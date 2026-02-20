@@ -1,0 +1,26 @@
+version: '3.9'
+
+services:
+  app:
+    image: ybagasbdd/dchcs:camerasr.1.5
+    container_name: tengok-app
+    restart: always
+    network_mode: "host"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    # ports:
+    #   - "3000:3000"
+    environment:
+      # ── MongoDB ───────────────────────────────────────────────────────────────
+      - MONGODB_URI=mongodb://admin:GANTI_PASSWORD@54.169.114.45:27017/tengok?authSource=admin
+
+      # ── App ──────────────────────────────────────────────────────────────────
+      - APP_PIN=123456
+      - NEXT_PUBLIC_RECAPTCHA_SITE_KEY=6Le-bmIsAAAAAIibu9QJef0kLwNIIIaVXgd04iPn
+      - RECAPTCHA_SECRET_KEY=6Le-bmIsAAAAALE8B2Wc4YaxIMUxJoxCn_QVh1ki
+
+      # ── Shinobi ──────────────────────────────────────────────────────────────
+      - SHINOBI_API_KEY=9lhELnOnSIjGWj0C7DoeXUKcGC8MgM
+      - SHINOBI_HOST=http://10.10.56.89:8080
+    
