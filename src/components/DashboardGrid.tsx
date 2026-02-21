@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import useSWR from 'swr';
 import VideoPlayer from '@/components/VideoPlayer';
 import { ICameraData } from '@/models/Camera';
-import { Phone, User, Settings, MapPin, LayoutGrid, SortAsc, SortDesc, Layers, RefreshCcw, Wifi, WifiOff } from 'lucide-react';
+import { Phone, MessageCircle, User, Settings, MapPin, LayoutGrid, SortAsc, SortDesc, Layers, RefreshCcw, Wifi, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -22,6 +22,14 @@ const GRID_COLS: Record<GridSize, string> = {
 
 // Transform Shinobi HTTP URLs → /shinobi-proxy/* to avoid Mixed Content errors on HTTPS
 // Works automatically with any Shinobi host that starts with http://
+// Format nomor HP Indonesia ke format internasional untuk wa.me
+const toWaNumber = (phone: string): string => {
+    const digits = phone.replace(/[^0-9]/g, '');
+    if (digits.startsWith('0')) return '62' + digits.slice(1);
+    if (digits.startsWith('62')) return digits;
+    return digits;
+};
+
 const proxyStreamUrl = (url: string): string => {
     if (!url) return url;
 
@@ -288,13 +296,24 @@ export default function DashboardGrid({ isAdmin = false }: { isAdmin?: boolean }
                                                     <span className="truncate">{cam.picName || 'N/A'}</span>
                                                 </div>
                                                 {cam.picPhone && (
-                                                    <a
-                                                        href={`tel:${cam.picPhone}`}
-                                                        className="flex items-center gap-1 ml-2 px-2 py-1 bg-green-900/30 text-green-400 rounded-md hover:bg-green-900/50 transition-colors border border-green-800/40 flex-shrink-0"
-                                                    >
-                                                        <Phone className="w-3 h-3" />
-                                                        <span>Call</span>
-                                                    </a>
+                                                    <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                                                        <a
+                                                            href={`tel:${cam.picPhone}`}
+                                                            className="flex items-center gap-1 px-2 py-1 bg-green-900/30 text-green-400 rounded-md hover:bg-green-900/50 transition-colors border border-green-800/40"
+                                                            title={`Call ${cam.picName || cam.picPhone}`}
+                                                        >
+                                                            <Phone className="w-3 h-3" />
+                                                        </a>
+                                                        <a
+                                                            href={`https://wa.me/${toWaNumber(cam.picPhone)}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex items-center gap-1 px-2 py-1 bg-emerald-900/30 text-emerald-400 rounded-md hover:bg-emerald-900/50 transition-colors border border-emerald-800/40"
+                                                            title={`WhatsApp ${cam.picName || cam.picPhone}`}
+                                                        >
+                                                            <MessageCircle className="w-3 h-3" />
+                                                        </a>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>

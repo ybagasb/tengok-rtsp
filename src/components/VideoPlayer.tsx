@@ -53,7 +53,7 @@ export default function VideoPlayer({
             if (Hls.isSupported()) {
                 hls = new Hls({
                     enableWorker: true,
-                    lowLatencyMode: true,
+                    lowLatencyMode: false,    // Shinobi tidak support LL-HLS
                     backBufferLength: 90,
                 });
                 hlsRef.current = hls;

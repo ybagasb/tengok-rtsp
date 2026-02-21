@@ -9,6 +9,7 @@ export function middleware(request: NextRequest) {
         pathname.startsWith('/_next') ||
         pathname.startsWith('/api') ||
         pathname.startsWith('/static') ||
+        pathname.startsWith('/shinobi-proxy') || // Stream proxy — auth via Shinobi API key in URL
         pathname.toLowerCase().startsWith('/direksi') || // Made case-insensitive
         pathname === '/login' ||
         pathname === '/favicon.ico'

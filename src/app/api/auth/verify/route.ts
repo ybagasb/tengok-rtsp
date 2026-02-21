@@ -23,7 +23,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: 'Recaptcha validation failed' }, { status: 403 });
         }
     } catch (error) {
-        console.error('Recaptcha error:', error);
         return NextResponse.json({ success: false, error: 'Recaptcha verification error' }, { status: 500 });
     }
 

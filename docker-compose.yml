@@ -2,10 +2,10 @@ version: '3.9'
 
 services:
   app:
-    image: ybagasbdd/dchcs:camerasr.1.5
+    image: ybagasbdd/dchcs:camerasr.1.6
     container_name: tengok-app
     restart: always
-    network_mode: "host"
+    #network_mode: "host"
     dns:
       - 8.8.8.8
       - 8.8.4.4
