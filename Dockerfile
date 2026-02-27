@@ -11,10 +11,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# NEXT_PUBLIC_* variables are baked into the client bundle at build time.
-# They MUST be declared as ARG and set as ENV before `npm run build`.
+
+# Pass reCAPTCHA site key to the builder stage so it gets bundled into the frontend
 ARG NEXT_PUBLIC_RECAPTCHA_SITE_KEY
-ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
+ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=$NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 
 RUN npm run build
 

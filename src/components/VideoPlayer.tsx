@@ -53,8 +53,15 @@ export default function VideoPlayer({
             if (Hls.isSupported()) {
                 hls = new Hls({
                     enableWorker: true,
-                    lowLatencyMode: false,    // Shinobi tidak support LL-HLS
-                    backBufferLength: 90,
+                    lowLatencyMode: false,
+                    // Tuning for stability over real-time latency
+                    maxBufferLength: 60,       // Try to keep 60 seconds of video buffered
+                    maxMaxBufferLength: 120,    // Hard maximum of 120 seconds
+                    liveSyncDuration: 30,      // Stay 30 seconds behind the live edge
+                    liveMaxLatencyDuration: 60,// Allow up to 60 seconds behind before catching up
+                    manifestLoadingTimeOut: 20000,
+                    manifestLoadingMaxRetry: 4,
+                    manifestLoadingRetryDelay: 1000,
                 });
                 hlsRef.current = hls;
 
@@ -122,11 +129,10 @@ export default function VideoPlayer({
         return () => {
             if (hls) hls.destroy();
         };
-        // reloadKey triggers re-init when incremented externally
-    }, [src, autoPlay, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [src, autoPlay]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleRetry = (e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleRetry = useCallback((e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
         setIsOffline(false);
         setIsLoading(true);
         notifyStatus('loading');
@@ -136,7 +142,14 @@ export default function VideoPlayer({
         } else if (videoRef.current) {
             videoRef.current.load();
         }
-    };
+    }, [src, notifyStatus]);
+
+    // Expose reload logic to respond to reloadKey changes without unmounting the whole player
+    useEffect(() => {
+        if (reloadKey > 0 && isOffline) {
+            handleRetry();
+        }
+    }, [reloadKey, isOffline, handleRetry]);
 
     const handleFullscreen = () => {
         const el = containerRef.current;
@@ -176,18 +189,23 @@ export default function VideoPlayer({
             {(isLoading || isOffline) && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
                     {isLoading && !isOffline && (
-                        <div className="flex flex-col items-center text-blue-400">
-                            <Loader2 className="w-10 h-10 animate-spin mb-2" />
-                            <span className="text-sm">Connecting...</span>
+                        <div className="flex flex-col items-center text-blue-400 p-4">
+                            <Loader2 className="w-10 h-10 animate-spin mb-3" />
+                            <span className="text-xs text-white/70 max-w-[200px] text-center">
+                                Please contact Project Manager by clicking the button below.
+                            </span>
                         </div>
                     )}
                     {isOffline && (
                         <div className="flex flex-col items-center text-red-500">
                             <MonitorX className="w-12 h-12 mb-2" />
-                            <span className="font-semibold mb-3">Stream Offline</span>
+                            <span className="font-semibold mb-1">Stream Offline</span>
+                            <span className="text-xs text-white/70 max-w-[200px] text-center mb-3">
+                                Please contact Project Manager by clicking the button below.
+                            </span>
                             <button
                                 onClick={handleRetry}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 rounded-full text-sm transition-colors"
+                                className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 rounded-full text-sm transition-colors mt-2"
                             >
                                 <RotateCcw className="w-4 h-4" />
                                 Retry

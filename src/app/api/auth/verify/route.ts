@@ -5,25 +5,30 @@ import axios from 'axios';
 export async function POST(req: NextRequest) {
     const { pin, recaptchaToken } = await req.json();
 
-    if (!pin || !recaptchaToken) {
+    if (!pin) {
         return NextResponse.json({ success: false, error: 'Missing credentials' }, { status: 400 });
     }
 
-    // 1. Verify Recaptcha
-    const secretKey = process.env.RECAPTCHA_SECRET_KEY;
-    if (!secretKey) {
-        return NextResponse.json({ success: false, error: 'Server configuration error' }, { status: 500 });
+    // 1. Verify reCAPTCHA token (Only in production or if token is explicitly required)
+    if (process.env.NODE_ENV === 'production' && !recaptchaToken) {
+        return NextResponse.json({ success: false, error: 'Missing reCAPTCHA token' }, { status: 400 });
     }
 
-    try {
-        const verifyUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${recaptchaToken}`;
-        const recaptchaRes = await axios.post(verifyUrl);
+    if (recaptchaToken) {
+        try {
+            const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+            const recaptchaRes = await axios.post(
+                `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${recaptchaToken}`
+            );
 
-        if (!recaptchaRes.data.success || recaptchaRes.data.score < 0.5) {
-            return NextResponse.json({ success: false, error: 'Recaptcha validation failed' }, { status: 403 });
+            if (!recaptchaRes.data.success || recaptchaRes.data.score < 0.5) {
+                console.warn('reCAPTCHA bot detected:', recaptchaRes.data);
+                return NextResponse.json({ success: false, error: 'reCAPTCHA verification failed (score too low)' }, { status: 403 });
+            }
+        } catch (error) {
+            console.error('reCAPTCHA Error:', error);
+            return NextResponse.json({ success: false, error: 'Failed to verify reCAPTCHA' }, { status: 500 });
         }
-    } catch (error) {
-        return NextResponse.json({ success: false, error: 'Recaptcha verification error' }, { status: 500 });
     }
 
     // 2. Verify PIN

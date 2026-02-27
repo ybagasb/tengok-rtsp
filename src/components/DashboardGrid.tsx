@@ -54,8 +54,8 @@ export default function DashboardGrid({ isAdmin = false }: { isAdmin?: boolean }
         refreshInterval: 5000,
     });
 
-    const [gridSize, setGridSize] = useState<GridSize>('3x3');
-    const [sortField, setSortField] = useState<SortField>('name');
+    const [gridSize, setGridSize] = useState<GridSize>('4x4');
+    const [sortField, setSortField] = useState<SortField>('status');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
     const [groupByLocation, setGroupByLocation] = useState(false);
 
@@ -80,30 +80,61 @@ export default function DashboardGrid({ isAdmin = false }: { isAdmin?: boolean }
         });
     }, [streamStatus]);
 
-    // Auto-reload offline streams every 30 seconds
+    // Auto-reload offline streams every 5 seconds
     useEffect(() => {
         const interval = setInterval(() => {
             const hasOffline = Object.values(streamStatus).some(s => s === 'offline');
             if (hasOffline) {
                 reloadOffline();
             }
-        }, 5000); // 30 seconds interval
+        }, 5000); // 5 seconds interval
 
         return () => clearInterval(interval);
     }, [streamStatus, reloadOffline]);
 
     const cameras: ICameraData[] = data?.data || [];
 
-    const offlineCount = Object.values(streamStatus).filter(s => s === 'offline').length;
-    const liveCount = Object.values(streamStatus).filter(s => s === 'live').length;
+    const liveCount = cameras.filter(cam => streamStatus[cam._id as string] === 'live').length;
+    const offlineCount = cameras.length - liveCount;
 
     const sortedCameras = useMemo(() => {
         return [...cameras].sort((a, b) => {
-            const aVal = (a[sortField] || '').toString().toLowerCase();
-            const bVal = (b[sortField] || '').toString().toLowerCase();
-            return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            if (sortField === 'status') {
+                const getStatusScore = (cam: ICameraData) => {
+                    const actualStatus = streamStatus[cam._id as string];
+                    if (actualStatus === 'live') return 1;
+                    // Group loading and offline together to prevent wild grid resorting every 5 seconds
+                    if (actualStatus === 'loading') return 2;
+                    if (actualStatus === 'offline') return 2;
+
+                    if (cam.status === 'offline') return 2;
+                    return 2;
+                };
+
+                const scoreA = getStatusScore(a);
+                const scoreB = getStatusScore(b);
+
+                if (scoreA !== scoreB) {
+                    return sortOrder === 'asc' ? scoreA - scoreB : scoreB - scoreA;
+                }
+
+                const nameA = (a.name || '').toString().toLowerCase();
+                const nameB = (b.name || '').toString().toLowerCase();
+                return nameA.localeCompare(nameB);
+            }
+
+            const aVal = (a[sortField as keyof ICameraData] || '').toString().toLowerCase();
+            const bVal = (b[sortField as keyof ICameraData] || '').toString().toLowerCase();
+
+            if (aVal !== bVal) {
+                return sortOrder === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            }
+
+            const nameA = (a.name || '').toString().toLowerCase();
+            const nameB = (b.name || '').toString().toLowerCase();
+            return nameA.localeCompare(nameB);
         });
-    }, [cameras, sortField, sortOrder]);
+    }, [cameras, sortField, sortOrder, streamStatus]);
 
     const groupedCameras = useMemo(() => {
         if (!groupByLocation) return { 'All Cameras': sortedCameras };

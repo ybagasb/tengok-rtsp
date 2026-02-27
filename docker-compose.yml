@@ -2,18 +2,18 @@ version: '3.9'
 
 services:
   app:
-    image: ybagasbdd/dchcs:camerasr.1.6
+    image: ybagasbdd/dchcs:camerasr.1.7   # ganti tag sesuai yang di-push ke Docker Hub
     container_name: tengok-app
     restart: always
-    #network_mode: "host"
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
-    # ports:
-    #   - "3000:3000"
+#    network_mode: "host"
+    ports:
+      - "3000:3000"
     environment:
-      # ── MongoDB ───────────────────────────────────────────────────────────────
-      - MONGODB_URI=mongodb://admin:GANTI_PASSWORD@54.169.114.45:27017/tengok?authSource=admin
+      # ── MongoDB AWS ──────────────────────────────────────────────────────────
+      # Ganti dengan connection string MongoDB AWS Anda:
+      # Atlas  : mongodb+srv://user:pass@cluster.mongodb.net/tengok?retryWrites=true&w=majority
+      # EC2    : mongodb://user:pass@54.169.114.45:27017/tengok?authSource=admin
+      - MONGODB_URI=mongodb://admin:Qwerty123.@54.169.114.45:27017/tengok?authSource=admin
 
       # ── App ──────────────────────────────────────────────────────────────────
       - APP_PIN=123456
@@ -23,4 +23,6 @@ services:
       # ── Shinobi ──────────────────────────────────────────────────────────────
       - SHINOBI_API_KEY=9lhELnOnSIjGWj0C7DoeXUKcGC8MgM
       - SHINOBI_HOST=http://10.10.56.89:8080
-    
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4

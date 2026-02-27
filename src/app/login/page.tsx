@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from 'react';
-import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { Lock, ShieldCheck, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 export default function LoginPage() {
     const [pin, setPin] = useState('');
@@ -15,18 +15,29 @@ export default function LoginPage() {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!pin) return;
 
-        if (!executeRecaptcha) {
-            toast.error('Recaptcha not ready');
+        if (!pin) {
+            toast.error('Please enter the access PIN');
             return;
+        }
+
+        let token = null;
+
+        if (process.env.NODE_ENV === 'production') {
+            if (!executeRecaptcha) {
+                toast.error('Gagal memuat reCAPTCHA');
+                return;
+            }
+            token = await executeRecaptcha('login');
+            if (!token) {
+                toast.error('Mohon selesaikan verifikasi reCAPTCHA');
+                return;
+            }
         }
 
         setLoading(true);
 
         try {
-            const token = await executeRecaptcha('login');
-
             const res = await axios.post('/api/auth/verify', {
                 pin,
                 recaptchaToken: token
@@ -89,7 +100,7 @@ export default function LoginPage() {
 
                     <button
                         type="submit"
-                        disabled={loading || !executeRecaptcha}
+                        disabled={loading}
                         className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3.5 rounded-xl transition-all shadow-[0_0_20px_rgba(234,179,8,0.3)] hover:shadow-[0_0_30px_rgba(234,179,8,0.5)] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? (
@@ -103,12 +114,6 @@ export default function LoginPage() {
                     </button>
                 </form>
 
-                <p className="text-center text-xs text-slate-600 mt-8">
-                    Protected by reCAPTCHA –&nbsp;
-                    <a href="https://policies.google.com/privacy" className="text-yellow-600 hover:underline">Privacy</a>
-                    &nbsp;&amp;&nbsp;
-                    <a href="https://policies.google.com/terms" className="text-yellow-600 hover:underline">Terms</a>
-                </p>
             </div>
         </div>
     );
