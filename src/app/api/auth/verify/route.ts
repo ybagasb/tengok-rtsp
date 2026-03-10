@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
                 `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${recaptchaToken}`
             );
 
-            if (!recaptchaRes.data.success || recaptchaRes.data.score < 0.5) {
+            if (!recaptchaRes.data.success || recaptchaRes.data.score < 0.1) {
                 console.warn('reCAPTCHA bot detected:', recaptchaRes.data);
                 return NextResponse.json({ success: false, error: 'reCAPTCHA verification failed (score too low)' }, { status: 403 });
             }

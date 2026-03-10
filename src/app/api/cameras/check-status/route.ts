@@ -9,10 +9,11 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        // Attempt to just fetch headers to see if it's reachable
-        // Timeout quickly to avoid hanging
-        await axios.head(url, { timeout: 3000 });
-        return NextResponse.json({ status: 'online' });
+        const res = await axios.get(url, { timeout: 3000 });
+        if (typeof res.data === 'string' && (res.data.includes('#EXTM3U') || res.data.includes('.ts') || res.data.includes('ftyp'))) {
+            return NextResponse.json({ status: 'online' });
+        }
+        return NextResponse.json({ status: 'offline' });
     } catch (error) {
         return NextResponse.json({ status: 'offline' });
     }

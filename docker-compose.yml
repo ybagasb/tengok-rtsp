@@ -2,10 +2,9 @@ version: '3.9'
 
 services:
   app:
-    image: ybagasbdd/dchcs:camerasr.1.7   # ganti tag sesuai yang di-push ke Docker Hub
+    image: ybagasbdd/dchcs:camerasr.2.4   # ganti tag sesuai yang di-push ke Docker Hub
     container_name: tengok-app
     restart: always
-#    network_mode: "host"
     ports:
       - "3000:3000"
     environment:

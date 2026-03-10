@@ -5,11 +5,11 @@ export interface ICameraData {
     _id?: string;
     name: string;
     streamUrl: string;
+    status: 'online' | 'offline';
+    createdAt: Date | string;
     location?: string;
     picName?: string;
     picPhone?: string;
-    status: 'online' | 'offline';
-    createdAt: Date | string;
 }
 
 // Mongoose Document Interface
@@ -20,9 +20,6 @@ export interface ICamera extends Document, Omit<ICameraData, '_id'> {
 const CameraSchema: Schema = new Schema({
     name: { type: String, required: true },
     streamUrl: { type: String, required: true },
-    location: { type: String },
-    picName: { type: String },
-    picPhone: { type: String },
     status: { type: String, enum: ['online', 'offline'], default: 'offline' },
     createdAt: { type: Date, default: Date.now },
 });

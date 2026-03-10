@@ -4,20 +4,36 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
     const pathname = request.nextUrl.pathname;
 
-    // Paths that are always accessible
+    // 1. Priority Redirects
+    if (pathname.toLowerCase() === '/direksi') {
+        const url = request.nextUrl.clone();
+        url.pathname = '/categories';
+        return NextResponse.redirect(url);
+    }
+
+    // Redirect root to login
+    if (pathname === '/') {
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        return NextResponse.redirect(url);
+    }
+
+    // 2. Paths that are always accessible (No Auth)
     if (
         pathname.startsWith('/_next') ||
         pathname.startsWith('/api') ||
         pathname.startsWith('/static') ||
-        pathname.startsWith('/shinobi-proxy') || // Stream proxy — auth via Shinobi API key in URL
-        pathname.toLowerCase().startsWith('/direksi') || // Made case-insensitive
+        pathname.startsWith('/shinobi-proxy') ||
+        pathname === '/categories' ||
+        pathname === '/multiview' ||
+        pathname === '/map' ||
         pathname === '/login' ||
         pathname === '/favicon.ico'
     ) {
         return NextResponse.next();
     }
 
-    // Check for auth token
+    // 3. Auth Guard
     const authToken = request.cookies.get('auth_token');
 
     if (!authToken) {
