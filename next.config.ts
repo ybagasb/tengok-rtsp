@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
         source: "/shinobi-proxy-94/:path*",
         destination: "http://10.10.56.94:8080/:path*",
       },
+      {
+        source: "/shinobi-proxy-101/:path*",
+        destination: "http://10.10.56.101:8080/:path*",
+      },
     ];
   },
 };

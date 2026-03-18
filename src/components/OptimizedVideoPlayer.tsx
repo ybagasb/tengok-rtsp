@@ -64,6 +64,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
         const getProxiedUrl = (url: string) => {
             if (url.includes('10.10.56.90')) return url.replace('http://10.10.56.90:8080', '/shinobi-proxy-90');
             if (url.includes('10.10.56.94')) return url.replace('http://10.10.56.94:8080', '/shinobi-proxy-94');
+            if (url.includes('10.10.56.101')) return url.replace('http://10.10.56.101:8080', '/shinobi-proxy-101');
             if (url.includes('10.10.56.89')) return url.replace('http://10.10.56.89:8080', '/shinobi-proxy');
             return url;
         };

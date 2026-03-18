@@ -214,19 +214,24 @@ export default function AdminLocations() {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            if (formData._id) {
+            const payload = {
+                ...formData,
+                category: formData.category || (categories.length > 0 ? categories[0].identifier : '')
+            };
+            
+            if (payload._id) {
                 // Update
-                await axios.put('/api/locations', formData);
+                await axios.put('/api/locations', payload);
                 toast.success('Lokasi berhasil diperbarui');
             } else {
                 // Create
-                await axios.post('/api/locations', formData);
+                await axios.post('/api/locations', payload);
                 toast.success('Lokasi berhasil ditambahkan');
             }
             handleReset();
             fetchData();
-        } catch (error) {
-            toast.error('Gagal menyimpan lokasi');
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Gagal menyimpan lokasi');
         } finally {
             setIsSubmitting(false);
         }
@@ -438,7 +443,7 @@ export default function AdminLocations() {
 
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                         <div className="lg:col-span-2 rounded-2xl overflow-hidden border border-white/10 h-80 bg-slate-950 flex items-center justify-center">
-                                            {typeof window !== 'undefined' ? (
+                                            {typeof window !== 'undefined' && RL && L ? (
                                                 <MapContainer
                                                     center={[formData.lat || -4.4943173, formData.lng || 113.2007588]}
                                                     zoom={6.5}

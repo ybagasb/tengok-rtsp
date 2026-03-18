@@ -147,6 +147,7 @@ export default function MapComponent({ category: propCategory }: { category?: st
             if (!url) return '';
             if (url.includes('10.10.56.90')) return url.replace('http://10.10.56.90:8080', '/shinobi-proxy-90');
             if (url.includes('10.10.56.94')) return url.replace('http://10.10.56.94:8080', '/shinobi-proxy-94');
+            if (url.includes('10.10.56.101')) return url.replace('http://10.10.56.101:8080', '/shinobi-proxy-101');
             if (url.includes('10.10.56.89')) return url.replace('http://10.10.56.89:8080', '/shinobi-proxy');
             return url;
         };
@@ -521,18 +522,24 @@ export default function MapComponent({ category: propCategory }: { category?: st
                                                 {/* Tooltip Body */}
                                                 <div className="p-3 bg-slate-900/60 flex items-center justify-between gap-3">
                                                     {/* Online Pill */}
-                                                    <div className="flex-1 flex items-center justify-center gap-2 px-2.5 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 group/pill">
-                                                        <div className="relative">
-                                                            <Signal className="w-4 h-4 text-emerald-400" />
-                                                            <div className="absolute inset-0 bg-emerald-400 blur-sm opacity-60 pulse-emerald" />
+                                                    <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 group/pill">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="relative">
+                                                                <Signal className="w-4 h-4 text-emerald-400" />
+                                                                <div className="absolute inset-0 bg-emerald-400 blur-sm opacity-60 pulse-emerald" />
+                                                            </div>
+                                                            <span className="text-[14px] font-black text-white leading-none">{dynamicOnlineCount}</span>
                                                         </div>
-                                                        <span className="text-[14px] font-black text-white leading-none">{dynamicOnlineCount}</span>
+                                                        <span className="text-[9px] font-bold text-emerald-400/80 uppercase tracking-widest">Online</span>
                                                     </div>
 
                                                     {/* Offline Pill */}
-                                                    <div className="flex-1 flex items-center justify-center gap-2 px-2.5 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
-                                                        <SignalZero className="w-4 h-4 text-rose-400" />
-                                                        <span className="text-[14px] font-black text-white leading-none">{dynamicOfflineCount}</span>
+                                                    <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
+                                                        <div className="flex items-center gap-2">
+                                                            <SignalZero className="w-4 h-4 text-rose-400" />
+                                                            <span className="text-[14px] font-black text-white leading-none">{dynamicOfflineCount}</span>
+                                                        </div>
+                                                        <span className="text-[9px] font-bold text-rose-400/80 uppercase tracking-widest">Offline</span>
                                                     </div>
                                                 </div>
                                             </div>
