@@ -8,19 +8,16 @@ import {
     Search,
     CheckSquare,
     Square,
-    Video,
-    WifiIcon,
-    WifiOff,
     Loader2,
-    X,
     PanelLeftOpen,
     PanelLeftClose,
-    Activity
+    Signal,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import OptimizedVideoPlayer from '@/components/OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
+import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 
 interface Location {
     _id: string;
@@ -37,7 +34,7 @@ export default function MultiViewPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [realtimeStatus, setRealtimeStatus] = useState<Record<string, 'online' | 'offline'>>({});
+    const { realtimeStatuses: realtimeStatus, setRealtimeStatuses: setRealtimeStatus } = useCameraStatusSSE();
 
     useEffect(() => {
         const fetchLocations = async () => {
@@ -53,6 +50,9 @@ export default function MultiViewPage() {
             }
         };
         fetchLocations();
+
+        const intervalId = setInterval(fetchLocations, 30000);
+        return () => clearInterval(intervalId);
     }, []);
 
     const filteredLocations = useMemo(() => {
@@ -105,7 +105,7 @@ export default function MultiViewPage() {
             <div className="min-h-screen bg-slate-950 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
                     <Loader2 className="w-12 h-12 text-yellow-500 animate-spin" />
-                    <p className="text-slate-400 font-black uppercase tracking-[0.2em] italic text-sm">Initializing Multi-View...</p>
+                    <p className="text-slate-400 font-bold uppercase tracking-wider text-sm">Initializing Multi-View...</p>
                 </div>
             </div>
         );
@@ -128,12 +128,12 @@ export default function MultiViewPage() {
                             <div className="p-6 border-b border-white/5 bg-slate-900/40">
                                 <div className="flex items-center justify-between mb-6">
                                     <button
-                                        onClick={() => router.push('/categories')}
+                                        onClick={() => router.back()}
                                         className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors"
                                     >
                                         <ArrowLeft className="w-5 h-5" />
                                     </button>
-                                    <h2 className="text-lg font-black text-white italic tracking-tighter uppercase">Selection</h2>
+                                    <h2 className="text-lg font-bold text-white tracking-tight uppercase">Selection</h2>
                                     <button
                                         onClick={() => setIsSidebarOpen(false)}
                                         className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors group"
@@ -163,8 +163,8 @@ export default function MultiViewPage() {
                                         <button
                                             key={loc._id}
                                             onClick={() => toggleLocation(loc._id)}
-                                            className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border ${isSelected
-                                                ? 'bg-yellow-500/10 border-yellow-500/30'
+                                            className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border hover:shadow-lg hover:-translate-y-0.5 active:scale-95 ${isSelected
+                                                ? 'bg-yellow-500/10 border-yellow-500/30 shadow-yellow-500/5'
                                                 : 'bg-white/5 border-transparent hover:bg-white/10'
                                                 }`}
                                         >
@@ -172,10 +172,10 @@ export default function MultiViewPage() {
                                                 {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                                             </div>
                                             <div className="text-left min-w-0 flex-1">
-                                                <div className={`text-sm font-black italic tracking-tighter uppercase truncate ${isSelected ? 'text-white' : 'text-slate-300'}`}>
+                                                <div className={`text-sm font-bold tracking-tight uppercase truncate ${isSelected ? 'text-white' : 'text-slate-300'}`}>
                                                     {loc.name}
                                                 </div>
-                                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
+                                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
                                                     {loc.cameras.length} CAMERAS • {loc.category}
                                                 </div>
                                             </div>
@@ -186,7 +186,7 @@ export default function MultiViewPage() {
 
                             {/* Sidebar Footer */}
                             <div className="p-6 bg-slate-900/60 border-t border-white/5">
-                                <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest">
+                                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
                                     <span className="text-slate-500">Selected</span>
                                     <span className="text-yellow-500">{selectedLocationIds.length} Locations</span>
                                 </div>
@@ -215,10 +215,10 @@ export default function MultiViewPage() {
                                 <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-500" />
                             </div>
                             <div>
-                                <h2 className="text-sm sm:text-lg font-black text-white italic tracking-tighter uppercase leading-none">Multi-View</h2>
+                                <h2 className="text-sm sm:text-lg font-bold text-white tracking-tight uppercase leading-none">Multi-View</h2>
                                 <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
                                     <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span className="text-[8px] sm:text-[10px] text-slate-400 font-black uppercase tracking-widest">{activeStreamCount} Active</span>
+                                    <span className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider">{activeStreamCount} Active</span>
                                 </div>
                             </div>
                         </div>
@@ -246,27 +246,29 @@ export default function MultiViewPage() {
                                         animate={{ opacity: 1, scale: 1 }}
                                         exit={{ opacity: 0, scale: 0.9 }}
                                         transition={{ duration: 0.3 }}
-                                        className="relative aspect-video bg-black rounded-3xl overflow-hidden border border-white/10 shadow-2xl group ring-1 ring-white/5"
+                                        className="relative aspect-video bg-black rounded-3xl overflow-hidden border border-white/10 shadow-2xl group ring-1 ring-white/5 hover:border-white/20 hover:shadow-white/10 hover:-translate-y-1 transition-all duration-500"
                                     >
                                         {/* Camera Info Overlay */}
                                         <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 via-black/20 to-transparent flex justify-between items-start opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                                             <div className="flex flex-col gap-1">
-                                                <span className="text-[10px] font-black text-white uppercase tracking-widest drop-shadow-md italic">
+                                                <span className="text-[10px] font-bold text-white uppercase tracking-wider drop-shadow-md">
                                                     {cam.locationName}
                                                 </span>
-                                                <span className="text-[12px] font-black text-slate-300 uppercase tracking-tighter leading-none italic">
+                                                <span className="text-[12px] font-bold text-slate-300 uppercase tracking-tight leading-none">
                                                     {cam.name}
                                                 </span>
                                             </div>
-                                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl backdrop-blur-md border ${(realtimeStatus[cam._id] || cam.status) === 'online'
-                                                ? 'bg-emerald-900/40 border-emerald-500/30'
-                                                : 'bg-rose-900/40 border-rose-500/30'
-                                                }`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${(realtimeStatus[cam._id] || cam.status) === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
-                                                    }`} />
-                                                <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">
-                                                    {(realtimeStatus[cam._id] || cam.status) === 'online' ? 'Live' : 'Offline'}
-                                                </span>
+                                            <div className="flex flex-col items-end gap-1.5">
+                                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl backdrop-blur-md border ${(realtimeStatus[cam._id] || cam.status) === 'online'
+                                                    ? 'bg-emerald-900/40 border-emerald-500/30'
+                                                    : 'bg-rose-900/40 border-rose-500/30'
+                                                    }`}>
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${(realtimeStatus[cam._id] || cam.status) === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                                                        }`} />
+                                                    <span className="text-[9px] font-bold text-white uppercase tracking-wider">
+                                                        {(realtimeStatus[cam._id] || cam.status) === 'online' ? 'Live' : 'Offline'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -288,14 +290,14 @@ export default function MultiViewPage() {
                                 <div className="w-24 h-24 rounded-[2.5rem] bg-slate-900/50 border border-white/5 flex items-center justify-center mb-8 shadow-2xl">
                                     <LayoutGrid className="w-10 h-10 text-slate-600 opacity-50" />
                                 </div>
-                                <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase mb-4">No Cameras Selected</h2>
-                                <p className="text-slate-500 text-sm max-w-md font-medium italic opacity-70 leading-relaxed">
+                                <h2 className="text-3xl font-bold text-white tracking-tight uppercase mb-4">No Cameras Selected</h2>
+                                <p className="text-slate-500 text-sm max-w-md font-medium opacity-70 leading-relaxed">
                                     Pilih lokasi dari panel sebelah kiri untuk mulai memantau beberapa aliran kamera secara bersamaan.
                                 </p>
                                 {!isSidebarOpen && (
                                     <button
                                         onClick={() => setIsSidebarOpen(true)}
-                                        className="mt-10 px-8 py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-[0.2em] rounded-2xl transition-all shadow-xl shadow-yellow-500/20 active:scale-95 flex items-center gap-3"
+                                        className="mt-10 px-8 py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-yellow-500/20 active:scale-95 flex items-center gap-3"
                                     >
                                         <PanelLeftOpen className="w-5 h-5" />
                                         Buka Filter Lokasi

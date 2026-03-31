@@ -23,7 +23,8 @@ export function middleware(request: NextRequest) {
         pathname.startsWith('/_next') ||
         pathname.startsWith('/api') ||
         pathname.startsWith('/static') ||
-        pathname.startsWith('/shinobi-proxy') ||
+        pathname.startsWith('/streams') ||      // HLS video segments
+        pathname.startsWith('/shared') ||       // Shared CCTV links (public)
         pathname === '/categories' ||
         pathname === '/multiview' ||
         pathname === '/map' ||

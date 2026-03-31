@@ -69,7 +69,7 @@ export default function CategoriesPage() {
             const enteredPin = pin.join('');
             if (enteredPin === '654321') {
                 toast.success('Akses Diterima');
-                router.push('/admin/locations');
+                router.push('/admin');
             } else {
                 toast.error('PIN Salah');
                 setPin(['', '', '', '', '', '']);
@@ -91,29 +91,20 @@ export default function CategoriesPage() {
                 <div className="flex items-center gap-4 w-full sm:w-auto">
                     <img src="/abipraya_original.svg" alt="Logo" className="w-10 h-10 sm:w-12 sm:h-12" />
                     <div>
-                        <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent italic tracking-tighter uppercase">
+                        <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent tracking-tight uppercase">
                             Kategori Proyek
                         </h1>
-                        <p className="text-slate-400 text-[9px] sm:text-[11px] font-bold uppercase tracking-widest opacity-60">Pilih lokasi yang ingin dipantau</p>
+                        <p className="text-slate-400 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider opacity-60">Pilih lokasi yang ingin dipantau</p>
                     </div>
                 </div>
                 <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto px-4 sm:px-0">
-                    <button
-                        onClick={() => router.push('/multiview')}
-                        className="flex-1 sm:flex-initial flex items-center justify-center gap-2 text-slate-400 hover:text-blue-400 transition-all px-4 sm:px-5 py-2.5 rounded-xl bg-slate-900/50 backdrop-blur border border-white/5 hover:border-blue-500/30 group"
-                        title="Multi-View Monitoring"
-                    >
-                        <LayoutGrid className="w-4 h-4 group-hover:scale-110 transition-transform duration-500" />
-                        <span className="text-[10px] sm:text-sm font-black uppercase tracking-widest hidden sm:block">Multi-View</span>
-                    </button>
-                    <div className="hidden sm:block w-px h-6 bg-white/10 mx-1" />
                     <button
                         onClick={() => setShowPinModal(true)}
                         className="flex-1 sm:flex-initial flex items-center justify-center gap-2 text-slate-400 hover:text-yellow-400 transition-all px-4 sm:px-5 py-2.5 rounded-xl bg-slate-900/50 backdrop-blur border border-white/5 hover:border-yellow-500/30 group"
                         title="Management"
                     >
                         <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
-                        <span className="text-[10px] sm:text-sm font-black uppercase tracking-widest hidden sm:block">Management</span>
+                        <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">Management</span>
                     </button>
                     <div className="hidden sm:block w-px h-6 bg-white/10 mx-1" />
                     <button
@@ -122,7 +113,7 @@ export default function CategoriesPage() {
                         title="Logout"
                     >
                         <LogOut className="w-4 h-4" />
-                        <span className="text-[10px] sm:text-sm font-black uppercase tracking-widest hidden sm:block">Logout</span>
+                        <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">Logout</span>
                     </button>
                 </div>
             </header>
@@ -156,10 +147,10 @@ export default function CategoriesPage() {
                                 </div>
 
                                 <div className="relative z-10 mt-auto">
-                                    <h2 className="text-2xl sm:text-3xl font-black text-white italic tracking-tighter uppercase mb-2 group-hover:text-yellow-400 transition-colors">
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight uppercase mb-2 group-hover:text-yellow-400 transition-colors">
                                         {cat.name}
                                     </h2>
-                                    <p className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-60 leading-relaxed sm:max-w-[80%] line-clamp-2">
+                                    <p className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed sm:max-w-[80%] line-clamp-2">
                                         {cat.description}
                                     </p>
                                 </div>
@@ -206,10 +197,10 @@ export default function CategoriesPage() {
                                     <ShieldAlert className="w-10 h-10 sm:w-12 sm:h-12 text-yellow-500 stroke-[2.5]" />
                                 </div>
 
-                                <h2 className="text-3xl sm:text-4xl font-black text-white italic tracking-tighter uppercase mb-3 px-4">
+                                <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight uppercase mb-3 px-4">
                                     Admin Access
                                 </h2>
-                                <p className="text-slate-400 text-xs sm:text-sm font-bold uppercase tracking-[0.2em] opacity-60 mb-10 sm:mb-12">
+                                <p className="text-slate-400 text-xs sm:text-sm font-bold uppercase tracking-wider opacity-60 mb-10 sm:mb-12">
                                     Masukkan PIN management rahasia
                                 </p>
 
@@ -224,12 +215,12 @@ export default function CategoriesPage() {
                                             value={digit}
                                             onChange={(e) => handlePinChange(index, e.target.value)}
                                             onKeyDown={(e) => handleKeyDown(index, e)}
-                                            className="w-10 h-14 sm:w-16 sm:h-20 bg-slate-950/50 border-2 border-white/10 rounded-2xl sm:rounded-3xl text-center text-2xl sm:text-4xl font-black text-white focus:border-yellow-500/50 focus:outline-none transition-all shadow-2xl"
+                                            className="w-10 h-14 sm:w-16 sm:h-20 bg-slate-950/50 border-2 border-white/10 rounded-2xl sm:rounded-3xl text-center text-2xl sm:text-4xl font-bold text-white focus:border-yellow-500/50 focus:outline-none transition-all shadow-2xl"
                                         />
                                     ))}
                                 </div>
 
-                                <p className="text-slate-500 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] italic">
+                                <p className="text-slate-500 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
                                     Unauthorized access is strictly prohibited
                                 </p>
                             </div>
@@ -240,7 +231,7 @@ export default function CategoriesPage() {
 
             {/* Footer */}
             <footer className="mt-auto text-center relative z-10 pb-10 pt-16 sm:pt-24">
-                <p className="text-slate-500 text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] italic opacity-40">
+                <p className="text-slate-500 text-[10px] sm:text-xs font-bold uppercase tracking-[0.3em] opacity-40">
                     © 2026 PT Brantas Abipraya (Persero) • Smart Monitoring System
                 </p>
             </footer>

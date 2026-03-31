@@ -20,3 +20,5 @@ README.md
 .vscode
 .idea
 *.log
+public/streams
+public/streams/*

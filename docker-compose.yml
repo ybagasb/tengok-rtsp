@@ -1,8 +1,25 @@
 version: '3.9'
 
 services:
+  # ── Nginx Reverse Proxy ──────────────────────────────────────────────────────
+  # Automatically serves maintenance.html when the app container is down
+  nginx:
+    image: nginx:alpine
+    container_name: tengok-nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./public/maintenance.html:/usr/share/nginx/html/maintenance.html:ro
+      - ./public/abipraya_original.svg:/usr/share/nginx/html/abipraya_original.svg:ro
+      - ./public/favicon.ico:/usr/share/nginx/html/favicon.ico:ro
+    depends_on:
+      - app
+
+  # ── Next.js App ──────────────────────────────────────────────────────────────
   app:
-    image: ybagasbdd/dchcs:camerasr.2.4   # ganti tag sesuai yang di-push ke Docker Hub
+    image: ybagasbdd/dchcs:tengok.3   # ganti tag sesuai yang di-push ke Docker Hub
     container_name: tengok-app
     restart: always
     ports:
@@ -12,16 +29,10 @@ services:
       # Ganti dengan connection string MongoDB AWS Anda:
       # Atlas  : mongodb+srv://user:pass@cluster.mongodb.net/tengok?retryWrites=true&w=majority
       # EC2    : mongodb://user:pass@54.169.114.45:27017/tengok?authSource=admin
-      - MONGODB_URI=mongodb://admin:Qwerty123.@54.169.114.45:27017/tengok?authSource=admin
+      - MONGODB_URI=mongodb://admin:Qwerty123.@54.169.114.45:27017/rtsp_tengok?authSource=admin
 
       # ── App ──────────────────────────────────────────────────────────────────
       - APP_PIN=123456
-      - NEXT_PUBLIC_RECAPTCHA_SITE_KEY=6Le-bmIsAAAAAIibu9QJef0kLwNIIIaVXgd04iPn
-      - RECAPTCHA_SECRET_KEY=6Le-bmIsAAAAALE8B2Wc4YaxIMUxJoxCn_QVh1ki
-
-      # ── Shinobi ──────────────────────────────────────────────────────────────
-      - SHINOBI_API_KEY=9lhELnOnSIjGWj0C7DoeXUKcGC8MgM
-      - SHINOBI_HOST=http://10.10.56.89:8080
     dns:
       - 8.8.8.8
       - 8.8.4.4

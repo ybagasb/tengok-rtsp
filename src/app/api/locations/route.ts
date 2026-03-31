@@ -3,6 +3,8 @@ import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
 import Camera from '@/models/Camera';
 
+import '@/lib/cameraStatusChecker';
+
 // Prevent tree-shaking of the Camera model
 const _models = [Camera, Location];
 

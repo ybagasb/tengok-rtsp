@@ -8,9 +8,12 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import L from 'leaflet';
 import axios from 'axios';
-import { ArrowLeft, Video, WifiIcon, WifiOff, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero } from 'lucide-react';
+import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Info } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import CameraPanel from './CameraPanel';
 import MarkerClusterGroup from 'react-leaflet-cluster';
+import ResourceMonitor from './ResourceMonitor';
+import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 
 // Fix Leaflet blank marker issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -68,7 +71,7 @@ function MapResize({ selectedLocation }: { selectedLocation: any }) {
     return null;
 }
 
-export default function MapComponent({ category: propCategory }: { category?: string | null }) {
+export default function MapComponent({ category: propCategory, allowedLocationIds, sharedMode = false }: { category?: string | null; allowedLocationIds?: string[]; sharedMode?: boolean }) {
     const searchParams = useSearchParams();
     const router = useRouter();
     const category = propCategory || searchParams.get('category');
@@ -76,8 +79,9 @@ export default function MapComponent({ category: propCategory }: { category?: st
     const [locations, setLocations] = useState<LocationData[]>([]);
     const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [center, setCenter] = useState<[number, number]>([-4.4943173, 113.2007588]); // Specific default position
-    const [realtimeStatuses, setRealtimeStatuses] = useState<Record<string, 'online' | 'offline'>>({});
+    const [center, setCenter] = useState<[number, number]>([-4.944993, 113.4942317]); // Specific default position
+    const { realtimeStatuses, setRealtimeStatuses } = useCameraStatusSSE();
+    const [showDelayNotice, setShowDelayNotice] = useState(true);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -99,18 +103,32 @@ export default function MapComponent({ category: propCategory }: { category?: st
     }, []);
 
     useEffect(() => {
+        const timer = setTimeout(() => {
+            setShowDelayNotice(false);
+        }, 10000);
+        return () => clearTimeout(timer);
+    }, []);
+
+    useEffect(() => {
         let isMounted = true;
         const controller = new AbortController();
+        let hasProbed = false; // Only trigger one probe per page load
 
-        if (!category) {
+        if (!category && !sharedMode) {
             router.push('/categories');
             return;
         }
 
         const fetchLocations = async () => {
             try {
-                const res = await axios.get(`/api/locations?category=${category}`, { signal: controller.signal });
-                const fetchedLocations = res.data.data.map((loc: any) => {
+                const apiUrl = category ? `/api/locations?category=${category}` : '/api/locations';
+                const res = await axios.get(apiUrl, { signal: controller.signal });
+                let rawLocations = res.data.data;
+                // Filter locations if allowedLocationIds is provided (shared mode)
+                if (allowedLocationIds && allowedLocationIds.length > 0) {
+                    rawLocations = rawLocations.filter((loc: any) => allowedLocationIds.includes(loc._id));
+                }
+                const fetchedLocations = rawLocations.map((loc: any) => {
                     let onlineCount = 0;
                     let offlineCount = 0;
                     if (loc.cameras) {
@@ -119,20 +137,24 @@ export default function MapComponent({ category: propCategory }: { category?: st
                             else offlineCount++;
                         });
                     }
-                    return {
-                        ...loc,
-                        onlineCount,
-                        offlineCount
-                    };
+                    return { ...loc, onlineCount, offlineCount };
                 });
 
                 if (!isMounted) return;
-
                 setLocations(fetchedLocations);
-                if (fetchedLocations.length > 0) {
-                    setCenter([fetchedLocations[0].lat, fetchedLocations[0].lng]);
-                }
 
+                // On first load: trigger background probe — results flow into DB
+                // and are picked up by the 3s polling below
+                if (!hasProbed) {
+                    hasProbed = true;
+                    const allCameraIds = fetchedLocations.flatMap((loc: any) =>
+                        (loc.cameras || []).map((cam: any) => cam._id)
+                    );
+                    if (allCameraIds.length > 0) {
+                        axios.post('/api/cameras/probe-now', { cameraIds: allCameraIds })
+                            .catch(() => {}); // Fire and forget — 202 returned immediately
+                    }
+                }
             } catch (error) {
                 if (axios.isCancel(error)) return;
                 console.error("Failed to fetch locations", error);
@@ -143,89 +165,16 @@ export default function MapComponent({ category: propCategory }: { category?: st
 
         fetchLocations();
 
-        const getProxiedUrl = (url: string) => {
-            if (!url) return '';
-            if (url.includes('10.10.56.90')) return url.replace('http://10.10.56.90:8080', '/shinobi-proxy-90');
-            if (url.includes('10.10.56.94')) return url.replace('http://10.10.56.94:8080', '/shinobi-proxy-94');
-            if (url.includes('10.10.56.101')) return url.replace('http://10.10.56.101:8080', '/shinobi-proxy-101');
-            if (url.includes('10.10.56.89')) return url.replace('http://10.10.56.89:8080', '/shinobi-proxy');
-            return url;
-        };
-
-        const checkCameraStatuses = async (currentLocations: LocationData[]) => {
-            if (!isMounted) return;
-            const updates: Record<string, 'online' | 'offline'> = {};
-
-            // Collect all stream URLs and check them
-            const checks = currentLocations.flatMap(loc => loc.cameras || []).map(async (cam) => {
-                const proxyUrl = getProxiedUrl(cam.streamUrl);
-                if (!proxyUrl) return;
-
-                try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
-
-                    const res = await fetch(proxyUrl, {
-                        method: 'GET',
-                        signal: controller.signal,
-                        // We only need headers or a fast fail, but we'll fetch a bit of the manifest
-                    });
-                    clearTimeout(timeoutId);
-
-                    if (res.ok) {
-                        const text = await res.text();
-                        if (text.includes('#EXTM3U') || text.includes('.ts') || text.includes('ftyp')) {
-                            updates[cam._id] = 'online';
-                            return;
-                        }
-                    }
-                    updates[cam._id] = 'offline';
-                } catch (error) {
-                    updates[cam._id] = 'offline';
-                }
-            });
-
-            await Promise.allSettled(checks);
-
-            if (isMounted) {
-                setRealtimeStatuses(prev => {
-                    // Only update if changed
-                    let changed = false;
-                    for (const id in updates) {
-                        if (prev[id] !== updates[id]) {
-                            changed = true;
-                            break;
-                        }
-                    }
-                    return changed ? { ...prev, ...updates } : prev;
-                });
-            }
-        };
-
-        // Status Polling Interval (every 15 seconds)
-        let pollInterval: NodeJS.Timeout;
-
-        // Initial check after fetching
-        const initialCheckTimeout = setTimeout(() => {
-            setLocations(prevLocs => {
-                checkCameraStatuses(prevLocs);
-                return prevLocs;
-            });
-            pollInterval = setInterval(() => {
-                setLocations(prevLocs => {
-                    checkCameraStatuses(prevLocs);
-                    return prevLocs;
-                });
-            }, 15000);
-        }, 1000);
+        const intervalId = setInterval(fetchLocations, 30000);
 
         return () => {
             isMounted = false;
-            clearTimeout(initialCheckTimeout);
-            if (pollInterval) clearInterval(pollInterval);
             controller.abort();
+            clearInterval(intervalId);
         };
-    }, [category, router]);
+    }, [category, router, sharedMode, allowedLocationIds]);
+
+    // Polling removed in favor of Server-Sent Events (useCameraStatusSSE)
 
     // Update online/offline counts for locations whenever realtimeStatuses changes
     useEffect(() => {
@@ -234,12 +183,12 @@ export default function MapComponent({ category: propCategory }: { category?: st
                 let currentOnlineCount = 0;
                 let currentOfflineCount = 0;
                 loc.cameras.forEach(cam => {
-                    if (realtimeStatuses[cam._id] === 'online') {
+                    const status = realtimeStatuses[cam._id] || cam.status;
+                    if (status === 'online') {
                         currentOnlineCount++;
-                    } else if (realtimeStatuses[cam._id] === 'offline') {
+                    } else if (status === 'offline') {
                         currentOfflineCount++;
                     }
-                    // If status is not yet determined, it doesn't count as online or offline
                 });
                 return {
                     ...loc,
@@ -260,40 +209,19 @@ export default function MapComponent({ category: propCategory }: { category?: st
 
     }, [realtimeStatuses]); // Depend on realtimeStatuses
 
-    // Custom Glassmorphic Scrollbar Styles
+    // Custom Glassmorphic Scrollbar + hide Leaflet attribution
     const scrollbarStyles = `
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 5px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(15, 23, 42, 0.1);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(234, 179, 8, 0.2);
-            border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(234, 179, 8, 0.4);
-        }
-
-        .pulse-emerald {
-            animation: pulse-emerald 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-
-        @keyframes pulse-emerald {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .5; }
-        }
-
-        .leaflet-tooltip.custom-tooltip {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-        }
-        .leaflet-tooltip-top.custom-tooltip:before {
-            border-top-color: transparent !important;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.1); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(234, 179, 8, 0.2); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(234, 179, 8, 0.4); }
+        .leaflet-control-attribution { display: none !important; }
+        .leaflet-tooltip.custom-tooltip { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
+        .leaflet-tooltip-top.custom-tooltip:before { border-top-color: transparent !important; }
+        .pulse-emerald { animation: pulse-emerald 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse-emerald { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .marker-pulse { animation: marker-pulse 1.5s ease-in-out infinite; }
+        @keyframes marker-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); } 70% { box-shadow: 0 0 0 10px rgba(34,197,94,0); } }
     `;
 
     // Handle Search Logic
@@ -362,21 +290,35 @@ export default function MapComponent({ category: propCategory }: { category?: st
         }
     };
 
-    if (!category) return null;
+    if (!category && !sharedMode) return null;
 
     return (
         <div className="flex h-screen w-full bg-slate-950 overflow-hidden relative">
             {/* Header / Nav overlay */}
-            <div className="absolute top-4 sm:top-6 left-2 sm:left-6 right-2 sm:right-6 z-[400] flex items-center justify-between pointer-events-none gap-2 sm:gap-3">
-                <button
-                    onClick={() => router.push('/categories')}
-                    className="p-3 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-white hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all pointer-events-auto group shrink-0"
-                >
-                    <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                </button>
+            <div className="absolute top-4 sm:top-6 left-2 sm:left-6 right-2 sm:right-6 z-[400] flex items-start justify-between pointer-events-none gap-2 sm:gap-3">
+                
+                {/* Navigation Buttons Group — hidden in shared mode */}
+                {!sharedMode && (
+                <div className={`flex flex-col gap-2 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] pointer-events-auto ${selectedLocation ? 'opacity-0 -translate-x-6 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
+                    <button
+                        onClick={() => router.push('/categories')}
+                        className="p-3 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-white hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
+                        title="Kembali ke Kategori"
+                    >
+                        <Home className="w-5 h-5 group-hover:-translate-y-1 transition-transform" />
+                    </button>
+                    <button
+                        onClick={() => router.push('/multiview')}
+                        className="p-3 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-yellow-500 hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
+                        title="Ke Halaman Multi-View"
+                    >
+                        <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    </button>
+                </div>
+                )}
 
                 {/* Search Bar */}
-                <div ref={searchRef} className="flex-1 max-w-[55vw] sm:max-w-xl sm:mx-8 relative pointer-events-auto">
+                <div ref={searchRef} className={`flex-1 max-w-[55vw] sm:max-w-xl sm:mx-8 relative pointer-events-auto transition-all duration-700 ${selectedLocation ? 'opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
                     <div className="relative group">
                         <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-yellow-500 transition-colors">
                             {isSearching ? (
@@ -441,7 +383,7 @@ export default function MapComponent({ category: propCategory }: { category?: st
                                     ))
                                 ) : !isSearching && searchQuery.length >= 3 ? (
                                     <div className="px-5 py-8 text-center">
-                                        <div className="text-slate-500 text-sm mb-1 italic">No results found for</div>
+                                        <div className="text-slate-500 text-sm mb-1">No results found for</div>
                                         <div className="text-white font-bold text-sm truncate px-4">"{searchQuery}"</div>
                                     </div>
                                 ) : null}
@@ -450,7 +392,7 @@ export default function MapComponent({ category: propCategory }: { category?: st
                     )}
                 </div>
 
-                <div className="hidden sm:flex px-4 sm:px-6 py-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-white font-black uppercase tracking-[0.2em] items-center gap-3 pointer-events-auto italic text-xs">
+                <div className="hidden sm:flex px-4 sm:px-6 py-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-white font-bold uppercase tracking-wider items-center gap-3 pointer-events-auto text-xs">
                     <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.8)] animate-pulse" />
                     <span className="truncate max-w-[100px] sm:max-w-none">{category}</span>
                 </div>
@@ -462,7 +404,8 @@ export default function MapComponent({ category: propCategory }: { category?: st
                 {!loading && (
                     <MapContainer
                         center={center}
-                        zoom={6.5}
+                        zoom={6.25}
+                        zoomSnap={0.25}
                         style={{ height: '100%', width: '100%', zIndex: 0 }}
                         zoomControl={false}
                     >
@@ -471,7 +414,7 @@ export default function MapComponent({ category: propCategory }: { category?: st
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
                         <MapResize selectedLocation={selectedLocation} />
-                        <ChangeView center={center} zoom={selectedLocation ? 14 : 6.5} />
+                        <ChangeView center={center} zoom={selectedLocation ? 14 : 6.25} />
 
                         <MarkerClusterGroup chunkedLoading>
                             {locations.map((loc) => {
@@ -514,7 +457,7 @@ export default function MapComponent({ category: propCategory }: { category?: st
                                                 {/* Tooltip Header */}
                                                 <div className="px-3.5 py-2.5 bg-slate-900/90 border-b border-white/10 flex items-center gap-2">
                                                     <div className={`w-2 h-2 rounded-full ${isMajorityOnline ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]'} mr-1`} />
-                                                    <div className="text-[10px] font-black text-white/90 uppercase tracking-[0.15em] truncate italic">
+                                                    <div className="text-[10px] font-bold text-white/90 uppercase tracking-wider truncate">
                                                         {loc.name}
                                                     </div>
                                                 </div>
@@ -528,18 +471,18 @@ export default function MapComponent({ category: propCategory }: { category?: st
                                                                 <Signal className="w-4 h-4 text-emerald-400" />
                                                                 <div className="absolute inset-0 bg-emerald-400 blur-sm opacity-60 pulse-emerald" />
                                                             </div>
-                                                            <span className="text-[14px] font-black text-white leading-none">{dynamicOnlineCount}</span>
+                                                            <span className="text-[14px] font-bold text-white leading-none">{dynamicOnlineCount}</span>
                                                         </div>
-                                                        <span className="text-[9px] font-bold text-emerald-400/80 uppercase tracking-widest">Online</span>
+                                                        <span className="text-[9px] font-bold text-emerald-400/80 uppercase tracking-wider">Online</span>
                                                     </div>
 
                                                     {/* Offline Pill */}
                                                     <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
                                                         <div className="flex items-center gap-2">
                                                             <SignalZero className="w-4 h-4 text-rose-400" />
-                                                            <span className="text-[14px] font-black text-white leading-none">{dynamicOfflineCount}</span>
+                                                            <span className="text-[14px] font-bold text-white leading-none">{dynamicOfflineCount}</span>
                                                         </div>
-                                                        <span className="text-[9px] font-bold text-rose-400/80 uppercase tracking-widest">Offline</span>
+                                                        <span className="text-[9px] font-bold text-rose-400/80 uppercase tracking-wider">Offline</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -552,6 +495,67 @@ export default function MapComponent({ category: propCategory }: { category?: st
                 )}
             </div>
 
+            {/* Delay Notice Bubble */}
+            <AnimatePresence>
+                {showDelayNotice && (
+                    <motion.div
+                        initial={{ opacity: 0, x: -30, scale: 0.9 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -20, scale: 0.9 }}
+                        transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+                        className={`fixed z-[2000] w-[calc(100vw-2rem)] sm:w-[380px] pointer-events-none ${selectedLocation ? 'hidden md:block' : 'block'} ${sharedMode ? 'bottom-24 sm:bottom-6 left-4' : 'bottom-20 sm:bottom-4 left-4 sm:left-[220px]'}`}
+                    >
+                        <div className="bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/30 shadow-2xl rounded-2xl p-4 flex gap-4 items-start pointer-events-auto ring-1 ring-white/5">
+                            <div className="p-2 bg-yellow-500/10 rounded-xl shrink-0">
+                                <Info className="w-5 h-5 text-yellow-500" />
+                            </div>
+                            <div className="flex-1 mt-0.5">
+                                <h4 className="text-sm font-bold text-white tracking-wide">Informasi Streaming</h4>
+                                <p className="text-xs text-slate-400 mt-1 leading-relaxed pr-2">
+                                    Memuat video CCTV mungkin terdapat sedikit <span className="text-slate-300 font-bold italic">delay</span>, kecepatan tergantung stabilitas koneksi jaringan di setiap proyek.
+                                </p>
+                                <div className="mt-2 pt-2 border-t border-white/10">
+                                    <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                                        💡 <strong className="text-slate-400">Info Status CCTV:</strong> Sistem mengecek kondisi mati/nyalanya kamera secara otomatis dan bertahap.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowDelayNotice(false)}
+                                className="text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0"
+                            >
+                                <CloseIcon className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Info Re-open Button */}
+            <AnimatePresence>
+                {!showDelayNotice && (
+                    <motion.button
+                        initial={{ opacity: 0, scale: 0.5, rotate: -90 }}
+                        animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                        exit={{ opacity: 0, scale: 0.5, rotate: 90 }}
+                        transition={{ duration: 0.3 }}
+                        onClick={() => setShowDelayNotice(true)}
+                        className={`fixed z-[1900] ${selectedLocation ? 'hidden md:flex' : 'flex'} items-center justify-center border transition-all group ${sharedMode ? 'bottom-24 left-4 sm:bottom-6 sm:left-[220px] w-[48px] h-[48px] rounded-2xl bg-slate-900/80 backdrop-blur-2xl border-white/10 shadow-2xl hover:bg-slate-800/90 hover:border-yellow-500/50' : 'bottom-4 left-[150px] px-3 py-2 rounded-2xl border-white/10 shadow-2xl hover:bg-white/5'}`}
+                        style={!sharedMode ? { backdropFilter: 'blur(20px)', background: 'rgba(2, 6, 23, 0.85)' } : {}}
+                        title="Informasi Delay Streaming"
+                    >
+                        <Info className="w-4 h-4 text-yellow-500 group-hover:scale-110 transition-transform" />
+                    </motion.button>
+                )}
+            </AnimatePresence>
+
+            {/* Resource Monitor — hidden in shared mode */}
+            {!sharedMode && (
+                <div className={selectedLocation ? 'hidden md:block' : 'block'}>
+                    <ResourceMonitor />
+                </div>
+            )}
+
             {/* Side Panel for Camera Details */}
             <div className={`fixed inset-y-0 right-0 z-[1000] w-full md:w-[520px] bg-slate-950/80 backdrop-blur-3xl border-l border-white/5 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transform transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedLocation ? 'translate-x-0' : 'translate-x-full'}`}>
                 {selectedLocation && (
@@ -559,6 +563,8 @@ export default function MapComponent({ category: propCategory }: { category?: st
                         <CameraPanel
                             location={selectedLocation}
                             onClose={() => setSelectedLocation(null)}
+                            onStatusChange={(id: string, status: 'online' | 'offline') => setRealtimeStatuses(prev => ({ ...prev, [id]: status }))}
+                            realtimeStatuses={realtimeStatuses}
                         />
                     </div>
                 )}

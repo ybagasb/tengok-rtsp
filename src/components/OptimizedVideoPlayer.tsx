@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
-import { Loader2, Play, Pause, Maximize2 } from 'lucide-react';
+import { Loader2, Play, Maximize2, WifiOff } from 'lucide-react';
 import { StreamManager } from '@/lib/StreamManager';
 
 interface OptimizedVideoPlayerProps {
-    streamUrl: string;
+    streamUrl: string; // RTSP URL
     cameraId: string;
     manager: StreamManager;
     onStatusChange?: (status: 'online' | 'offline') => void;
@@ -16,35 +16,161 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const hlsRef = useRef<Hls | null>(null);
+    const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
+    const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const retryCountRef = useRef(0);
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 3000;
 
     const [isVisible, setIsVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
-    // Intersection Observer for Lazy Loading
+    // Zoom & Pan State
+    const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
+    const transformRef = useRef({ scale: 1, x: 0, y: 0 });
+    const isDragging = useRef(false);
+    const lastPos = useRef({ x: 0, y: 0 });
+    const initialDistance = useRef(0);
+    const clickStartPos = useRef({ x: 0, y: 0 });
+
     useEffect(() => {
-        const observer = new IntersectionObserver(
-            ([entry]) => {
-                setIsVisible(entry.isIntersecting);
-            },
-            {
-                root: null,
-                rootMargin: '50px', // Reduce margin so it unloads faster when scrolling away
-                threshold: 0.05
-            }
-        );
+        transformRef.current = transform;
+    }, [transform]);
 
-        if (containerRef.current) {
-            observer.observe(containerRef.current);
-        }
+    // Track fullscreen state & Native Pan/Zoom
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const handleFullscreenChange = () => {
+            const isFs = !!document.fullscreenElement;
+            setIsFullscreen(isFs);
+            if (!isFs) setTransform({ scale: 1, x: 0, y: 0 });
+        };
+
+        const updateTransform = (t: any) => setTransform(t);
+
+        const handleWheel = (e: WheelEvent) => {
+            if (!document.fullscreenElement) return;
+            e.preventDefault();
+            const delta = e.deltaY * -0.005;
+            const current = transformRef.current;
+            const newScale = Math.min(Math.max(1, current.scale + delta), 8);
+            updateTransform({
+                scale: newScale,
+                x: newScale === 1 ? 0 : current.x,
+                y: newScale === 1 ? 0 : current.y
+            });
+        };
+
+        const getDistance = (touches: TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+
+        const handleTouchStart = (e: TouchEvent) => {
+            if (!document.fullscreenElement) return;
+            if (e.touches.length === 2) {
+                initialDistance.current = getDistance(e.touches);
+            } else if (e.touches.length === 1 && transformRef.current.scale > 1) {
+                isDragging.current = true;
+                lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (!document.fullscreenElement) return;
+            if (e.touches.length > 1 || transformRef.current.scale > 1) e.preventDefault(); 
+            
+            if (e.touches.length === 2) {
+                const dist = getDistance(e.touches);
+                if (initialDistance.current > 0) {
+                    const delta = dist - initialDistance.current;
+                    const current = transformRef.current;
+                    const newScale = Math.min(Math.max(1, current.scale + delta * 0.015), 8);
+                    updateTransform({ ...current, scale: newScale, x: newScale === 1 ? 0 : current.x, y: newScale === 1 ? 0 : current.y });
+                }
+                initialDistance.current = dist;
+            } else if (e.touches.length === 1 && isDragging.current && transformRef.current.scale > 1) {
+                const dx = e.touches[0].clientX - lastPos.current.x;
+                const dy = e.touches[0].clientY - lastPos.current.y;
+                lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                const current = transformRef.current;
+                updateTransform({ ...current, x: current.x + dx, y: current.y + dy });
+            }
+        };
+
+        const handleTouchEnd = (e: TouchEvent) => {
+            if (e.touches.length < 2) initialDistance.current = 0;
+            if (e.touches.length === 0) isDragging.current = false;
+        };
+
+        const handleMouseDown = (e: MouseEvent) => {
+            if (!document.fullscreenElement || transformRef.current.scale <= 1) return;
+            isDragging.current = true;
+            lastPos.current = { x: e.clientX, y: e.clientY };
+        };
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!document.fullscreenElement || !isDragging.current) return;
+            const dx = e.clientX - lastPos.current.x;
+            const dy = e.clientY - lastPos.current.y;
+            lastPos.current = { x: e.clientX, y: e.clientY };
+            const current = transformRef.current;
+            updateTransform({ ...current, x: current.x + dx, y: current.y + dy });
+        };
+
+        const handleMouseUp = () => isDragging.current = false;
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        container.addEventListener('wheel', handleWheel, { passive: false });
+        container.addEventListener('touchstart', handleTouchStart, { passive: false });
+        container.addEventListener('touchmove', handleTouchMove, { passive: false });
+        container.addEventListener('touchend', handleTouchEnd);
+        container.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
 
         return () => {
-            if (containerRef.current) observer.unobserve(containerRef.current);
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            container.removeEventListener('wheel', handleWheel);
+            container.removeEventListener('touchstart', handleTouchStart);
+            container.removeEventListener('touchmove', handleTouchMove);
+            container.removeEventListener('touchend', handleTouchEnd);
+            container.removeEventListener('mousedown', handleMouseDown);
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
         };
     }, []);
 
-    const destroyPlayer = () => {
+    // Intersection Observer for lazy loading - only play when visible
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => setIsVisible(entry.isIntersecting),
+            { root: null, rootMargin: '100px', threshold: 0.1 }
+        );
+        if (containerRef.current) observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, []);
+
+    const stopHeartbeat = useCallback(() => {
+        if (heartbeatRef.current) {
+            clearInterval(heartbeatRef.current);
+            heartbeatRef.current = null;
+        }
+    }, []);
+
+    const stopRetry = useCallback(() => {
+        if (retryTimerRef.current) {
+            clearTimeout(retryTimerRef.current);
+            retryTimerRef.current = null;
+        }
+    }, []);
+
+    const destroyPlayer = useCallback(async (stopServer = true) => {
+        stopHeartbeat();
+        stopRetry();
+
         if (hlsRef.current) {
             hlsRef.current.destroy();
             hlsRef.current = null;
@@ -56,167 +182,248 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
         }
         setIsPlaying(false);
         setIsLoading(false);
-    };
 
-    const initPlayer = () => {
+        if (stopServer) {
+            try {
+                await fetch('/api/streams/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cameraId }),
+                    keepalive: true,
+                });
+            } catch { /* ignore stop errors */ }
+        }
+    }, [cameraId, stopHeartbeat, stopRetry]);
+
+    const initPlayer = useCallback(async () => {
         if (!videoRef.current || !streamUrl) return;
-
-        const getProxiedUrl = (url: string) => {
-            if (url.includes('10.10.56.90')) return url.replace('http://10.10.56.90:8080', '/shinobi-proxy-90');
-            if (url.includes('10.10.56.94')) return url.replace('http://10.10.56.94:8080', '/shinobi-proxy-94');
-            if (url.includes('10.10.56.101')) return url.replace('http://10.10.56.101:8080', '/shinobi-proxy-101');
-            if (url.includes('10.10.56.89')) return url.replace('http://10.10.56.89:8080', '/shinobi-proxy');
-            return url;
-        };
-        const proxiedStreamUrl = getProxiedUrl(streamUrl);
 
         setIsLoading(true);
         setError(null);
 
-        if (Hls.isSupported()) {
-            destroyPlayer(); // Ensure clean slate
 
-            const hls = new Hls({
-                maxBufferLength: 5, // Limit buffer drastically to save RAM on weak devices
-                maxMaxBufferLength: 10,
-                maxBufferSize: 15 * 1000 * 1000, // 15MB max buffer
-                liveSyncDurationCount: 3,
-                liveMaxLatencyDurationCount: 10,
-                enableWorker: true,
+
+        try {
+            const res = await fetch('/api/streams/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cameraId, rtspUrl: streamUrl }),
             });
-            hlsRef.current = hls;
 
-            hls.loadSource(proxiedStreamUrl);
-            hls.attachMedia(videoRef.current);
+            const data = await res.json();
 
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                videoRef.current?.play().then(() => {
+            if (!res.ok || !data.success || !data.hlsUrl) {
+                throw new Error(data.error || 'Failed to start stream');
+            }
+
+            if (!videoRef.current) {
+                return;
+            }
+
+            // Start heartbeat ASAP after confirmed stream start
+            stopHeartbeat();
+            heartbeatRef.current = setInterval(() => {
+                fetch('/api/streams/heartbeat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cameraId }),
+                }).catch(() => {});
+            }, 10000);
+
+            // Setup HLS.js player
+            if (Hls.isSupported()) {
+                if (hlsRef.current) hlsRef.current.destroy();
+
+                const hls = new Hls({
+                    // Low-latency tuning: snap to live edge immediately
+                    liveSyncDurationCount: 1,
+                    liveMaxLatencyDurationCount: 3,
+                    // Minimal buffering before playback starts
+                    maxBufferLength: 3,
+                    maxMaxBufferLength: 8,
+                    maxBufferSize: 5 * 1000 * 1000,  // 5MB
+                    startLevel: -1,
+                    abrEwmaDefaultEstimate: 5_000_000,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    progressive: true,
+                });
+                hlsRef.current = hls;
+
+                hls.loadSource(data.hlsUrl);
+                hls.attachMedia(videoRef.current);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    retryCountRef.current = 0;
+                    videoRef.current?.play().catch(() => {});
                     setIsPlaying(true);
                     setIsLoading(false);
                     onStatusChange?.('online');
-                }).catch(err => {
-                    console.log("Autoplay prevented", err);
-                    setIsLoading(false);
-                    onStatusChange?.('online');
                 });
-            });
 
-            hls.on(Hls.Events.ERROR, (event, data) => {
-                if (data.fatal) {
-                    switch (data.type) {
-                        case Hls.ErrorTypes.NETWORK_ERROR:
-                            console.error("Network error, stream offline.");
-                            destroyPlayer();
-                            setError("Please contact Project Manager");
-                            onStatusChange?.('offline');
-                            break;
-                        case Hls.ErrorTypes.MEDIA_ERROR:
-                            console.error("Media error, trying to recover...");
-                            hls.recoverMediaError();
-                            break;
-                        default:
-                            destroyPlayer();
-                            setError("Please contact Project Manager");
-                            onStatusChange?.('offline');
-                            break;
+                hls.on(Hls.Events.ERROR, (_, errData) => {
+                    if (!errData.fatal) return;
+
+                    if (errData.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                        hls.recoverMediaError();
+                        return;
                     }
-                }
-            });
-        } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-            // Native HLS fallback (Safari)
-            videoRef.current.src = proxiedStreamUrl;
-            videoRef.current.addEventListener('loadedmetadata', () => {
-                videoRef.current?.play().then(() => {
+
+                    // Network/Other Fatal Error → don't clear timeout here, let it retry
+                    // if it's within the 15s window, otherwise the timeout will kill it.
+                    console.warn(`[Player] HLS error for ${cameraId}:`, errData.type);
+                    hls.destroy();
+
+                    if (retryCountRef.current < MAX_RETRIES) {
+                        retryCountRef.current++;
+                        setError(`Mencoba ulang (${retryCountRef.current}/${MAX_RETRIES})...`);
+                        retryTimerRef.current = setTimeout(() => {
+                            setError(null);
+                            initPlayer(); // Note: initPlayer creates a NEW 15s timeout
+                        }, RETRY_DELAY_MS);
+                    } else {
+                        destroyPlayer(true);
+                        setError('Kamera Offline');
+                        setIsLoading(false);
+                        onStatusChange?.('offline');
+                    }
+                });
+
+            } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari native HLS
+                videoRef.current.src = data.hlsUrl;
+                videoRef.current.play().then(() => {
                     setIsPlaying(true);
                     setIsLoading(false);
                     onStatusChange?.('online');
-                }).catch(err => {
-                    console.log("Autoplay prevented", err);
-                    setIsLoading(false);
-                    onStatusChange?.('online');
+                }).catch(() => {
+                    // Let the 15s timeout handle failures
                 });
-            });
-            videoRef.current.addEventListener('error', () => {
-                setError("Please contact Project Manager");
+            }
+        } catch (err: any) {
+            console.warn(`[Player] Stream fetch failed for ${cameraId}:`, err.message);
+            if (retryCountRef.current < MAX_RETRIES) {
+                retryCountRef.current++;
+                setError(`Mencoba ulang (${retryCountRef.current}/${MAX_RETRIES})...`);
+                retryTimerRef.current = setTimeout(() => {
+                    setError(null);
+                    initPlayer();
+                }, RETRY_DELAY_MS);
+            } else {
+                destroyPlayer(true);
+                setError('Kamera Offline');
                 setIsLoading(false);
                 onStatusChange?.('offline');
-            });
-        } else {
-            setError("Browser tidak mendukung HLS");
-            onStatusChange?.('offline');
+            }
         }
-    };
+    }, [streamUrl, cameraId, destroyPlayer, onStatusChange, stopHeartbeat]);
 
-    // Handle visibility and Stream Manager
+
+
+    // Manage stream based on visibility and StreamManager
     useEffect(() => {
         if (isVisible) {
-            // Register this player to trigger play when allowed by manager
-            manager.register(cameraId, () => {
-                initPlayer();
-            }, () => {
-                destroyPlayer();
-            });
+            manager.register(cameraId, () => initPlayer(), () => destroyPlayer());
         } else {
-            // Unregister and destroy aggressively when off-screen to save RAM/CPU
             manager.unregister(cameraId);
             destroyPlayer();
         }
-
         return () => {
             manager.unregister(cameraId);
             destroyPlayer();
         };
-    }, [isVisible, streamUrl, cameraId, manager]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isVisible, cameraId]);
 
     const handleFullscreen = () => {
-        const el = containerRef.current;
-        if (!el) return;
+        if (!containerRef.current) return;
         if (!document.fullscreenElement) {
-            el.requestFullscreen().catch(() => { });
+            containerRef.current.requestFullscreen().catch(() => {});
         } else {
-            document.exitFullscreen().catch(() => { });
+            document.exitFullscreen().catch(() => {});
+        }
+    };
+
+    const handleVideoPointerDown = (e: React.PointerEvent) => {
+        if (e.button !== 0 && e.pointerType === 'mouse') return; // only left click
+        clickStartPos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleVideoPointerUp = (e: React.PointerEvent) => {
+        const dx = e.clientX - clickStartPos.current.x;
+        const dy = e.clientY - clickStartPos.current.y;
+        if (Math.hypot(dx, dy) < 10) {
+            handleFullscreen();
         }
     };
 
     return (
         <div ref={containerRef} className="w-full h-full relative bg-slate-950 group">
-            {error ? (
-                <div className="absolute inset-0 flex items-center justify-center text-red-500 text-xs font-bold uppercase tracking-widest text-center px-4">
-                    {error}
+            {/* Video element - always present in DOM */}
+            <video
+                ref={videoRef}
+                className={`w-full h-full transition-all ${isFullscreen ? 'object-contain bg-black' : 'object-cover duration-300'}`}
+                style={isFullscreen ? {
+                    transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+                    touchAction: 'none',
+                    transition: isDragging.current ? 'none' : 'transform 0.05s linear',
+                    cursor: transform.scale > 1 ? 'grab' : 'pointer'
+                } : {}}
+                playsInline
+                muted
+                onPointerDown={handleVideoPointerDown}
+                onPointerUp={handleVideoPointerUp}
+            />
+
+            {/* Loading Overlay */}
+            {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+                    <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="w-7 h-7 animate-spin text-yellow-500" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Menghubungkan...</span>
+                    </div>
                 </div>
-            ) : (
-                <>
-                    <video
-                        ref={videoRef}
-                        className="w-full h-full object-cover cursor-pointer"
-                        playsInline
-                        muted
-                        onClick={handleFullscreen}
-                    />
+            )}
 
-                    {isLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                            <Loader2 className="w-6 h-6 animate-spin text-yellow-500" />
-                        </div>
+            {/* Error / Offline State */}
+            {error && !isLoading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm gap-3">
+                    <WifiOff className="w-8 h-8 text-rose-400 opacity-70" />
+                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider text-center px-4">{error}</span>
+                    {error === 'Kamera Offline' && (
+                        <button
+                            onClick={() => { retryCountRef.current = 0; setError(null); initPlayer(); }}
+                            className="mt-1 px-4 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-300 uppercase tracking-wider transition-all"
+                        >
+                            Coba Lagi
+                        </button>
                     )}
+                </div>
+            )}
 
-                    {!isPlaying && !isLoading && !error && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm group-hover:bg-black/40 transition-colors">
-                            <button
-                                onClick={() => manager.register(cameraId, initPlayer, destroyPlayer)}
-                                className="w-12 h-12 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center hover:bg-yellow-500/30 transition-colors border border-yellow-500/50"
-                            >
-                                <Play className="w-5 h-5 ml-1" />
-                            </button>
-                        </div>
-                    )}
+            {/* Play Button - shown when idle and not loading and no error */}
+            {!isPlaying && !isLoading && !error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm group-hover:bg-black/40 transition-colors">
+                    <button
+                        onClick={() => manager.register(cameraId, initPlayer, destroyPlayer)}
+                        className="w-14 h-14 rounded-full bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 flex items-center justify-center transition-all border border-yellow-500/40 hover:scale-110 active:scale-95"
+                    >
+                        <Play className="w-6 h-6 ml-1" />
+                    </button>
+                </div>
+            )}
 
-                    {isPlaying && !isLoading && !error && (
-                        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                            <Maximize2 className="w-4 h-4 text-white/60 drop-shadow-md" />
-                        </div>
-                    )}
-                </>
+            {/* Overlay buttons: Fullscreen */}
+            {isPlaying && (
+                <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
+                        className="p-2 bg-black/60 hover:bg-black/80 rounded-xl text-white backdrop-blur-md transition-all shadow-xl border border-white/10 group/btn"
+                        title="Layar Penuh"
+                    >
+                        <Maximize2 className="w-5 h-5 drop-shadow-md group-hover/btn:scale-110 transition-transform" />
+                    </button>
+                </div>
             )}
         </div>
     );

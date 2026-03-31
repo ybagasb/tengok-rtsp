@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
 
+
 export async function GET() {
     await dbConnect();
     try {
