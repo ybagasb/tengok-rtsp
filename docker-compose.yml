@@ -29,10 +29,10 @@ services:
       # Ganti dengan connection string MongoDB AWS Anda:
       # Atlas  : mongodb+srv://user:pass@cluster.mongodb.net/tengok?retryWrites=true&w=majority
       # EC2    : mongodb://user:pass@54.169.114.45:27017/tengok?authSource=admin
-      - MONGODB_URI=mongodb://admin:Qwerty123.@54.169.114.45:27017/rtsp_tengok?authSource=admin
+      - MONGODB_URI=...
 
       # ── App ──────────────────────────────────────────────────────────────────
-      - APP_PIN=123456
+      - APP_PIN=......
     dns:
       - 8.8.8.8
       - 8.8.4.4
