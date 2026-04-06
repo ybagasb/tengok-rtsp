@@ -9,12 +9,23 @@ interface CameraPanelProps {
     onClose: () => void;
     onStatusChange?: (id: string, status: 'online' | 'offline') => void;
     realtimeStatuses?: Record<string, 'online' | 'offline'>;
+    lastCheckedTimes?: Record<string, string>;
 }
 
-export default function CameraPanel({ location, onClose, onStatusChange, realtimeStatuses }: CameraPanelProps) {
+export default function CameraPanel({ location, onClose, onStatusChange, realtimeStatuses, lastCheckedTimes }: CameraPanelProps) {
     // Reset global stream manager when we switch locations
     const streamManager = useStreamManager();
     const [statuses, setStatuses] = useState<Record<string, 'online' | 'offline'>>({});
+
+    // Helper: format relative time in Indonesian
+    const formatRelativeTime = (isoString?: string) => {
+        if (!isoString) return null;
+        const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+        if (diff < 60) return 'Baru saja';
+        if (diff < 3600) return `${Math.floor(diff / 60)}m lalu`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}j lalu`;
+        return `${Math.floor(diff / 86400)}h lalu`;
+    };
 
     useEffect(() => {
         const initial: Record<string, 'online' | 'offline'> = {};
@@ -33,12 +44,10 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
             return { ...prev, [id]: status };
         });
 
-        // Persist offline status to DB so map/other users see it too
-        if (status === 'offline') {
-            axios.patch(`/api/cameras/${id}/status`, { status }).catch(() => {
-                // Ignore silent failures — next DB poll / checker might pick it up
-            });
-        }
+        // Persist stream-confirmed status to DB + SSE so map and other users see accurate status
+        axios.patch(`/api/cameras/${id}/status`, { status }).catch(() => {
+            // Ignore silent failures — next checker cycle will reconcile
+        });
 
         if (onStatusChange) {
             onStatusChange(id, status);
@@ -198,6 +207,49 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             )
                         })}
                     </div>
+
+                    {/* Offline Camera Disclaimer */}
+                    {dynamicOfflineCount > 0 && (
+                        <div className="mt-6 p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl">
+                            <div className="flex gap-3 items-start">
+                                <div className="p-2 bg-amber-500/10 rounded-xl shrink-0 mt-0.5">
+                                    <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-amber-400 mb-1.5">Mengapa Kamera Offline?</h4>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                        Kamera berstatus <strong className="text-rose-400">Offline</strong> berarti server <strong className="text-white">tidak dapat terhubung</strong> ke perangkat di lokasi proyek. Beberapa kemungkinan penyebabnya:
+                                    </p>
+                                    <ul className="text-xs text-slate-400 mt-2.5 space-y-1.5 ml-1">
+                                        <li className="flex items-start gap-2">
+                                            <span className="text-amber-500 mt-0.5">•</span>
+                                            <span>Jaringan internet atau router di lokasi proyek terputus</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="text-amber-500 mt-0.5">•</span>
+                                            <span>Perangkat kamera, DVR, atau NVR sedang mati / restart</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="text-amber-500 mt-0.5">•</span>
+                                            <span>Pengaturan port forwarding atau VPN berubah</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="text-amber-500 mt-0.5">•</span>
+                                            <span>Alamat RTSP yang didaftarkan sudah tidak aktif</span>
+                                        </li>
+                                    </ul>
+                                    <div className="mt-3 pt-3 border-t border-amber-500/10">
+                                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                                            ℹ️ Aplikasi <strong className="text-slate-300">TENGOK</strong> hanya menampilkan stream berdasarkan alamat RTSP yang diberikan oleh pihak proyek.
+                                            Untuk mengatasi kamera offline, silakan <strong className="text-amber-400">hubungi PIC atau tim IT di lokasi proyek</strong> terkait.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
             {/* Add custom scrollbar hiding styles here or in global.css */}

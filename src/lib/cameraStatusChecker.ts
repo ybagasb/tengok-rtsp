@@ -15,10 +15,11 @@ import dbConnect from './db';
 import Camera from '@/models/Camera';
 import { ffmpegManager } from './ffmpegManager';
 import { cameraStatusEmitter } from './cameraStatusEmitter';
+import StatusLog from '@/models/StatusLog';
 
-const BATCH_SIZE = 3;           // Concurrent RTSP probes (keep low to avoid camera connection limits)
-const PROBE_TIMEOUT_MS = 12000; // 12s max per camera (ffprobe needs ~8s, +4s buffer)
-const CHECK_INTERVAL_MS = 5 * 60 * 1000;  // Background check every 5 minutes (probe-now handles on-demand accuracy)
+const BATCH_SIZE = 5;           // Concurrent RTSP probes (increased for faster cycles)
+const PROBE_TIMEOUT_MS = 10000; // 10s max per camera
+const CHECK_INTERVAL_MS = 1 * 60 * 1000;  // Check every 1 minute (isRunning guard prevents overlap)
 const INITIAL_DELAY_MS = 5 * 1000;        // Wait 5s after server start before first check
 
 // Probe a single RTSP URL using ffprobe
@@ -38,13 +39,23 @@ export function probeCamera(rtspUrl: string): Promise<'online' | 'offline'> {
             '-i', rtspUrl
         ]);
 
-        let hasOutput = false;
-        proc.stdout?.on('data', () => { hasOutput = true; });
+        let outputData = '';
+        proc.stdout?.on('data', (data) => { outputData += data.toString(); });
         proc.stderr?.on('data', () => {}); // Suppress stderr
 
         proc.on('close', (code) => {
             clearTimeout(timer);
-            resolve(code === 0 || hasOutput ? 'online' : 'offline');
+            if (code !== 0) {
+                resolve('offline');
+                return;
+            }
+            try {
+                const parsed = JSON.parse(outputData);
+                const hasVideoStream = parsed?.streams?.some((s: any) => s.codec_type === 'video');
+                resolve(hasVideoStream ? 'online' : 'offline');
+            } catch {
+                resolve('offline'); // If output isn't valid JSON or format changes, assume offline to be safe
+            }
         });
 
         proc.on('error', () => {
@@ -97,7 +108,7 @@ class CameraStatusChecker {
         try {
             await dbConnect();
             const cameras = await Camera.find({ streamUrl: { $exists: true, $ne: '' } })
-                .select('_id streamUrl')
+                .select('_id streamUrl status')
                 .lean();
 
             if (cameras.length === 0) return;
@@ -113,13 +124,18 @@ class CameraStatusChecker {
             let onlineCount = 0;
             let offlineCount = 0;
 
+            const now = new Date();
             await runInBatches(camerasToProbe, BATCH_SIZE, async (cam: any) => {
                 const status = await probeCamera(cam.streamUrl);
                 if (status === 'online') onlineCount++;
                 else offlineCount++;
-                await Camera.updateOne({ _id: cam._id }, { $set: { status } });
+                await Camera.updateOne({ _id: cam._id }, { $set: { status, lastCheckedAt: now } });
+                // Log status change to history (only if changed)
+                if (cam.status !== status) {
+                    await StatusLog.create({ cameraId: cam._id, status, checkedBy: 'auto' });
+                }
                 // Push status to all connected SSE clients immediately
-                cameraStatusEmitter.emit('status', { cameraId: cam._id.toString(), status });
+                cameraStatusEmitter.emit('status', { cameraId: cam._id.toString(), status, lastCheckedAt: now.toISOString() });
             });
 
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);

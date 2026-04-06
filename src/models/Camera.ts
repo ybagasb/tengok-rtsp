@@ -6,6 +6,7 @@ export interface ICameraData {
     name: string;
     streamUrl: string;
     status: 'online' | 'offline';
+    lastCheckedAt?: Date | string;
     createdAt: Date | string;
     location?: string;
     picName?: string;
@@ -21,6 +22,7 @@ const CameraSchema: Schema = new Schema({
     name: { type: String, required: true },
     streamUrl: { type: String, required: true },
     status: { type: String, enum: ['online', 'offline'], default: 'offline' },
+    lastCheckedAt: { type: Date },
     createdAt: { type: Date, default: Date.now },
 });
 

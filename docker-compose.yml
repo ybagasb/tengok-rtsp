@@ -1,23 +1,7 @@
 version: '3.9'
 
 services:
-  # ── Nginx Reverse Proxy ──────────────────────────────────────────────────────
-  # Automatically serves maintenance.html when the app container is down
-  nginx:
-    image: nginx:alpine
-    container_name: tengok-nginx
-    restart: always
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./public/maintenance.html:/usr/share/nginx/html/maintenance.html:ro
-      - ./public/abipraya_original.svg:/usr/share/nginx/html/abipraya_original.svg:ro
-      - ./public/favicon.ico:/usr/share/nginx/html/favicon.ico:ro
-    depends_on:
-      - app
-
-  # ── Next.js App ──────────────────────────────────────────────────────────────
+# ── Next.js App ──────────────────────────────────────────────────────────────
   app:
     image: ybagasbdd/dchcs:tengok.3   # ganti tag sesuai yang di-push ke Docker Hub
     container_name: tengok-app
@@ -33,6 +17,21 @@ services:
 
       # ── App ──────────────────────────────────────────────────────────────────
       - APP_PIN=123456
+
+      # ── AWS Cognito SSO ──────────────────────────────────────────────────────
+      - COGNITO_CLIENT_ID=5kdev0ace....                          # Client ID dari Cognito
+      - COGNITO_CLIENT_SECRET=ssf1bl2abqismacofunmon6...         # Client Secret dari Cognito
+      - COGNITO_ISSUER=https://cognito-idp.ap-south....          # Cognito Issuer URL
+      - COGNITO_DOMAIN=https://auth.brantas-abipraya.co.id       # Cognito Custom Domain
+
+      # ── NextAuth ─────────────────────────────────────────────────────────────
+      # PENTING: NEXTAUTH_URL harus match dengan Allowed sign-out URLs di Cognito
+      # Untuk production: https://tengok.brantas-abipraya.co.id
+      - NEXTAUTH_URL=https://tengok.brantas-abipraya.co.id
+      - NEXTAUTH_SECRET=..     # openssl rand -base64 32
+
+      # ── Cognito Callback ─────────────────────────────────────────────────────
+      - COGNITO_REDIRECT_URI=https://tengok.brantas-abipraya.co.id/api/auth/callback/cognito
     dns:
       - 8.8.8.8
       - 8.8.4.4

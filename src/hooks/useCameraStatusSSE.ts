@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 
 export function useCameraStatusSSE() {
     const [realtimeStatuses, setRealtimeStatuses] = useState<Record<string, 'online' | 'offline'>>({});
+    const [lastCheckedTimes, setLastCheckedTimes] = useState<Record<string, string>>({});
 
     useEffect(() => {
         let isMounted = true;
@@ -20,15 +21,18 @@ export function useCameraStatusSSE() {
                         if (prev[data.cameraId] === data.status) return prev;
                         return { ...prev, [data.cameraId]: data.status };
                     });
+                    if (data.lastCheckedAt) {
+                        setLastCheckedTimes(prev => ({ ...prev, [data.cameraId]: data.lastCheckedAt }));
+                    }
                 }
             } catch (err) {
                 // Silently ignore ping or parse errors string parsing
             }
         };
 
-        eventSource.onerror = (err) => {
+        eventSource.onerror = () => {
             // EventSource auto-reconnects natively if the connection drops.
-            console.error('[SSE] Connection error/renewed');
+            // Silencing console.error to prevent console spam during normal reconnect cycles.
         };
 
         return () => {
@@ -37,5 +41,6 @@ export function useCameraStatusSSE() {
         };
     }, []);
 
-    return { realtimeStatuses, setRealtimeStatuses };
+    return { realtimeStatuses, setRealtimeStatuses, lastCheckedTimes, setLastCheckedTimes };
 }
+

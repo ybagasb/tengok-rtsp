@@ -1,12 +1,16 @@
 "use client";
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Monitor, MapPin, Tags, ArrowLeft, Shield, Link2, BarChart3 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { Monitor, MapPin, Tags, ArrowLeft, Shield, Link2, BarChart3, Activity, MoreHorizontal, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { sidebarVariants, navItemVariants } from '@/components/admin/shared';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
+    const router = useRouter();
+    const [showMore, setShowMore] = useState(false);
 
     const navigation = [
         { name: 'Cameras', href: '/admin', icon: Monitor },
@@ -14,21 +18,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'Categories', href: '/admin/categories', icon: Tags },
         { name: 'Share Links', href: '/admin/share-links', icon: Link2 },
         { name: 'Statistik', href: '/admin/statistics', icon: BarChart3 },
+        { name: 'Uptime', href: '/admin/uptime', icon: Activity },
     ];
 
-    const sidebarVariants = {
-        hidden: { x: -20, opacity: 0 },
-        show: {
-            x: 0,
-            opacity: 1,
-            transition: { staggerChildren: 0.07, delayChildren: 0.15 }
-        }
-    };
-
-    const navItemVariants = {
-        hidden: { x: -16, opacity: 0 },
-        show: { x: 0, opacity: 1, transition: { type: "spring" as const, stiffness: 300, damping: 24 } }
-    };
+    // Mobile: show first 4, put rest in "More" menu
+    const mobileMainNav = navigation.slice(0, 4);
+    const mobileMoreNav = navigation.slice(4);
 
     return (
         <div className="flex min-h-screen bg-slate-950 text-white font-sans">
@@ -36,7 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="w-64 bg-slate-900/80 backdrop-blur-xl border-r border-white/5 flex-col hidden lg:flex sticky top-0 h-screen relative overflow-hidden">
                 {/* Sidebar decoration */}
                 <div className="absolute -top-20 -left-20 w-40 h-40 bg-yellow-500/10 rounded-full blur-[60px] pointer-events-none" />
-                <div className="absolute bottom-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[50px] pointer-events-none" />
+                <div className="absolute bottom-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-[50px] pointer-events-none" />
 
                 <div className="p-6 border-b border-white/5 flex items-center gap-3 relative z-10">
                     <motion.div
@@ -79,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
                                         />
                                     )}
-                                    <Icon className={`w-5 h-5 transition-all ${isActive ? 'text-yellow-500' : 'group-hover:scale-110 group-hover:text-blue-400'}`} />
+                                    <Icon className={`w-5 h-5 transition-all ${isActive ? 'text-yellow-500' : 'group-hover:scale-110 group-hover:text-yellow-400'}`} />
                                     <span className="text-sm font-bold">{item.name}</span>
                                     {isActive && (
                                         <motion.div
@@ -95,42 +90,115 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </motion.div>
 
                 <div className="p-4 border-t border-white/5 relative z-10">
-                    <Link
-                        href="/categories"
-                        className="flex items-center gap-3 px-4 py-3.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all group"
+                    <button
+                        onClick={() => router.push('/categories')}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition-all group"
                     >
                         <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                         <span className="text-sm font-bold tracking-wide">Exit Admin</span>
-                    </Link>
+                    </button>
                 </div>
             </div>
 
-            {/* Mobile Navigation (Bottom Bar) */}
-            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 flex items-center justify-around p-2.5 z-50 pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.4)]">
-                {navigation.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = pathname === item.href;
-                    return (
-                        <Link
-                            key={item.name}
-                            href={item.href}
-                            className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all relative ${
-                                isActive ? 'text-yellow-500' : 'text-slate-500 hover:text-slate-300'
-                            }`}
-                        >
-                            {isActive && (
-                                <motion.div
-                                    layoutId="mobile-indicator"
-                                    className="absolute -top-2.5 w-8 h-0.5 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full"
-                                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                                />
-                            )}
-                            <Icon className={`w-5 h-5 ${isActive ? 'drop-shadow-[0_0_6px_rgba(234,179,8,0.5)]' : ''}`} />
-                            <span className="text-[10px] font-bold">{item.name}</span>
-                        </Link>
-                    );
-                })}
+            {/* Mobile Navigation (Bottom Bar) — 4 items + More */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 z-50 pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.4)]">
+                <div className="flex items-center justify-around p-2.5">
+                    {mobileMainNav.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = pathname === item.href;
+                        return (
+                            <Link
+                                key={item.name}
+                                href={item.href}
+                                className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all relative ${
+                                    isActive ? 'text-yellow-500' : 'text-slate-500 hover:text-slate-300'
+                                }`}
+                            >
+                                {isActive && (
+                                    <motion.div
+                                        layoutId="mobile-indicator"
+                                        className="absolute -top-2.5 w-8 h-0.5 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full"
+                                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                    />
+                                )}
+                                <Icon className={`w-5 h-5 ${isActive ? 'drop-shadow-[0_0_6px_rgba(234,179,8,0.5)]' : ''}`} />
+                                <span className="text-[10px] font-bold">{item.name}</span>
+                            </Link>
+                        );
+                    })}
+
+                    {/* More Menu Trigger */}
+                    <button
+                        onClick={() => setShowMore(true)}
+                        className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all ${
+                            mobileMoreNav.some(n => pathname === n.href) ? 'text-yellow-500' : 'text-slate-500'
+                        }`}
+                    >
+                        <MoreHorizontal className="w-5 h-5" />
+                        <span className="text-[10px] font-bold">Lainnya</span>
+                    </button>
+                </div>
             </div>
+
+            {/* Mobile "More" Slide-up Sheet */}
+            <AnimatePresence>
+                {showMore && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="lg:hidden fixed inset-0 z-[60] flex items-end"
+                    >
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowMore(false)} />
+                        <motion.div
+                            initial={{ y: '100%' }}
+                            animate={{ y: 0 }}
+                            exit={{ y: '100%' }}
+                            transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                            className="relative w-full bg-slate-900/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-safe"
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-lg font-bold text-white uppercase tracking-wider">Menu Lainnya</h3>
+                                <button
+                                    onClick={() => setShowMore(false)}
+                                    className="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-white transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="space-y-2">
+                                {mobileMoreNav.map((item) => {
+                                    const Icon = item.icon;
+                                    const isActive = pathname === item.href;
+                                    return (
+                                        <Link
+                                            key={item.name}
+                                            href={item.href}
+                                            onClick={() => setShowMore(false)}
+                                            className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
+                                                isActive
+                                                    ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20'
+                                                    : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                                            }`}
+                                        >
+                                            <Icon className="w-5 h-5" />
+                                            <span className="text-sm font-bold">{item.name}</span>
+                                            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-500" />}
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                            <button
+                                onClick={() => { setShowMore(false); router.push('/categories'); }}
+                                className="w-full flex items-center gap-4 p-4 mt-4 rounded-2xl text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10 transition-all border-t border-white/5 pt-6"
+                            >
+                                <ArrowLeft className="w-5 h-5" />
+                                <span className="text-sm font-bold">Exit Admin</span>
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Main Content Area */}
             <div className="flex-1 pb-20 lg:pb-0 w-full overflow-y-auto">

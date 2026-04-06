@@ -8,6 +8,9 @@ export interface ICategoryData {
     description: string;
     icon: string; // Name of Lucide icon (e.g. 'School', 'Building2')
     color: string; // Tailwind gradient class (e.g. 'from-blue-500 to-cyan-400')
+    defaultLat?: number;  // Default map center latitude
+    defaultLng?: number;  // Default map center longitude
+    defaultZoom?: number; // Default map zoom level (1-18)
     createdAt?: Date | string;
 }
 
@@ -20,6 +23,9 @@ const CategorySchema: Schema = new Schema({
     description: { type: String, required: true },
     icon: { type: String, required: true },
     color: { type: String, required: true },
+    defaultLat: { type: Number },
+    defaultLng: { type: Number },
+    defaultZoom: { type: Number },
     createdAt: { type: Date, default: Date.now },
 });
 

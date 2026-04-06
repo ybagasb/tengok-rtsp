@@ -5,11 +5,13 @@ import useSWR, { mutate } from 'swr';
 import axios from 'axios';
 import {
     Link2, Plus, Trash2, Copy, CheckCircle2, XCircle, Clock,
-    Loader2, Eye, ToggleLeft, ToggleRight, MapPin,
+    Loader2, Eye, ToggleLeft, ToggleRight, MapPin, X,
     ChevronDown, ChevronUp, Search, Check, Timer
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PageHeader, useConfirm } from '@/components/admin/AdminUI';
+import { inputCls } from '@/components/admin/shared';
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
@@ -201,6 +203,7 @@ export default function ShareLinksPage() {
     // Expired section visibility
     const [showExpired, setShowExpired] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [showAddSheet, setShowAddSheet] = useState(false);
 
     useEffect(() => {
         const fetchLocations = async () => {
@@ -280,8 +283,11 @@ export default function ShareLinksPage() {
         }
     };
 
+    const { confirm: confirmDelete, ConfirmDialog } = useConfirm();
+
     const handleDelete = async (id: string) => {
-        if (!confirm('Yakin ingin menghapus secara permanen tautan ini?')) return;
+        const ok = await confirmDelete('Yakin ingin menghapus secara permanen tautan ini?', { title: 'Hapus Tautan' });
+        if (!ok) return;
         try {
             await axios.delete(`/api/share-links/${id}`);
             mutate('/api/share-links');
@@ -301,30 +307,17 @@ export default function ShareLinksPage() {
 
     return (
         <div className="min-h-full bg-slate-950 p-6 md:p-10 font-sans">
+            {ConfirmDialog}
             <div className="max-w-6xl mx-auto">
-                <motion.header
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 pb-6 border-b border-white/5"
-                >
-                    <div>
-                        <h1 className="text-4xl font-bold tracking-tight uppercase flex items-center gap-4 text-white">
-                            <div className="p-3 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl shadow-[0_8px_30px_rgba(234,179,8,0.3)] relative overflow-hidden group">
-                                <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                <Link2 className="w-8 h-8 text-slate-950 relative z-10" />
-                            </div>
-                            Share Links
-                        </h1>
-                        <p className="text-slate-500 text-sm mt-3 font-medium tracking-wide">
-                            Pusat distribusi tautan publik berbatas waktu untuk area CCTV
-                        </p>
-                    </div>
-                </motion.header>
+                <PageHeader
+                    icon={Link2}
+                    title="Share Links"
+                    subtitle="Pusat distribusi tautan publik berbatas waktu untuk area CCTV"
+                />
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* ── Create Form (Sticky Container) ────────────────────── */}
-                    <div className="lg:col-span-1">
+                    {/* ── Create Form (Sticky Container — Desktop only) ────── */}
+                    <div className="hidden lg:block lg:col-span-1">
                         <motion.div 
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
@@ -568,6 +561,78 @@ export default function ShareLinksPage() {
                     </div>
                 </div>
             </div>
+
+            {/* ── Mobile FAB ─────────────────────────────────────────────── */}
+            <motion.button
+                className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl shadow-[0_8px_30px_rgba(234,179,8,0.5)] flex items-center justify-center text-slate-950"
+                whileTap={{ scale: 0.92 }}
+                whileHover={{ y: -2 }}
+                onClick={() => setShowAddSheet(true)}
+                title="Buat Link Baru"
+            >
+                <Plus className="w-7 h-7 stroke-[2.5]" />
+            </motion.button>
+
+            {/* ── Mobile Slide-Up Sheet ───────────────────────────────────── */}
+            <AnimatePresence>
+                {showAddSheet && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="lg:hidden fixed inset-0 z-[70] flex items-end"
+                    >
+                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowAddSheet(false)} />
+                        <motion.div
+                            initial={{ y: '100%' }}
+                            animate={{ y: 0 }}
+                            exit={{ y: '100%' }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                            className="relative w-full bg-slate-900/98 backdrop-blur-2xl border-t border-white/10 rounded-t-3xl p-6 pb-10 max-h-[90vh] overflow-y-auto"
+                        >
+                            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-6" />
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-3">
+                                    <div className="p-2 rounded-xl bg-yellow-500/10">
+                                        <Plus className="w-5 h-5 text-yellow-500" />
+                                    </div>
+                                    Form Link Baru
+                                </h3>
+                                <button onClick={() => setShowAddSheet(false)} className="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-white">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <form onSubmit={async (e) => { await handleCreate(e); setShowAddSheet(false); }} className="space-y-6">
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Judul Hak Akses *</label>
+                                    <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="Contoh: Inspeksi K3 Lapangan"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-white placeholder:text-slate-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Teritori / Proyek *</label>
+                                    <LocationSelector locations={locations} selected={selectedLocationIds} onChange={setSelectedLocationIds} />
+                                </div>
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Timer Kedaluwarsa *</label>
+                                    <div className="grid grid-cols-2 gap-3 mt-2">
+                                        {DURATION_OPTIONS.map(opt => (
+                                            <button key={opt.value} type="button" onClick={() => setDuration(opt.value)}
+                                                className={`py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${duration === opt.value ? 'bg-gradient-to-br from-yellow-500 to-orange-500 border-orange-400 text-slate-950 shadow-[0_10px_20px_rgba(234,179,8,0.3)]' : 'bg-black/40 border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
+                                            >{opt.label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <motion.button whileTap={{ scale: 0.97 }} type="submit" disabled={isSubmitting}
+                                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-900 font-bold py-5 rounded-2xl transition-all shadow-[0_10px_30px_rgba(234,179,8,0.3)] disabled:opacity-50 flex items-center justify-center gap-3 uppercase text-sm tracking-wider"
+                                >
+                                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Link2 className="w-5 h-5" /> Distribusikan Tautan</>}
+                                </motion.button>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

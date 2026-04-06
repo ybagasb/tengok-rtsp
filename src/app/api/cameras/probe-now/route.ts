@@ -4,6 +4,7 @@ import { cameraStatusEmitter } from '@/lib/cameraStatusEmitter';
 import { ffmpegManager } from '@/lib/ffmpegManager';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
+import StatusLog from '@/models/StatusLog';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
         try {
             await dbConnect();
             const cameras = await Camera.find({ _id: { $in: cameraIds }, streamUrl: { $exists: true, $ne: '' } })
-                .select('_id streamUrl')
+                .select('_id streamUrl status')
                 .lean();
 
             const BATCH_SIZE = 3;
@@ -50,8 +51,12 @@ export async function POST(req: NextRequest) {
                 await Promise.all(batch.map(async (cam: any) => {
                     // Already streaming = confirmed live → mark online immediately
                     if (ffmpegManager.isStreaming(cam._id.toString())) {
-                        const payload = { cameraId: cam._id.toString(), status: 'online' as const };
-                        await Camera.updateOne({ _id: cam._id }, { $set: { status: 'online' } });
+                        const now = new Date();
+                        const payload = { cameraId: cam._id.toString(), status: 'online' as const, lastCheckedAt: now.toISOString() };
+                        await Camera.updateOne({ _id: cam._id }, { $set: { status: 'online', lastCheckedAt: now } });
+                        if (cam.status !== 'online') {
+                            await StatusLog.create({ cameraId: cam._id, status: 'online', checkedBy: 'probe' });
+                        }
                         cameraStatusEmitter.emit('status', payload);
                         return;
                     }
@@ -75,9 +80,13 @@ export async function POST(req: NextRequest) {
                         try { ffmpegManager.stopStream(cam._id.toString()); } catch { /* ignore */ }
                     }
 
-                    // Write to DB immediately — MapComponent's 3s polling will pick this up
-                    await Camera.updateOne({ _id: cam._id }, { $set: { status } });
-                    cameraStatusEmitter.emit('status', { cameraId: cam._id.toString(), status });
+                    // Write to DB immediately
+                    const now = new Date();
+                    await Camera.updateOne({ _id: cam._id }, { $set: { status, lastCheckedAt: now } });
+                    if (cam.status !== status) {
+                        await StatusLog.create({ cameraId: cam._id, status, checkedBy: 'probe' });
+                    }
+                    cameraStatusEmitter.emit('status', { cameraId: cam._id.toString(), status, lastCheckedAt: now.toISOString() });
                 }));
             }
 

@@ -8,7 +8,9 @@
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @layer utilities {
@@ -29,21 +31,34 @@ body {
 
 /* Custom Scrollbar for Webkit */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #334155;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
 }
 
 /* Custom Leaflet Tooltip & Marker Styles */
@@ -109,4 +124,9 @@ body {
 .marker-cluster-large div {
   background-color: rgba(239, 68, 68, 0.8) !important;
   color: white !important;
+}
+
+/* Hide Leaflet Watermark */
+.leaflet-control-attribution {
+  display: none !important;
 }

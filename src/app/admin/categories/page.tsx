@@ -1,16 +1,22 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import axios from 'axios';
 import {
     Plus, Trash2, Edit2, Loader2, Save, RotateCcw,
-    LayoutGrid, Tags, Palette, Info, Link as LinkIcon,
-    ArrowLeft, Home, Building2, School, Hotel, Hospital, Briefcase, Camera
+    LayoutGrid, Tags, Palette, Info, Link as LinkIcon, ArrowRight, MapPin, Navigation
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
+import 'leaflet/dist/leaflet.css';
+import { containerVariants, cardVariants, inputCls } from '@/components/admin/shared';
+import { PageHeader, SectionHeader, FormField, EmptyState, FullPageLoading, SearchBar, useConfirm, CountBadge } from '@/components/admin/AdminUI';
+
+const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 
 interface Category {
     _id: string;
@@ -19,16 +25,22 @@ interface Category {
     description: string;
     icon: string;
     color: string;
+    defaultLat?: number;
+    defaultLng?: number;
+    defaultZoom?: number;
     createdAt?: string;
 }
 
-// Available standard icons for categories
+interface LocationCount {
+    [identifier: string]: number;
+}
+
 const AVAILABLE_ICONS = [
     'School', 'Building2', 'Home', 'Hotel', 'Hospital', 'Briefcase',
-    'Camera', 'ShieldCheck', 'Map', 'LayoutGrid', 'HardHat', 'Truck'
+    'Camera', 'ShieldCheck', 'Map', 'LayoutGrid', 'HardHat', 'Truck',
+    'Factory', 'Landmark', 'Construction', 'Warehouse', 'Building', 'TreePine'
 ];
 
-// Available standard Tailwind gradients
 const AVAILABLE_COLORS = [
     { label: 'Blue-Cyan', value: 'from-blue-500 to-cyan-400', class: 'bg-gradient-to-br from-blue-500 to-cyan-400' },
     { label: 'Yellow-Orange', value: 'from-yellow-500 to-orange-400', class: 'bg-gradient-to-br from-yellow-500 to-orange-400' },
@@ -39,29 +51,72 @@ const AVAILABLE_COLORS = [
     { label: 'Slate-Gray', value: 'from-slate-500 to-gray-400', class: 'bg-gradient-to-br from-slate-500 to-gray-400' },
 ];
 
+const DEFAULT_CENTER = { lat: -4.4943173, lng: 113.2007588 };
+const DEFAULT_ZOOM = 5;
+
+// Map click handler component
+function MapClickHandler({ onPick, RL }: { onPick: (lat: number, lng: number) => void; RL: any }) {
+    if (!RL?.useMapEvents) return null;
+    RL.useMapEvents({ click(e: any) { onPick(e.latlng.lat, e.latlng.lng); } });
+    return null;
+}
+
 export default function AdminCategories() {
     const [categories, setCategories] = useState<Category[]>([]);
+    const [locationCounts, setLocationCounts] = useState<LocationCount>({});
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showForm, setShowForm] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [L, setL] = useState<any>(null);
+    const [RL, setRL] = useState<any>(null);
+    const { confirm, ConfirmDialog } = useConfirm();
 
-    // Form State
     const [formData, setFormData] = useState<Partial<Category>>({
         name: '',
         identifier: '',
         description: '',
         icon: 'LayoutGrid',
-        color: 'from-blue-500 to-cyan-400'
+        color: 'from-blue-500 to-cyan-400',
+        defaultLat: undefined,
+        defaultLng: undefined,
+        defaultZoom: undefined,
     });
 
     useEffect(() => {
+        const init = async () => {
+            if (typeof window !== 'undefined') {
+                const [leaf, rLeaf] = await Promise.all([import('leaflet'), import('react-leaflet')]);
+                const LMod = leaf.default;
+                setL(LMod);
+                setRL(rLeaf);
+                delete (LMod.Icon.Default.prototype as any)._getIconUrl;
+                LMod.Icon.Default.mergeOptions({
+                    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                });
+            }
+        };
+        init();
         fetchData();
     }, []);
 
     const fetchData = async () => {
         try {
-            const res = await axios.get('/api/categories');
-            setCategories(res.data);
+            const [catRes, locRes] = await Promise.all([
+                axios.get('/api/categories'),
+                axios.get('/api/locations'),
+            ]);
+            setCategories(catRes.data);
+
+            // Count locations per category
+            const counts: LocationCount = {};
+            const locations = locRes.data.data || [];
+            locations.forEach((loc: any) => {
+                counts[loc.category] = (counts[loc.category] || 0) + 1;
+            });
+            setLocationCounts(counts);
         } catch (error) {
             toast.error('Gagal mengambil data kategori');
         } finally {
@@ -78,7 +133,6 @@ export default function AdminCategories() {
         setFormData(prev => ({
             ...prev,
             name,
-            // Only auto-generate identifier if creating a new category
             ...(!prev._id ? { identifier: generateIdentifier(name) } : {})
         }));
     };
@@ -110,7 +164,10 @@ export default function AdminCategories() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`Yakin ingin menghapus kategori "${name}"? Lokasi yang menggunakan kategori ini mungkin tidak akan tampil dengan benar.`)) return;
+        const ok = await confirm(`Yakin ingin menghapus kategori "${name}"? Lokasi yang menggunakan kategori ini mungkin tidak akan tampil dengan benar.`, {
+            title: 'Hapus Kategori',
+        });
+        if (!ok) return;
         try {
             await axios.delete(`/api/categories/${id}`);
             toast.success('Kategori dihapus');
@@ -126,65 +183,45 @@ export default function AdminCategories() {
             identifier: '',
             description: '',
             icon: 'LayoutGrid',
-            color: 'from-blue-500 to-cyan-400'
+            color: 'from-blue-500 to-cyan-400',
+            defaultLat: undefined,
+            defaultLng: undefined,
+            defaultZoom: undefined,
         });
         setShowForm(false);
     };
 
-    // Animation variants
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        show: {
-            opacity: 1,
-            transition: { staggerChildren: 0.08 }
-        }
-    };
-    const cardVariants = {
-        hidden: { opacity: 0, y: 24, scale: 0.96 },
-        show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 24 } }
-    };
+    const filteredCategories = useMemo(() => {
+        if (!searchQuery) return categories;
+        const q = searchQuery.toLowerCase();
+        return categories.filter(c =>
+            c.name.toLowerCase().includes(q) ||
+            c.identifier.toLowerCase().includes(q) ||
+            c.description.toLowerCase().includes(q)
+        );
+    }, [categories, searchQuery]);
 
-    if (loading) return <div className="flex justify-center items-center h-screen bg-slate-950"><Loader2 className="w-8 h-8 animate-spin text-yellow-500" /></div>;
-
-    const SectionHeader = ({ icon: Icon, title, color }: any) => (
-        <div className="flex items-center gap-2.5 mb-5 border-b border-white/5 pb-3">
-            <div className={`p-1.5 rounded-lg ${color === 'text-blue-500' ? 'bg-blue-500/10' : 'bg-yellow-500/10'}`}>
-                <Icon className={`w-4 h-4 ${color}`} />
-            </div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</h3>
-        </div>
-    );
+    if (loading) return <FullPageLoading />;
 
     return (
         <div className="min-h-full bg-slate-950 p-6 md:p-10 font-sans">
+            {ConfirmDialog}
             <div className="max-w-5xl mx-auto">
-                <motion.header
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="flex flex-col md:flex-row justify-between md:items-end mb-10 pb-6 border-b border-white/5 gap-6"
-                >
-                    <div>
-                        <h1 className="text-4xl font-bold tracking-tight uppercase flex items-center gap-4 text-white">
-                            <div className="p-3 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-2xl shadow-[0_8px_30px_rgba(37,99,235,0.3)] relative overflow-hidden group">
-                                <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                <LayoutGrid className="w-8 h-8 text-white relative z-10" />
-                            </div>
-                            Kategori Proyek
-                        </h1>
-                        <p className="text-slate-500 text-sm mt-3 font-medium tracking-wide">
-                            Kelola jenis kategori tayangan dan pangkalan visual ikon aplikasi
-                        </p>
-                    </div>
-                    <motion.button
-                        whileHover={{ y: showForm ? 0 : -2 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => { if (showForm) handleReset(); else setShowForm(true); }}
-                        className={`px-8 py-3.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-sm uppercase tracking-wider ${showForm ? 'bg-slate-800 text-slate-400 border border-white/5 hover:bg-slate-700 hover:text-white' : 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]'}`}
-                    >
-                        {showForm ? 'Batal Tambah' : <><Plus className="w-5 h-5" /> Buat Kategori</>}
-                    </motion.button>
-                </motion.header>
+                <PageHeader
+                    icon={LayoutGrid}
+                    title="Kategori Proyek"
+                    subtitle="Kelola jenis kategori tayangan dan pangkalan visual ikon aplikasi"
+                    actions={
+                        <motion.button
+                            whileHover={{ y: showForm ? 0 : -2 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => { if (showForm) handleReset(); else setShowForm(true); }}
+                            className={`px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-sm uppercase tracking-wider ${showForm ? 'bg-slate-800 text-slate-400 border border-white/5 hover:bg-slate-700 hover:text-white' : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-950 shadow-[0_4px_20px_rgba(234,179,8,0.4)]'}`}
+                        >
+                            {showForm ? 'Batal' : <><Plus className="w-5 h-5" /><span className="hidden sm:inline">Buat Kategori</span><span className="sm:hidden">Tambah</span></>}
+                        </motion.button>
+                    }
+                />
 
                 <AnimatePresence>
                     {showForm && (
@@ -196,40 +233,33 @@ export default function AdminCategories() {
                             className="bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-white/10 mb-12 shadow-[0_30px_60px_rgba(0,0,0,0.4)] overflow-hidden relative group"
                         >
                             <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/5 blur-[100px] pointer-events-none" />
-                            <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/5 blur-[80px] pointer-events-none" />
+                            <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/5 blur-[80px] pointer-events-none" />
 
                             <form onSubmit={handleSubmit} className="space-y-10 relative z-10">
                                 {/* Section 1: Informasi Dasar */}
                                 <div>
-                                    <SectionHeader icon={Info} title="Informasi Dasar" color="text-blue-500" />
+                                    <SectionHeader icon={Info} title="Informasi Dasar" />
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="space-y-2">
-                                            <label className="text-[11px] font-bold text-slate-500 uppercase ml-1">Nama Kategori *</label>
-                                            <input required type="text" value={formData.name} onChange={handleNameChange} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all placeholder:text-slate-600" placeholder="Contoh: Sekolah Dasar" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[11px] font-bold text-slate-500 uppercase ml-1">URL Identifier *</label>
-                                            <div className="relative">
-                                                <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
-                                                <input required type="text" value={formData.identifier} onChange={e => setFormData({ ...formData, identifier: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all placeholder:text-slate-600" placeholder="sekolah-dasar" />
-                                            </div>
-                                            <p className="text-[10px] text-slate-600 ml-1">Gunakan huruf kecil, angka, dan strip (-). Contoh: rsud-baru</p>
-                                        </div>
-                                        <div className="md:col-span-2 space-y-2">
-                                            <label className="text-[11px] font-bold text-slate-500 uppercase ml-1">Deskripsi *</label>
-                                            <textarea required value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all placeholder:text-slate-600" rows={3} placeholder="Penjelasan mengenai kategori ini..." />
+                                        <FormField label="Nama Kategori" required>
+                                            <input required type="text" value={formData.name} onChange={handleNameChange} className={inputCls()} placeholder="Contoh: Sekolah Dasar" />
+                                        </FormField>
+                                        <FormField label="URL Identifier" required icon={<LinkIcon className="w-4 h-4" />}>
+                                            <input required type="text" value={formData.identifier} onChange={e => setFormData({ ...formData, identifier: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className={inputCls(true)} placeholder="sekolah-dasar" />
+                                        </FormField>
+                                        <div className="md:col-span-2">
+                                            <FormField label="Deskripsi" required>
+                                                <textarea required value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className={inputCls()} rows={3} placeholder="Penjelasan mengenai kategori ini..." />
+                                            </FormField>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Section 2: Tampilan Visual */}
                                 <div>
-                                    <SectionHeader icon={Palette} title="Tampilan Visual" color="text-yellow-500" />
+                                    <SectionHeader icon={Palette} title="Tampilan Visual" />
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-
                                         {/* Icon Picker */}
-                                        <div className="space-y-4">
-                                            <label className="text-[11px] font-bold text-slate-500 uppercase ml-1">Pilih Icon *</label>
+                                        <FormField label="Pilih Icon" required>
                                             <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
                                                 {AVAILABLE_ICONS.map(iconName => {
                                                     const IconComp = (LucideIcons as any)[iconName];
@@ -249,11 +279,10 @@ export default function AdminCategories() {
                                                     )
                                                 })}
                                             </div>
-                                        </div>
+                                        </FormField>
 
                                         {/* Color Picker */}
-                                        <div className="space-y-4">
-                                            <label className="text-[11px] font-bold text-slate-500 uppercase ml-1">Mode Warna Kategori *</label>
+                                        <FormField label="Mode Warna Kategori" required>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 {AVAILABLE_COLORS.map(color => {
                                                     const isSelected = formData.color === color.value;
@@ -272,32 +301,111 @@ export default function AdminCategories() {
                                                     )
                                                 })}
                                             </div>
-                                        </div>
+                                        </FormField>
 
                                         {/* Live Preview */}
                                         <div className="md:col-span-2 mt-4 p-8 bg-black/30 rounded-2xl border border-white/5 flex flex-col items-center justify-center">
                                             <label className="text-[10px] font-bold text-slate-600 uppercase mb-6 tracking-wider">— Live Preview Card —</label>
-
-                                            <motion.div
+                                            <motion.button
                                                 layout
-                                                className={`w-[280px] h-[320px] rounded-[30px] p-1 bg-gradient-to-br border border-white/10 shadow-2xl flex flex-col justify-end text-left overflow-hidden relative group/preview ${formData.color}`}
+                                                type="button"
+                                                className="group/preview relative w-full max-w-[360px] h-52 rounded-[2.5rem] overflow-hidden bg-slate-900/40 backdrop-blur-xl border border-white/5 hover:border-yellow-500/30 transition-all duration-500 text-left p-6 sm:p-8 shadow-2xl flex flex-col justify-between"
                                             >
-                                                <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.03] mix-blend-overlay"></div>
-                                                <div className="absolute top-6 left-6 p-4 rounded-2xl bg-white/20 backdrop-blur-md shadow-lg border border-white/30">
-                                                    {formData.icon && (LucideIcons as any)[formData.icon] &&
-                                                        (() => { const PreviewIcon = (LucideIcons as any)[formData.icon]; return <PreviewIcon className="w-8 h-8 text-white stroke-[2.5]" />; })()
-                                                    }
+                                                <div className={`absolute -top-10 -right-10 w-32 h-32 sm:w-40 sm:h-40 bg-gradient-to-br ${formData.color} opacity-10 blur-3xl group-hover/preview:opacity-20 transition-opacity duration-500`} />
+                                                <div className="relative z-10 flex justify-between items-start">
+                                                    <div className={`p-4 rounded-3xl bg-gradient-to-br ${formData.color} shadow-lg`}>
+                                                        {formData.icon && (LucideIcons as any)[formData.icon] &&
+                                                            (() => { const PreviewIcon = (LucideIcons as any)[formData.icon]; return <PreviewIcon className="w-6 h-6 text-white stroke-[2.5]" />; })()
+                                                        }
+                                                    </div>
+                                                    <ArrowRight className="w-6 h-6 text-slate-700" />
                                                 </div>
-                                                <div className="p-8 pb-10 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-32">
-                                                    <h2 className="text-3xl font-bold text-white tracking-tight mb-2">
+                                                <div className="relative z-10 mt-auto">
+                                                    <h2 className="text-2xl font-bold text-white tracking-tight uppercase mb-2">
                                                         {formData.name || 'Nama Kategori'}
                                                     </h2>
-                                                    <p className="text-white/80 text-sm font-medium leading-relaxed line-clamp-2">
+                                                    <p className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed line-clamp-2">
                                                         {formData.description || 'Deskripsi kategori akan tampil di sini'}
                                                     </p>
                                                 </div>
-                                            </motion.div>
+                                                <div className="absolute inset-0 border-2 border-transparent group-hover/preview:border-yellow-500/20 rounded-[2.5rem] transition-all duration-500 pointer-events-none" />
+                                            </motion.button>
+                                        </div>
+                                    </div>
+                                </div>
 
+                                {/* Section 3: Pengaturan Default Peta */}
+                                <div>
+                                    <SectionHeader icon={Navigation} title="Pengaturan Default Tampilan Peta" />
+                                    <p className="text-xs text-slate-500 mb-6 -mt-3">
+                                        Atur titik koordinat dan zoom default saat user membuka peta kategori ini. Klik pada peta atau isi manual. Jika dikosongkan, akan menggunakan default Indonesia.
+                                    </p>
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                        {/* Map picker */}
+                                        <div className="lg:col-span-2 rounded-2xl overflow-hidden border border-white/10 h-72 bg-slate-950 flex items-center justify-center shadow-inner">
+                                            {typeof window !== 'undefined' && RL && L ? (
+                                                <MapContainer
+                                                    center={[formData.defaultLat || DEFAULT_CENTER.lat, formData.defaultLng || DEFAULT_CENTER.lng]}
+                                                    zoom={formData.defaultZoom || DEFAULT_ZOOM}
+                                                    style={{ height: '100%', width: '100%', zIndex: 0 }}
+                                                    attributionControl={false}
+                                                >
+                                                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                                    <MapClickHandler
+                                                        onPick={(lat, lng) => setFormData(prev => ({ ...prev, defaultLat: lat, defaultLng: lng }))}
+                                                        RL={RL}
+                                                    />
+                                                    {formData.defaultLat && formData.defaultLng && (
+                                                        <Marker position={[formData.defaultLat, formData.defaultLng]} />
+                                                    )}
+                                                </MapContainer>
+                                            ) : (
+                                                <Loader2 className="animate-spin text-slate-700" />
+                                            )}
+                                        </div>
+                                        {/* Manual inputs */}
+                                        <div className="bg-black/40 rounded-2xl p-6 border border-white/10 flex flex-col justify-center space-y-5">
+                                            <FormField label="Latitude">
+                                                <input
+                                                    type="number"
+                                                    step="any"
+                                                    value={formData.defaultLat ?? ''}
+                                                    onChange={e => setFormData({ ...formData, defaultLat: e.target.value ? parseFloat(e.target.value) : undefined })}
+                                                    className={inputCls()}
+                                                    placeholder="-6.2088 (opsional)"
+                                                />
+                                            </FormField>
+                                            <FormField label="Longitude">
+                                                <input
+                                                    type="number"
+                                                    step="any"
+                                                    value={formData.defaultLng ?? ''}
+                                                    onChange={e => setFormData({ ...formData, defaultLng: e.target.value ? parseFloat(e.target.value) : undefined })}
+                                                    className={inputCls()}
+                                                    placeholder="106.8456 (opsional)"
+                                                />
+                                            </FormField>
+                                            <FormField label="Zoom Level (1-18)">
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    max={18}
+                                                    step={0.5}
+                                                    value={formData.defaultZoom ?? ''}
+                                                    onChange={e => setFormData({ ...formData, defaultZoom: e.target.value ? parseFloat(e.target.value) : undefined })}
+                                                    className={inputCls()}
+                                                    placeholder="12 (opsional)"
+                                                />
+                                            </FormField>
+                                            {formData.defaultLat && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({ ...prev, defaultLat: undefined, defaultLng: undefined, defaultZoom: undefined }))}
+                                                    className="text-[11px] text-slate-500 hover:text-red-400 transition-colors uppercase tracking-wider font-bold mt-2"
+                                                >
+                                                    Reset ke Default Indonesia
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -329,41 +437,40 @@ export default function AdminCategories() {
                     )}
                 </AnimatePresence>
 
+                {/* Search */}
+                {categories.length > 0 && (
+                    <div className="mb-6">
+                        <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Cari kategori..." />
+                    </div>
+                )}
+
                 {/* Categories List */}
-                {categories.length === 0 && !loading ? (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="col-span-full flex flex-col items-center justify-center py-24 text-slate-600 border-2 border-dashed border-white/10 rounded-[2rem] bg-slate-900/20"
-                    >
-                        <Tags className="w-20 h-20 mb-4 opacity-10" />
-                        <p className="font-bold text-lg uppercase tracking-wider opacity-30">Belum Ada Kategori</p>
-                        <p className="text-sm mt-2 opacity-40 font-medium">Buat klasifikasi proyek pertama Anda menggunakan panel di atas.</p>
-                    </motion.div>
+                {filteredCategories.length === 0 && !loading ? (
+                    <EmptyState
+                        icon={Tags}
+                        title={searchQuery ? 'Tidak ditemukan' : 'Belum Ada Kategori'}
+                        subtitle={searchQuery ? 'Coba ubah kata pencarian Anda' : 'Buat klasifikasi proyek pertama Anda menggunakan panel di atas.'}
+                    />
                 ) : (
-                    <motion.div
-                        variants={containerVariants}
-                        initial="hidden"
-                        animate="show"
-                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                    >
-                        {categories.map((cat) => {
+                    <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-24">
+                        {filteredCategories.map((cat) => {
                             const IconComp = (LucideIcons as any)[cat.icon] || LayoutGrid;
+                            const locCount = locationCounts[cat.identifier] || 0;
 
                             return (
                                 <motion.div
                                     variants={cardVariants}
                                     key={cat._id}
-                                    className="group relative bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 hover:border-blue-500/30 hover:shadow-[0_20px_40px_rgba(37,99,235,0.1)] transition-all overflow-hidden flex flex-col h-[280px]"
+                                    className="group relative bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.06)] transition-all overflow-hidden flex flex-col h-[300px]"
                                 >
                                     <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${cat.color} opacity-20 blur-3xl pointer-events-none group-hover:opacity-40 transition-opacity duration-500`} />
 
-                                    <div className="flex justify-between items-start mb-6 relative z-10">
+                                    <div className="flex justify-between items-start mb-4 relative z-10">
                                         <div className={`p-4 rounded-2xl bg-gradient-to-br ${cat.color} text-white shadow-lg`}>
                                             <IconComp className="w-6 h-6" />
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => handleEdit(cat)} className="p-2.5 bg-black/40 hover:bg-blue-500/20 text-slate-400 hover:text-blue-400 rounded-xl transition-all border border-white/5 hover:border-blue-500/30">
+                                            <button onClick={() => handleEdit(cat)} className="p-2.5 bg-black/40 hover:bg-yellow-500/20 text-slate-400 hover:text-yellow-400 rounded-xl transition-all border border-white/5 hover:border-yellow-500/30">
                                                 <Edit2 className="w-4 h-4" />
                                             </button>
                                             <button onClick={() => handleDelete(cat._id, cat.name)} className="p-2.5 bg-black/40 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-xl transition-all border border-white/5 hover:border-red-500/30">
@@ -373,9 +480,23 @@ export default function AdminCategories() {
                                     </div>
 
                                     <div className="mt-auto relative z-10">
-                                        <h3 className="text-xl font-bold text-white mb-1 uppercase tracking-wider group-hover:text-blue-400 transition-colors">{cat.name}</h3>
+                                        <h3 className="text-xl font-bold text-white mb-1 uppercase tracking-wider group-hover:text-yellow-400 transition-colors">{cat.name}</h3>
                                         <p className="text-xs font-mono text-slate-500 mb-3 bg-black/30 w-fit px-2 py-1 rounded-md border border-white/5">/{cat.identifier}</p>
-                                        <p className="text-sm text-slate-400 line-clamp-3 leading-relaxed">{cat.description}</p>
+                                        <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-4">{cat.description}</p>
+
+                                        {/* Location count + Map defaults badge */}
+                                        <div className="flex items-center gap-3 pt-3 border-t border-white/5">
+                                            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                                <MapPin className="w-3 h-3" />
+                                                {locCount} Proyek
+                                            </span>
+                                            {cat.defaultLat && (
+                                                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-500/60">
+                                                    <Navigation className="w-3 h-3" />
+                                                    Custom Map
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </motion.div>
                             );

@@ -22,7 +22,6 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
     const MAX_RETRIES = 2;
     const RETRY_DELAY_MS = 3000;
 
-    const [isVisible, setIsVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -143,16 +142,6 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
         };
     }, []);
 
-    // Intersection Observer for lazy loading - only play when visible
-    useEffect(() => {
-        const observer = new IntersectionObserver(
-            ([entry]) => setIsVisible(entry.isIntersecting),
-            { root: null, rootMargin: '100px', threshold: 0.1 }
-        );
-        if (containerRef.current) observer.observe(containerRef.current);
-        return () => observer.disconnect();
-    }, []);
-
     const stopHeartbeat = useCallback(() => {
         if (heartbeatRef.current) {
             clearInterval(heartbeatRef.current);
@@ -201,8 +190,6 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
         setIsLoading(true);
         setError(null);
 
-
-
         try {
             const res = await fetch('/api/streams/start', {
                 method: 'POST',
@@ -216,9 +203,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                 throw new Error(data.error || 'Failed to start stream');
             }
 
-            if (!videoRef.current) {
-                return;
-            }
+            if (!videoRef.current) return;
 
             // Start heartbeat ASAP after confirmed stream start
             stopHeartbeat();
@@ -235,13 +220,11 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                 if (hlsRef.current) hlsRef.current.destroy();
 
                 const hls = new Hls({
-                    // Low-latency tuning: snap to live edge immediately
                     liveSyncDurationCount: 1,
                     liveMaxLatencyDurationCount: 3,
-                    // Minimal buffering before playback starts
                     maxBufferLength: 3,
                     maxMaxBufferLength: 8,
-                    maxBufferSize: 5 * 1000 * 1000,  // 5MB
+                    maxBufferSize: 5 * 1000 * 1000,
                     startLevel: -1,
                     abrEwmaDefaultEstimate: 5_000_000,
                     enableWorker: true,
@@ -269,8 +252,6 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                         return;
                     }
 
-                    // Network/Other Fatal Error → don't clear timeout here, let it retry
-                    // if it's within the 15s window, otherwise the timeout will kill it.
                     console.warn(`[Player] HLS error for ${cameraId}:`, errData.type);
                     hls.destroy();
 
@@ -279,7 +260,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                         setError(`Mencoba ulang (${retryCountRef.current}/${MAX_RETRIES})...`);
                         retryTimerRef.current = setTimeout(() => {
                             setError(null);
-                            initPlayer(); // Note: initPlayer creates a NEW 15s timeout
+                            initPlayer();
                         }, RETRY_DELAY_MS);
                     } else {
                         destroyPlayer(true);
@@ -290,15 +271,12 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                 });
 
             } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-                // Safari native HLS
                 videoRef.current.src = data.hlsUrl;
                 videoRef.current.play().then(() => {
                     setIsPlaying(true);
                     setIsLoading(false);
                     onStatusChange?.('online');
-                }).catch(() => {
-                    // Let the 15s timeout handle failures
-                });
+                }).catch(() => {});
             }
         } catch (err: any) {
             console.warn(`[Player] Stream fetch failed for ${cameraId}:`, err.message);
@@ -318,22 +296,17 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
         }
     }, [streamUrl, cameraId, destroyPlayer, onStatusChange, stopHeartbeat]);
 
-
-
-    // Manage stream based on visibility and StreamManager
+    // Stream lifecycle: start on mount, destroy on unmount.
+    // No IntersectionObserver — streams stay alive while the panel is open.
+    // StreamManager still enforces MAX_STREAMS limit if needed.
     useEffect(() => {
-        if (isVisible) {
-            manager.register(cameraId, () => initPlayer(), () => destroyPlayer());
-        } else {
-            manager.unregister(cameraId);
-            destroyPlayer();
-        }
+        manager.register(cameraId, () => initPlayer(), () => destroyPlayer());
         return () => {
             manager.unregister(cameraId);
             destroyPlayer();
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isVisible, cameraId]);
+    }, [cameraId]);
 
     const handleFullscreen = () => {
         if (!containerRef.current) return;
@@ -423,6 +396,19 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                     >
                         <Maximize2 className="w-5 h-5 drop-shadow-md group-hover/btn:scale-110 transition-transform" />
                     </button>
+                </div>
+            )}
+
+            {/* Fullscreen Brand Watermark — large centered logo */}
+            {isFullscreen && (
+                <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
+                    <img
+                        src="/abipraya_original.svg"
+                        alt=""
+                        aria-hidden="true"
+                        className="w-48 h-48 sm:w-64 sm:h-64 object-contain opacity-[0.09] drop-shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
+                        draggable={false}
+                    />
                 </div>
             )}
         </div>

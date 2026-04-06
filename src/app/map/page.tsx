@@ -20,6 +20,7 @@ const MapComponent = dynamic(
 );
 
 import { useSearchParams } from 'next/navigation';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 export default function MapPage() {
     return (
@@ -37,5 +38,6 @@ export default function MapPage() {
 function MapPageContent() {
     const searchParams = useSearchParams();
     const category = searchParams.get('category');
+    usePageTracking('map');
     return <MapComponent category={category} />;
 }

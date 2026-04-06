@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Open_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 
-const openSans = Open_Sans({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "TENGOK – Surveillance Integration System",
@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={openSans.className} suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans`} suppressHydrationWarning>
         <Providers>
           {children}
         </Providers>

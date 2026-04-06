@@ -8,7 +8,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import L from 'leaflet';
 import axios from 'axios';
-import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Info } from 'lucide-react';
+import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Info, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CameraPanel from './CameraPanel';
 import MarkerClusterGroup from 'react-leaflet-cluster';
@@ -18,9 +18,9 @@ import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 // Fix Leaflet blank marker issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-    iconRetinaUrl: '/leaflet/marker-icon-2x.png',
-    iconUrl: '/leaflet/marker-icon.png',
-    shadowUrl: '/leaflet/marker-shadow.png',
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
 // Custom Icons based on status
@@ -79,9 +79,11 @@ export default function MapComponent({ category: propCategory, allowedLocationId
     const [locations, setLocations] = useState<LocationData[]>([]);
     const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [center, setCenter] = useState<[number, number]>([-4.944993, 113.4942317]); // Specific default position
-    const { realtimeStatuses, setRealtimeStatuses } = useCameraStatusSSE();
+    const [center, setCenter] = useState<[number, number]>([-4.944993, 113.4942317]);
+    const [defaultZoom, setDefaultZoom] = useState(6.25);
+    const { realtimeStatuses, setRealtimeStatuses, lastCheckedTimes } = useCameraStatusSSE();
     const [showDelayNotice, setShowDelayNotice] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -109,10 +111,29 @@ export default function MapComponent({ category: propCategory, allowedLocationId
         return () => clearTimeout(timer);
     }, []);
 
+    // Fetch category data for custom map defaults
+    useEffect(() => {
+        if (!category || sharedMode) return;
+        axios.get('/api/categories')
+            .then(res => {
+                const cats = res.data || [];
+                const cat = cats.find((c: any) => c.identifier === category);
+                if (cat) {
+                    if (cat.defaultLat && cat.defaultLng) {
+                        setCenter([cat.defaultLat, cat.defaultLng]);
+                    }
+                    if (cat.defaultZoom) {
+                        setDefaultZoom(cat.defaultZoom);
+                    }
+                }
+            })
+            .catch(() => {}); // Fail silently, use defaults
+    }, [category, sharedMode]);
+
     useEffect(() => {
         let isMounted = true;
         const controller = new AbortController();
-        let hasProbed = false; // Only trigger one probe per page load
+        let hasProbed = false;
 
         if (!category && !sharedMode) {
             router.push('/categories');
@@ -314,11 +335,50 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                     >
                         <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" />
                     </button>
+                    <button
+                        onClick={async () => {
+                            if (isRefreshing) return;
+                            setIsRefreshing(true);
+                            try {
+                                const apiUrl = category ? `/api/locations?category=${category}` : '/api/locations';
+                                const res = await axios.get(apiUrl);
+                                let rawLocations = res.data.data;
+                                if (allowedLocationIds && allowedLocationIds.length > 0) {
+                                    rawLocations = rawLocations.filter((loc: any) => allowedLocationIds.includes(loc._id));
+                                }
+                                const refreshedLocations = rawLocations.map((loc: any) => {
+                                    let onlineCount = 0;
+                                    let offlineCount = 0;
+                                    if (loc.cameras) {
+                                        loc.cameras.forEach((cam: any) => {
+                                            if (cam.status === 'online') onlineCount++;
+                                            else offlineCount++;
+                                        });
+                                    }
+                                    return { ...loc, onlineCount, offlineCount };
+                                });
+                                setLocations(refreshedLocations);
+                                // Trigger probe for fresh status check
+                                const allCameraIds = refreshedLocations.flatMap((loc: any) =>
+                                    (loc.cameras || []).map((cam: any) => cam._id)
+                                );
+                                if (allCameraIds.length > 0) {
+                                    await axios.post('/api/cameras/probe-now', { cameraIds: allCameraIds }).catch(() => {});
+                                }
+                            } catch { /* ignore */ }
+                            finally { setIsRefreshing(false); }
+                        }}
+                        disabled={isRefreshing}
+                        className="p-3 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0 disabled:opacity-50 sm:hidden"
+                        title="Refresh Status Kamera"
+                    >
+                        <RefreshCw className={`w-5 h-5 transition-transform ${isRefreshing ? 'animate-spin' : 'group-hover:rotate-90'}`} />
+                    </button>
                 </div>
                 )}
 
                 {/* Search Bar */}
-                <div ref={searchRef} className={`flex-1 max-w-[55vw] sm:max-w-xl sm:mx-8 relative pointer-events-auto transition-all duration-700 ${selectedLocation ? 'opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
+                <div ref={searchRef} className={`flex-1 sm:max-w-xl sm:mx-8 relative pointer-events-auto transition-all duration-700 ${selectedLocation ? 'opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
                     <div className="relative group">
                         <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-yellow-500 transition-colors">
                             {isSearching ? (
@@ -404,17 +464,18 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                 {!loading && (
                     <MapContainer
                         center={center}
-                        zoom={6.25}
+                        zoom={defaultZoom}
                         zoomSnap={0.25}
                         style={{ height: '100%', width: '100%', zIndex: 0 }}
                         zoomControl={false}
+                        attributionControl={false}
                     >
                         <TileLayer
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
                         <MapResize selectedLocation={selectedLocation} />
-                        <ChangeView center={center} zoom={selectedLocation ? 14 : 6.25} />
+                        <ChangeView center={center} zoom={selectedLocation ? 14 : defaultZoom} />
 
                         <MarkerClusterGroup chunkedLoading>
                             {locations.map((loc) => {
@@ -463,27 +524,51 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                                                 </div>
 
                                                 {/* Tooltip Body */}
-                                                <div className="p-3 bg-slate-900/60 flex items-center justify-between gap-3">
-                                                    {/* Online Pill */}
-                                                    <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 group/pill">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="relative">
-                                                                <Signal className="w-4 h-4 text-emerald-400" />
-                                                                <div className="absolute inset-0 bg-emerald-400 blur-sm opacity-60 pulse-emerald" />
+                                                <div className="p-3 bg-slate-900/60 flex flex-col gap-2">
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        {/* Online Pill */}
+                                                        <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 group/pill">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="relative">
+                                                                    <Signal className="w-4 h-4 text-emerald-400" />
+                                                                    <div className="absolute inset-0 bg-emerald-400 blur-sm opacity-60 pulse-emerald" />
+                                                                </div>
+                                                                <span className="text-[14px] font-bold text-white leading-none">{dynamicOnlineCount}</span>
                                                             </div>
-                                                            <span className="text-[14px] font-bold text-white leading-none">{dynamicOnlineCount}</span>
+                                                            <span className="text-[9px] font-bold text-emerald-400/80 uppercase tracking-wider">Online</span>
                                                         </div>
-                                                        <span className="text-[9px] font-bold text-emerald-400/80 uppercase tracking-wider">Online</span>
-                                                    </div>
 
-                                                    {/* Offline Pill */}
-                                                    <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
-                                                        <div className="flex items-center gap-2">
-                                                            <SignalZero className="w-4 h-4 text-rose-400" />
-                                                            <span className="text-[14px] font-bold text-white leading-none">{dynamicOfflineCount}</span>
+                                                        {/* Offline Pill */}
+                                                        <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
+                                                            <div className="flex items-center gap-2">
+                                                                <SignalZero className="w-4 h-4 text-rose-400" />
+                                                                <span className="text-[14px] font-bold text-white leading-none">{dynamicOfflineCount}</span>
+                                                            </div>
+                                                            <span className="text-[9px] font-bold text-rose-400/80 uppercase tracking-wider">Offline</span>
                                                         </div>
-                                                        <span className="text-[9px] font-bold text-rose-400/80 uppercase tracking-wider">Offline</span>
                                                     </div>
+                                                    {/* Last Checked Timestamp */}
+                                                    {(() => {
+                                                        // Find most recent lastCheckedAt among this location's cameras
+                                                        let latest: string | null = null;
+                                                        loc.cameras?.forEach((cam: any) => {
+                                                            const t = lastCheckedTimes?.[cam._id] || cam.lastCheckedAt;
+                                                            if (t && (!latest || new Date(t) > new Date(latest))) latest = t;
+                                                        });
+                                                        if (!latest) return null;
+                                                        const diff = Math.floor((Date.now() - new Date(latest).getTime()) / 1000);
+                                                        let rel = 'Baru saja';
+                                                        if (diff >= 86400) rel = `${Math.floor(diff / 86400)}h lalu`;
+                                                        else if (diff >= 3600) rel = `${Math.floor(diff / 3600)}j lalu`;
+                                                        else if (diff >= 60) rel = `${Math.floor(diff / 60)}m lalu`;
+                                                        return (
+                                                            <div className="text-center pt-1 border-t border-white/5">
+                                                                <span className="text-[8px] font-semibold text-slate-500 tracking-wide">
+                                                                    Dicek {rel}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </Tooltip>
@@ -495,38 +580,79 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                 )}
             </div>
 
-            {/* Delay Notice Bubble */}
+            {/* Delay Notice Toast Stack */}
             <AnimatePresence>
                 {showDelayNotice && (
                     <motion.div
-                        initial={{ opacity: 0, x: -30, scale: 0.9 }}
-                        animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: -20, scale: 0.9 }}
-                        transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-                        className={`fixed z-[2000] w-[calc(100vw-2rem)] sm:w-[380px] pointer-events-none ${selectedLocation ? 'hidden md:block' : 'block'} ${sharedMode ? 'bottom-24 sm:bottom-6 left-4' : 'bottom-20 sm:bottom-4 left-4 sm:left-[220px]'}`}
+                        className={`fixed z-[2000] flex flex-col gap-3 pointer-events-none ${selectedLocation ? 'hidden md:flex' : 'flex'} ${sharedMode ? 'bottom-24 sm:bottom-6 left-4' : 'bottom-20 sm:bottom-4 left-4 sm:left-[220px]'}`}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        variants={{
+                            visible: { transition: { staggerChildren: 0.1 } },
+                            exit: { transition: { staggerChildren: 0.05, staggerDirection: -1 } }
+                        }}
                     >
-                        <div className="bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/30 shadow-2xl rounded-2xl p-4 flex gap-4 items-start pointer-events-auto ring-1 ring-white/5">
+                        {/* Toast 1: Info Streaming */}
+                        <motion.div
+                            variants={{
+                                hidden: { opacity: 0, x: -30, scale: 0.9 },
+                                visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 400, damping: 25 } },
+                                exit: { opacity: 0, x: -20, scale: 0.9 }
+                            }}
+                            className="w-[calc(100vw-2rem)] sm:w-[380px] bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/30 shadow-2xl rounded-2xl p-4 flex gap-3.5 items-start pointer-events-auto ring-1 ring-white/5 relative"
+                        >
                             <div className="p-2 bg-yellow-500/10 rounded-xl shrink-0">
                                 <Info className="w-5 h-5 text-yellow-500" />
                             </div>
-                            <div className="flex-1 mt-0.5">
+                            <div className="flex-1 mt-0.5 pr-6">
                                 <h4 className="text-sm font-bold text-white tracking-wide">Informasi Streaming</h4>
-                                <p className="text-xs text-slate-400 mt-1 leading-relaxed pr-2">
-                                    Memuat video CCTV mungkin terdapat sedikit <span className="text-slate-300 font-bold italic">delay</span>, kecepatan tergantung stabilitas koneksi jaringan di setiap proyek.
+                                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                                    Proses memuat video CCTV membutuhkan waktu beberapa saat. Kecepatan bergantung pada <span className="text-slate-300 font-bold">stabilitas jaringan</span> di masing-masing lokasi.
                                 </p>
-                                <div className="mt-2 pt-2 border-t border-white/10">
-                                    <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
-                                        💡 <strong className="text-slate-400">Info Status CCTV:</strong> Sistem mengecek kondisi mati/nyalanya kamera secara otomatis dan bertahap.
-                                    </p>
-                                </div>
                             </div>
                             <button
                                 onClick={() => setShowDelayNotice(false)}
-                                className="text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0"
+                                className="absolute top-3 right-3 text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0"
+                                title="Tutup Semua"
                             >
                                 <CloseIcon className="w-4 h-4" />
                             </button>
-                        </div>
+                        </motion.div>
+
+                        {/* Toast 2: Pengecekan Otomatis - hidden on mobile */}
+                        <motion.div
+                            variants={{
+                                hidden: { opacity: 0, x: -30, scale: 0.9 },
+                                visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 400, damping: 25 } },
+                                exit: { opacity: 0, x: -20, scale: 0.9 }
+                            }}
+                            className="hidden sm:flex w-[calc(100vw-2rem)] sm:w-[380px] bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-3.5 gap-3.5 items-start pointer-events-auto ring-1 ring-white/5"
+                        >
+                            <div className="text-lg shrink-0 pt-0.5 drop-shadow-md">💡</div>
+                            <div className="flex-1 mt-0.5">
+                                <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                                    <strong className="text-slate-200">Pengecekan Otomatis:</strong> Sistem memeriksa status kamera secara berkala dan bertahap untuk memastikan data selalu terbaru.
+                                </p>
+                            </div>
+                        </motion.div>
+
+                        {/* Toast 3: Disclaimer - hidden on mobile */}
+                        <motion.div
+                            variants={{
+                                hidden: { opacity: 0, x: -30, scale: 0.9 },
+                                visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 400, damping: 25 } },
+                                exit: { opacity: 0, x: -20, scale: 0.9 }
+                            }}
+                            className="hidden sm:flex w-[calc(100vw-2rem)] sm:w-[380px] bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-3.5 gap-3.5 items-start pointer-events-auto ring-1 ring-white/5"
+                        >
+                            <div className="text-lg shrink-0 pt-0.5 drop-shadow-md">🙏</div>
+                            <div className="flex-1 mt-0.5">
+                                <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                                    <strong className="text-slate-200">Perlu diketahui:</strong> Status <span className="text-emerald-400">online</span> / <span className="text-rose-400">offline</span> yang tertera <strong className="text-slate-300">dapat berubah sewaktu-waktu</strong> karena kondisi jaringan. Mohon maaf jika terdapat perbedaan status.
+                                </p>
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -540,7 +666,7 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                         exit={{ opacity: 0, scale: 0.5, rotate: 90 }}
                         transition={{ duration: 0.3 }}
                         onClick={() => setShowDelayNotice(true)}
-                        className={`fixed z-[1900] ${selectedLocation ? 'hidden md:flex' : 'flex'} items-center justify-center border transition-all group ${sharedMode ? 'bottom-24 left-4 sm:bottom-6 sm:left-[220px] w-[48px] h-[48px] rounded-2xl bg-slate-900/80 backdrop-blur-2xl border-white/10 shadow-2xl hover:bg-slate-800/90 hover:border-yellow-500/50' : 'bottom-4 left-[150px] px-3 py-2 rounded-2xl border-white/10 shadow-2xl hover:bg-white/5'}`}
+                        className={`fixed z-[1900] ${selectedLocation ? 'hidden md:flex' : 'flex'} items-center justify-center border transition-all group ${sharedMode ? 'bottom-24 left-4 sm:bottom-6 sm:left-[220px] w-[48px] h-[48px] rounded-2xl bg-slate-900/80 backdrop-blur-2xl border-white/10 shadow-2xl hover:bg-slate-800/90 hover:border-yellow-500/50' : 'bottom-4 left-4 sm:left-[150px] px-3 py-2 rounded-2xl border-white/10 shadow-2xl hover:bg-white/5'}`}
                         style={!sharedMode ? { backdropFilter: 'blur(20px)', background: 'rgba(2, 6, 23, 0.85)' } : {}}
                         title="Informasi Delay Streaming"
                     >
@@ -556,6 +682,22 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                 </div>
             )}
 
+            {/* PT Brantas Abipraya — Brand Identity Watermark */}
+            <div className={`fixed bottom-4 right-4 z-[500] pointer-events-none transition-all duration-700 ${selectedLocation ? 'opacity-0' : 'opacity-100'}`}>
+                <div className="flex items-center gap-2.5 bg-slate-950/70 backdrop-blur-xl rounded-2xl px-3.5 py-2.5 border border-white/5 shadow-2xl">
+                    <img
+                        src="/abipraya_original.svg"
+                        alt="PT Brantas Abipraya"
+                        className="w-7 h-7 object-contain opacity-70"
+                        draggable={false}
+                    />
+                    <div className="hidden sm:block">
+                        <p className="text-[9px] font-bold text-white/50 uppercase tracking-[0.15em] leading-none">PT Brantas Abipraya</p>
+                        <p className="text-[8px] font-medium text-white/25 uppercase tracking-wider mt-0.5">Smart Monitoring</p>
+                    </div>
+                </div>
+            </div>
+
             {/* Side Panel for Camera Details */}
             <div className={`fixed inset-y-0 right-0 z-[1000] w-full md:w-[520px] bg-slate-950/80 backdrop-blur-3xl border-l border-white/5 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transform transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedLocation ? 'translate-x-0' : 'translate-x-full'}`}>
                 {selectedLocation && (
@@ -565,6 +707,7 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                             onClose={() => setSelectedLocation(null)}
                             onStatusChange={(id: string, status: 'online' | 'offline') => setRealtimeStatuses(prev => ({ ...prev, [id]: status }))}
                             realtimeStatuses={realtimeStatuses}
+                            lastCheckedTimes={lastCheckedTimes}
                         />
                     </div>
                 )}
