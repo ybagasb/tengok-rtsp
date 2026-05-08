@@ -19,8 +19,8 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
     const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
     const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
     const retryCountRef = useRef(0);
-    const MAX_RETRIES = 2;
-    const RETRY_DELAY_MS = 3000;
+    const MAX_RETRIES = 999999; // Infinite retry untuk standby
+    const RETRY_DELAY_MS = 1000; // 1 Detik, cepat tapi aman untuk server/browser
 
     const [isLoading, setIsLoading] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -257,7 +257,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
 
                     if (retryCountRef.current < MAX_RETRIES) {
                         retryCountRef.current++;
-                        setError(`Mencoba ulang (${retryCountRef.current}/${MAX_RETRIES})...`);
+                        setError(`Mencoba ulang (Ke-${retryCountRef.current})...`);
                         retryTimerRef.current = setTimeout(() => {
                             setError(null);
                             initPlayer();
@@ -282,7 +282,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
             console.warn(`[Player] Stream fetch failed for ${cameraId}:`, err.message);
             if (retryCountRef.current < MAX_RETRIES) {
                 retryCountRef.current++;
-                setError(`Mencoba ulang (${retryCountRef.current}/${MAX_RETRIES})...`);
+                setError(`Mencoba ulang (Ke-${retryCountRef.current})...`);
                 retryTimerRef.current = setTimeout(() => {
                     setError(null);
                     initPlayer();

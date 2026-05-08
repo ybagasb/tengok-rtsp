@@ -102,7 +102,7 @@ export default function CategoriesPage() {
     }, [pin, router]);
 
     return (
-        <div className="min-h-screen bg-slate-950 p-6 md:p-12 relative overflow-hidden flex flex-col">
+        <div className="min-h-screen bg-slate-950 px-4 py-4 sm:p-6 md:p-12 relative overflow-hidden flex flex-col">
             {/* Background Decorations */}
             <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
                 <div className="absolute -top-40 -left-40 w-96 h-96 bg-blue-600/10 blur-[120px]" />
@@ -124,24 +124,27 @@ export default function CategoriesPage() {
             </div>
 
             {/* Header */}
-            <header className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-12 sm:mb-16 relative z-10">
-                <div className="flex items-center gap-4 w-full sm:w-auto">
-                    <img src="/abipraya_original.svg" alt="Logo" className="w-10 h-10 sm:w-12 sm:h-12" />
-                    <div>
-                        <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent tracking-tight uppercase">
+            <header className="flex flex-row justify-between items-center gap-2 mb-6 sm:mb-16 relative z-30">
+                {/* Logo + Title */}
+                <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+                    <img src="/abipraya_original.svg" alt="Logo" className="w-8 h-8 sm:w-12 sm:h-12 shrink-0" />
+                    <div className="min-w-0">
+                        <h1 className="text-base sm:text-2xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent tracking-tight uppercase leading-tight">
                             Kategori Proyek
                         </h1>
-                        <p className="text-slate-400 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider opacity-60">Pilih lokasi yang ingin dipantau</p>
+                        <p className="text-slate-400 text-[8px] sm:text-[11px] font-bold uppercase tracking-wider opacity-60 truncate">Pilih lokasi yang ingin dipantau</p>
                     </div>
                 </div>
-                <div className="relative flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto px-4 sm:px-0">
+
+                {/* Actions */}
+                <div className="relative flex items-center gap-1.5 sm:gap-3 shrink-0">
 
                     {/* SSO User Profile */}
                     {session?.user && (
-                        <div>
+                        <div className="relative">
                             <button
                                 onClick={() => setShowProfile(p => !p)}
-                                className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-900/50 backdrop-blur border border-white/5 hover:border-yellow-500/30 transition-all group"
+                                className="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-xl bg-slate-900/50 backdrop-blur border border-white/5 hover:border-yellow-500/30 transition-all group"
                                 title={session.user.name || 'Profil'}
                             >
                                 {session.user.image ? (
@@ -162,64 +165,71 @@ export default function CategoriesPage() {
                                 </div>
                             </button>
 
-                            {/* Profile Dropdown */}
+                            {/* Profile Dropdown - fixed to right edge on mobile */}
                             <AnimatePresence>
                                 {showProfile && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                                        transition={{ duration: 0.15 }}
-                                        className="absolute left-0 right-0 top-full mt-2 sm:left-auto sm:right-0 sm:w-64 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
-                                    >
-                                        <div className="p-4 border-b border-white/10 flex items-center gap-3">
-                                            {session.user.image ? (
-                                                <img src={session.user.image} alt="" className="w-10 h-10 rounded-full object-cover ring-2 ring-yellow-500/20" />
-                                            ) : (
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500 to-yellow-700 flex items-center justify-center text-sm font-bold text-white">
-                                                    {session.user.name?.charAt(0)?.toUpperCase()}
+                                    <>
+                                        {/* Backdrop to close on click outside */}
+                                        <div
+                                            className="fixed inset-0 z-40"
+                                            onClick={() => setShowProfile(false)}
+                                        />
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                                            transition={{ duration: 0.15 }}
+                                            className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-[260px] bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-[100] overflow-hidden"
+                                        >
+                                            <div className="p-4 border-b border-white/10 flex items-center gap-3">
+                                                {session.user.image ? (
+                                                    <img src={session.user.image} alt="" className="w-10 h-10 rounded-full object-cover ring-2 ring-yellow-500/20 shrink-0" />
+                                                ) : (
+                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500 to-yellow-700 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                                                        {session.user.name?.charAt(0)?.toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-bold text-white truncate">{session.user.name}</p>
+                                                    <p className="text-[10px] text-slate-400 truncate">{session.user.email}</p>
+                                                    <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[9px] font-bold text-blue-400 uppercase tracking-wider">
+                                                        <ShieldAlert className="w-2.5 h-2.5" /> SSO
+                                                    </span>
                                                 </div>
-                                            )}
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-bold text-white truncate">{session.user.name}</p>
-                                                <p className="text-[10px] text-slate-400 truncate">{session.user.email}</p>
-                                                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[9px] font-bold text-blue-400 uppercase tracking-wider">
-                                                    <ShieldAlert className="w-2.5 h-2.5" /> SSO
-                                                </span>
                                             </div>
-                                        </div>
-                                        <div className="p-2">
-                                            <button
-                                                onClick={handleLogout}
-                                                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors text-sm font-semibold"
-                                            >
-                                                <LogOut className="w-4 h-4" />
-                                                Keluar / Logout
-                                            </button>
-                                        </div>
-                                    </motion.div>
+                                            <div className="p-2">
+                                                <button
+                                                    onClick={handleLogout}
+                                                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors text-sm font-semibold"
+                                                >
+                                                    <LogOut className="w-4 h-4" />
+                                                    Keluar / Logout
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    </>
                                 )}
                             </AnimatePresence>
                         </div>
                     )}
 
+                    {/* Settings / Management button */}
                     {session?.user && (
-                        <>
-                            <button
-                                onClick={() => setShowPinModal(true)}
-                                className="flex-1 sm:flex-initial flex items-center justify-center gap-2 text-slate-400 hover:text-yellow-400 transition-all px-4 sm:px-5 py-2.5 rounded-xl bg-slate-900/50 backdrop-blur border border-white/5 hover:border-yellow-500/30 group"
-                                title="Management"
-                            >
-                                <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
-                                <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">Management</span>
-                            </button>
-                            <div className="hidden sm:block w-px h-6 bg-white/10 mx-1" />
-                        </>
+                        <button
+                            onClick={() => setShowPinModal(true)}
+                            className="flex items-center justify-center gap-1.5 text-slate-400 hover:text-yellow-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-900/50 backdrop-blur border border-white/5 hover:border-yellow-500/30 group"
+                            title="Management"
+                        >
+                            <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
+                            <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">Management</span>
+                        </button>
                     )}
+
+                    {/* Logout button for non-SSO users */}
                     {!session?.user && (
                         <button
                             onClick={handleLogout}
-                            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 text-slate-400 hover:text-red-400 transition-all px-4 sm:px-5 py-2.5 rounded-xl bg-slate-900/50 backdrop-blur border border-white/5 hover:border-red-500/30 group"
+                            className="flex items-center justify-center gap-1.5 text-slate-400 hover:text-red-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-900/50 backdrop-blur border border-white/5 hover:border-red-500/30 group"
                             title="Logout"
                         >
                             <LogOut className="w-4 h-4" />
@@ -231,23 +241,23 @@ export default function CategoriesPage() {
 
             {/* Grid Kategori */}
             {isLoadingCategories ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto relative z-10">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-6xl mx-auto relative z-10">
                     {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-48 sm:h-64 rounded-[2.5rem] bg-slate-900/40 border border-white/5 p-6 sm:p-10 flex flex-col justify-between animate-pulse">
+                        <div key={i} className="h-36 sm:h-48 lg:h-64 rounded-3xl sm:rounded-[2.5rem] bg-slate-900/40 border border-white/5 p-5 sm:p-8 flex flex-col justify-between animate-pulse">
                             <div className="flex justify-between items-start">
-                                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-3xl bg-slate-800/80" />
-                                <div className="w-8 h-8 rounded-full bg-slate-800/60" />
+                                <div className="w-11 h-11 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-2xl sm:rounded-3xl bg-slate-800/80" />
+                                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-800/60" />
                             </div>
-                            <div className="mt-auto space-y-3">
-                                <div className="h-7 sm:h-8 bg-slate-800/80 rounded-xl w-3/4" />
-                                <div className="h-3 bg-slate-800/50 rounded-lg w-full" />
-                                <div className="h-3 bg-slate-800/40 rounded-lg w-1/2" />
+                            <div className="mt-auto space-y-2 sm:space-y-3">
+                                <div className="h-5 sm:h-7 lg:h-8 bg-slate-800/80 rounded-xl w-3/4" />
+                                <div className="h-2.5 sm:h-3 bg-slate-800/50 rounded-lg w-full" />
+                                <div className="h-2.5 sm:h-3 bg-slate-800/40 rounded-lg w-1/2" />
                             </div>
                         </div>
                     ))}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto relative z-10 pb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-6xl mx-auto relative z-10 pb-8">
                     {categories.map((cat, index) => {
                         const Icon = (LucideIcons as any)[cat.icon] || LayoutGrid;
                         return (
@@ -257,29 +267,29 @@ export default function CategoriesPage() {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: index * 0.1, ease: "easeOut" }}
                                 onClick={() => handleCategoryClick(cat.identifier)}
-                                className="group relative h-48 sm:h-64 rounded-[2.5rem] overflow-hidden bg-slate-900/40 backdrop-blur-xl border border-white/5 hover:border-yellow-500/30 transition-all duration-500 text-left p-6 sm:p-10 shadow-2xl hover:shadow-yellow-500/10 active:scale-95 flex flex-col justify-between"
+                                className="group relative h-36 sm:h-48 lg:h-64 rounded-3xl sm:rounded-[2.5rem] overflow-hidden bg-slate-900/40 backdrop-blur-xl border border-white/5 hover:border-yellow-500/30 transition-all duration-500 text-left p-5 sm:p-8 lg:p-10 shadow-xl hover:shadow-yellow-500/10 active:scale-95 flex flex-col justify-between"
                             >
                                 {/* Icon Background Glow */}
-                                <div className={`absolute -top-10 -right-10 w-32 h-32 sm:w-40 sm:h-40 bg-gradient-to-br ${cat.color} opacity-10 blur-3xl group-hover:opacity-20 transition-opacity duration-500`} />
+                                <div className={`absolute -top-10 -right-10 w-28 h-28 sm:w-40 sm:h-40 bg-gradient-to-br ${cat.color} opacity-10 blur-3xl group-hover:opacity-20 transition-opacity duration-500`} />
 
                                 <div className="relative z-10 flex justify-between items-start">
-                                    <div className={`p-4 sm:p-5 rounded-3xl bg-gradient-to-br ${cat.color} shadow-lg group-hover:scale-110 group-hover:rotate-6 transition-all duration-500`}>
-                                        <Icon className="w-6 h-6 sm:w-8 sm:h-8 text-white stroke-[2.5]" />
+                                    <div className={`p-3 sm:p-4 lg:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${cat.color} shadow-lg group-hover:scale-110 group-hover:rotate-6 transition-all duration-500`}>
+                                        <Icon className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 text-white stroke-[2.5]" />
                                     </div>
-                                    <LucideIcons.ArrowRight className="w-6 h-6 sm:w-8 sm:h-8 text-slate-700 group-hover:text-yellow-400 group-hover:translate-x-2 transition-all duration-500" />
+                                    <LucideIcons.ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 text-slate-700 group-hover:text-yellow-400 group-hover:translate-x-2 transition-all duration-500" />
                                 </div>
 
                                 <div className="relative z-10 mt-auto">
-                                    <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight uppercase mb-2 group-hover:text-yellow-400 transition-colors">
+                                    <h2 className="text-lg sm:text-2xl lg:text-3xl font-bold text-white tracking-tight uppercase mb-1 sm:mb-2 group-hover:text-yellow-400 transition-colors line-clamp-1">
                                         {cat.name}
                                     </h2>
-                                    <p className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed sm:max-w-[80%] line-clamp-2">
+                                    <p className="text-slate-400 text-[9px] sm:text-[10px] lg:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed line-clamp-2">
                                         {cat.description}
                                     </p>
                                 </div>
 
                                 {/* Hover Border Gradient */}
-                                <div className="absolute inset-0 border-2 border-transparent group-hover:border-yellow-500/20 rounded-[2.5rem] transition-all duration-500 pointer-events-none" />
+                                <div className="absolute inset-0 border-2 border-transparent group-hover:border-yellow-500/20 rounded-3xl sm:rounded-[2.5rem] transition-all duration-500 pointer-events-none" />
                             </motion.button>
                         );
                     })}

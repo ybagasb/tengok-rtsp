@@ -10,7 +10,7 @@ interface StreamSession {
 class FfmpegManager {
     private streams: Map<string, StreamSession> = new Map();
     private streamsDir: string;
-    private maxIdleTimeMs = 60000; // 60 seconds
+    private maxIdleTimeMs = 300000; // 5 minutes (menghindari browser throttling)
 
     constructor() {
         this.streamsDir = path.join(process.cwd(), 'public', 'streams');

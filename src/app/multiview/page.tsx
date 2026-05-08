@@ -116,85 +116,97 @@ export default function MultiViewPage() {
             {/* Sidebar selection */}
             <AnimatePresence mode="wait">
                 {isSidebarOpen && (
-                    <motion.aside
-                        initial={{ x: -400, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: -400, opacity: 0 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                        className="fixed inset-y-0 left-0 w-full sm:w-80 bg-slate-900/95 backdrop-blur-3xl border-r border-white/5 flex flex-col z-[100] sm:relative sm:z-50 shrink-0 overflow-hidden"
-                    >
-                        <div className="w-full sm:w-80 h-full flex flex-col">
-                            {/* Sidebar Header */}
-                            <div className="p-6 border-b border-white/5 bg-slate-900/40">
-                                <div className="flex items-center justify-between mb-6">
-                                    <button
-                                        onClick={() => router.back()}
-                                        className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors"
-                                    >
-                                        <ArrowLeft className="w-5 h-5" />
-                                    </button>
-                                    <h2 className="text-lg font-bold text-white tracking-tight uppercase">Selection</h2>
-                                    <button
-                                        onClick={() => setIsSidebarOpen(false)}
-                                        className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors group"
-                                        title="Close Sidebar"
-                                    >
-                                        <PanelLeftClose className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                                    </button>
-                                </div>
-
-                                <div className="relative group">
-                                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-yellow-500 transition-colors" />
-                                    <input
-                                        type="text"
-                                        placeholder="Cari lokasi..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full bg-slate-950/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-yellow-500/50 transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Location List */}
-                            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
-                                {filteredLocations.map(loc => {
-                                    const isSelected = selectedLocationIds.includes(loc._id);
-                                    return (
+                    <>
+                        {/* Mobile backdrop — tap to close */}
+                        <motion.div
+                            key="sidebar-backdrop"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[99] bg-black/60 backdrop-blur-sm sm:hidden"
+                            onClick={() => setIsSidebarOpen(false)}
+                        />
+                        <motion.aside
+                            initial={{ x: -400, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: -400, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                            className="fixed inset-y-0 left-0 w-[85%] sm:w-80 bg-slate-900/95 backdrop-blur-3xl border-r border-white/5 flex flex-col z-[100] sm:relative sm:z-50 shrink-0 overflow-hidden"
+                        >
+                            <div className="w-full sm:w-80 h-full flex flex-col">
+                                {/* Sidebar Header */}
+                                <div className="p-6 border-b border-white/5 bg-slate-900/40">
+                                    <div className="flex items-center justify-between mb-6">
                                         <button
-                                            key={loc._id}
-                                            onClick={() => toggleLocation(loc._id)}
-                                            className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border hover:shadow-lg hover:-translate-y-0.5 active:scale-95 ${isSelected
-                                                ? 'bg-yellow-500/10 border-yellow-500/30 shadow-yellow-500/5'
-                                                : 'bg-white/5 border-transparent hover:bg-white/10'
-                                                }`}
+                                            onClick={() => router.back()}
+                                            className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors"
                                         >
-                                            <div className={`shrink-0 ${isSelected ? 'text-yellow-500' : 'text-slate-600'}`}>
-                                                {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                                            </div>
-                                            <div className="text-left min-w-0 flex-1">
-                                                <div className={`text-sm font-bold tracking-tight uppercase truncate ${isSelected ? 'text-white' : 'text-slate-300'}`}>
-                                                    {loc.name}
-                                                </div>
-                                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
-                                                    {loc.cameras.length} CAMERAS • {loc.category}
-                                                </div>
-                                            </div>
+                                            <ArrowLeft className="w-5 h-5" />
                                         </button>
-                                    );
-                                })}
-                            </div>
+                                        <h2 className="text-lg font-bold text-white tracking-tight uppercase">Selection</h2>
+                                        <button
+                                            onClick={() => setIsSidebarOpen(false)}
+                                            className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors group"
+                                            title="Close Sidebar"
+                                        >
+                                            <PanelLeftClose className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                        </button>
+                                    </div>
 
-                            {/* Sidebar Footer */}
-                            <div className="p-6 bg-slate-900/60 border-t border-white/5">
-                                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
-                                    <span className="text-slate-500">Selected</span>
-                                    <span className="text-yellow-500">{selectedLocationIds.length} Locations</span>
+                                    <div className="relative group">
+                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-yellow-500 transition-colors" />
+                                        <input
+                                            type="text"
+                                            placeholder="Cari lokasi..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="w-full bg-slate-950/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-yellow-500/50 transition-all"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Location List */}
+                                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
+                                    {filteredLocations.map(loc => {
+                                        const isSelected = selectedLocationIds.includes(loc._id);
+                                        return (
+                                            <button
+                                                key={loc._id}
+                                                onClick={() => toggleLocation(loc._id)}
+                                                className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border hover:shadow-lg hover:-translate-y-0.5 active:scale-95 ${isSelected
+                                                    ? 'bg-yellow-500/10 border-yellow-500/30 shadow-yellow-500/5'
+                                                    : 'bg-white/5 border-transparent hover:bg-white/10'
+                                                    }`}
+                                            >
+                                                <div className={`shrink-0 ${isSelected ? 'text-yellow-500' : 'text-slate-600'}`}>
+                                                    {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                                                </div>
+                                                <div className="text-left min-w-0 flex-1">
+                                                    <div className={`text-sm font-bold tracking-tight uppercase truncate ${isSelected ? 'text-white' : 'text-slate-300'}`}>
+                                                        {loc.name}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
+                                                        {loc.cameras.length} CAMERAS • {loc.category}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Sidebar Footer */}
+                                <div className="p-6 bg-slate-900/60 border-t border-white/5">
+                                    <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
+                                        <span className="text-slate-500">Selected</span>
+                                        <span className="text-yellow-500">{selectedLocationIds.length} Locations</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </motion.aside>
+                        </motion.aside>
+                    </>
                 )}
             </AnimatePresence>
+
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col relative overflow-hidden bg-[radial-gradient(circle_at_50%_50%,rgba(15,23,42,1)_0%,rgba(2,6,23,1)_100%)]">

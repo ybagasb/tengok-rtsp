@@ -61,17 +61,17 @@ function CountdownTimer({ expiresAt, onExpire }: { expiresAt: string; onExpire: 
         <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            className={`fixed top-4 right-4 z-[500] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-2xl border transition-all duration-500 ${
+            className={`fixed top-4 right-4 z-[500] flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3 rounded-2xl shadow-2xl backdrop-blur-2xl border transition-all duration-500 ${
                 isUrgent
                     ? 'bg-red-950/80 border-red-500/30 shadow-red-500/20'
                     : 'bg-slate-900/80 border-white/10'
             }`}
         >
-            <Timer className={`w-4 h-4 ${isUrgent ? 'text-red-400 animate-pulse' : 'text-yellow-500'}`} />
-            <span className={`text-sm font-bold tabular-nums tracking-wider ${isUrgent ? 'text-red-300' : 'text-white'}`}>
+            <Timer className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isUrgent ? 'text-red-400 animate-pulse' : 'text-yellow-500'}`} />
+            <span className={`text-xs sm:text-sm font-bold tabular-nums tracking-wider ${isUrgent ? 'text-red-300' : 'text-white'}`}>
                 {timeLeft}
             </span>
-            <span className={`text-[9px] font-bold uppercase tracking-wider ${isUrgent ? 'text-red-400/60' : 'text-slate-500'}`}>
+            <span className={`text-[8px] sm:text-[9px] font-bold uppercase tracking-wider ${isUrgent ? 'text-red-400/60' : 'text-slate-500'}`}>
                 tersisa
             </span>
         </motion.div>
@@ -81,16 +81,16 @@ function CountdownTimer({ expiresAt, onExpire }: { expiresAt: string; onExpire: 
 function BrandingOverlay({ label }: { label: string }) {
     return (
         <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="fixed bottom-4 left-4 z-[500] flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-slate-900/80 backdrop-blur-2xl border border-white/10 shadow-2xl"
+            className="fixed top-4 left-4 z-[500] flex items-center gap-2.5 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl bg-slate-900/80 backdrop-blur-2xl border border-white/10 shadow-2xl max-w-[calc(100vw-7rem)]"
         >
-            <img src="/abipraya_original.svg" alt="Logo" className="h-5 sm:h-6" />
-            <div className="h-6 w-px bg-white/10" />
-            <div>
-                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Shared View</div>
-                <div className="text-xs font-bold text-white tracking-tight truncate max-w-[150px] sm:max-w-[200px]">{label}</div>
+            <img src="/abipraya_original.svg" alt="Logo" className="h-5 sm:h-6 shrink-0" />
+            <div className="h-5 w-px bg-white/10 shrink-0" />
+            <div className="min-w-0">
+                <div className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase tracking-wider leading-none">Shared View</div>
+                <div className="text-[11px] sm:text-xs font-bold text-white tracking-tight truncate mt-0.5">{label}</div>
             </div>
         </motion.div>
     );

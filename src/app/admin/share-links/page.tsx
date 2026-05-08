@@ -225,10 +225,10 @@ export default function ShareLinksPage() {
         fetchLocations();
     }, []);
 
-    const handleCreate = async (e: React.FormEvent) => {
+    const handleCreate = async (e: React.FormEvent): Promise<boolean> => {
         e.preventDefault();
-        if (!label.trim()) return toast.error('Label diperlukan');
-        if (selectedLocationIds.length === 0) return toast.error('Pilih minimal 1 lokasi');
+        if (!label.trim()) { toast.error('Label diperlukan'); return false; }
+        if (selectedLocationIds.length === 0) { toast.error('Pilih minimal 1 lokasi'); return false; }
 
         setIsSubmitting(true);
         try {
@@ -237,13 +237,16 @@ export default function ShareLinksPage() {
                 locationIds: selectedLocationIds,
                 duration,
             });
+            // await mutate so the list is refreshed before any UI closes
+            await mutate('/api/share-links');
             toast.success('Share link berhasil dibuat!');
             setLabel('');
             setSelectedLocationIds([]);
             setDuration(60);
-            mutate('/api/share-links');
+            return true;
         } catch {
             toast.error('Gagal membuat share link');
+            return false;
         } finally {
             setIsSubmitting(false);
         }
@@ -602,7 +605,7 @@ export default function ShareLinksPage() {
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <form onSubmit={async (e) => { await handleCreate(e); setShowAddSheet(false); }} className="space-y-6">
+                            <form onSubmit={async (e) => { const ok = await handleCreate(e); if (ok) setShowAddSheet(false); }} className="space-y-6">
                                 <div>
                                     <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Judul Hak Akses *</label>
                                     <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="Contoh: Inspeksi K3 Lapangan"

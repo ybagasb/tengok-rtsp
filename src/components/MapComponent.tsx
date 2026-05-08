@@ -8,7 +8,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import L from 'leaflet';
 import axios from 'axios';
-import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Info, RefreshCw } from 'lucide-react';
+import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CameraPanel from './CameraPanel';
 import MarkerClusterGroup from 'react-leaflet-cluster';
@@ -82,8 +82,12 @@ export default function MapComponent({ category: propCategory, allowedLocationId
     const [center, setCenter] = useState<[number, number]>([-4.944993, 113.4942317]);
     const [defaultZoom, setDefaultZoom] = useState(6.25);
     const { realtimeStatuses, setRealtimeStatuses, lastCheckedTimes } = useCameraStatusSSE();
-    const [showDelayNotice, setShowDelayNotice] = useState(true);
-    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [showDelayNotice, setShowDelayNotice] = useState(true); // kept for potential future use
+    // Individual toast visibility
+    const [toast1, setToast1] = useState(true); // Info Streaming (always on mobile)
+    const [toast2, setToast2] = useState(true); // Pengecekan Otomatis (sm+)
+    const [toast3, setToast3] = useState(true); // Disclaimer (sm+)
+    const allToastsClosed = !toast1 && !toast2 && !toast3;
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -106,7 +110,9 @@ export default function MapComponent({ category: propCategory, allowedLocationId
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            setShowDelayNotice(false);
+            setToast1(false);
+            setToast2(false);
+            setToast3(false);
         }, 10000);
         return () => clearTimeout(timer);
     }, []);
@@ -335,49 +341,12 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                     >
                         <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" />
                     </button>
-                    <button
-                        onClick={async () => {
-                            if (isRefreshing) return;
-                            setIsRefreshing(true);
-                            try {
-                                const apiUrl = category ? `/api/locations?category=${category}` : '/api/locations';
-                                const res = await axios.get(apiUrl);
-                                let rawLocations = res.data.data;
-                                if (allowedLocationIds && allowedLocationIds.length > 0) {
-                                    rawLocations = rawLocations.filter((loc: any) => allowedLocationIds.includes(loc._id));
-                                }
-                                const refreshedLocations = rawLocations.map((loc: any) => {
-                                    let onlineCount = 0;
-                                    let offlineCount = 0;
-                                    if (loc.cameras) {
-                                        loc.cameras.forEach((cam: any) => {
-                                            if (cam.status === 'online') onlineCount++;
-                                            else offlineCount++;
-                                        });
-                                    }
-                                    return { ...loc, onlineCount, offlineCount };
-                                });
-                                setLocations(refreshedLocations);
-                                // Trigger probe for fresh status check
-                                const allCameraIds = refreshedLocations.flatMap((loc: any) =>
-                                    (loc.cameras || []).map((cam: any) => cam._id)
-                                );
-                                if (allCameraIds.length > 0) {
-                                    await axios.post('/api/cameras/probe-now', { cameraIds: allCameraIds }).catch(() => {});
-                                }
-                            } catch { /* ignore */ }
-                            finally { setIsRefreshing(false); }
-                        }}
-                        disabled={isRefreshing}
-                        className="p-3 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0 disabled:opacity-50 sm:hidden"
-                        title="Refresh Status Kamera"
-                    >
-                        <RefreshCw className={`w-5 h-5 transition-transform ${isRefreshing ? 'animate-spin' : 'group-hover:rotate-90'}`} />
-                    </button>
+
                 </div>
                 )}
 
-                {/* Search Bar */}
+                {/* Search Bar — hidden in shared mode */}
+                {!sharedMode && (
                 <div ref={searchRef} className={`flex-1 sm:max-w-xl sm:mx-8 relative pointer-events-auto transition-all duration-700 ${selectedLocation ? 'opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
                     <div className="relative group">
                         <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-yellow-500 transition-colors">
@@ -451,11 +420,15 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                         </div>
                     )}
                 </div>
+                )}
 
+                {/* Category badge — hidden in shared mode */}
+                {!sharedMode && (
                 <div className="hidden sm:flex px-4 sm:px-6 py-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-white font-bold uppercase tracking-wider items-center gap-3 pointer-events-auto text-xs">
                     <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.8)] animate-pulse" />
                     <span className="truncate max-w-[100px] sm:max-w-none">{category}</span>
                 </div>
+                )}
             </div>
 
             {/* Map Container - Absolute inset-0 ensures it fills the background regardless of flex flow */}
@@ -582,91 +555,137 @@ export default function MapComponent({ category: propCategory, allowedLocationId
 
             {/* Delay Notice Toast Stack */}
             <AnimatePresence>
-                {showDelayNotice && (
+                {(toast1 || toast2 || toast3) && (
                     <motion.div
-                        className={`fixed z-[2000] flex flex-col gap-3 pointer-events-none ${selectedLocation ? 'hidden md:flex' : 'flex'} ${sharedMode ? 'bottom-24 sm:bottom-6 left-4' : 'bottom-20 sm:bottom-4 left-4 sm:left-[220px]'}`}
+                        className={`fixed z-[2000] flex flex-col-reverse gap-2.5 pointer-events-none ${selectedLocation ? 'hidden md:flex' : 'flex'} ${
+                            sharedMode ? 'bottom-6 left-4' : 'bottom-20 sm:bottom-4 left-4 sm:left-[220px]'
+                        }`}
                         initial="hidden"
                         animate="visible"
                         exit="exit"
                         variants={{
-                            visible: { transition: { staggerChildren: 0.1 } },
-                            exit: { transition: { staggerChildren: 0.05, staggerDirection: -1 } }
+                            hidden: {},
+                            visible: { transition: { staggerChildren: 0.2, staggerDirection: -1 } },
+                            exit:    { transition: { staggerChildren: 0.08, staggerDirection: 1  } },
                         }}
                     >
-                        {/* Toast 1: Info Streaming */}
-                        <motion.div
-                            variants={{
-                                hidden: { opacity: 0, x: -30, scale: 0.9 },
-                                visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 400, damping: 25 } },
-                                exit: { opacity: 0, x: -20, scale: 0.9 }
-                            }}
-                            className="w-[calc(100vw-2rem)] sm:w-[380px] bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/30 shadow-2xl rounded-2xl p-4 flex gap-3.5 items-start pointer-events-auto ring-1 ring-white/5 relative"
-                        >
-                            <div className="p-2 bg-yellow-500/10 rounded-xl shrink-0">
-                                <Info className="w-5 h-5 text-yellow-500" />
-                            </div>
-                            <div className="flex-1 mt-0.5 pr-6">
-                                <h4 className="text-sm font-bold text-white tracking-wide">Informasi Streaming</h4>
-                                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                    Proses memuat video CCTV membutuhkan waktu beberapa saat. Kecepatan bergantung pada <span className="text-slate-300 font-bold">stabilitas jaringan</span> di masing-masing lokasi.
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => setShowDelayNotice(false)}
-                                className="absolute top-3 right-3 text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0"
-                                title="Tutup Semua"
-                            >
-                                <CloseIcon className="w-4 h-4" />
-                            </button>
-                        </motion.div>
+                        {/* Toast 3: Disclaimer - hidden on mobile */}
+                        <AnimatePresence>
+                            {toast3 && (
+                                <motion.div
+                                    key="toast3"
+                                    variants={{
+                                        hidden:  { opacity: 0, y: 20, scale: 0.95, filter: 'blur(4px)' },
+                                        visible: { opacity: 1, y: 0,  scale: 1,    filter: 'blur(0px)', transition: { type: 'spring', stiffness: 320, damping: 28 } },
+                                        exit:    { opacity: 0, y: 12, scale: 0.95, filter: 'blur(4px)', transition: { duration: 0.18 } },
+                                    }}
+                                    initial="hidden"
+                                    animate="visible"
+                                    exit="exit"
+                                    className="hidden sm:flex w-[min(380px,calc(100vw-2rem))] bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-3.5 gap-3.5 items-start pointer-events-auto ring-1 ring-white/5 relative"
+                                >
+                                    <div className="text-lg shrink-0 pt-0.5 drop-shadow-md">🙏</div>
+                                    <div className="flex-1 mt-0.5 pr-6">
+                                        <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                                            <strong className="text-slate-200">Perlu diketahui:</strong> Status <span className="text-emerald-400">online</span> / <span className="text-rose-400">offline</span> yang tertera <strong className="text-slate-300">dapat berubah sewaktu-waktu</strong> karena kondisi jaringan. Mohon maaf jika terdapat perbedaan status.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => setToast3(false)}
+                                        className="absolute top-2.5 right-2.5 text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto"
+                                        title="Tutup"
+                                    >
+                                        <CloseIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         {/* Toast 2: Pengecekan Otomatis - hidden on mobile */}
-                        <motion.div
-                            variants={{
-                                hidden: { opacity: 0, x: -30, scale: 0.9 },
-                                visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 400, damping: 25 } },
-                                exit: { opacity: 0, x: -20, scale: 0.9 }
-                            }}
-                            className="hidden sm:flex w-[calc(100vw-2rem)] sm:w-[380px] bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-3.5 gap-3.5 items-start pointer-events-auto ring-1 ring-white/5"
-                        >
-                            <div className="text-lg shrink-0 pt-0.5 drop-shadow-md">💡</div>
-                            <div className="flex-1 mt-0.5">
-                                <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                                    <strong className="text-slate-200">Pengecekan Otomatis:</strong> Sistem memeriksa status kamera secara berkala dan bertahap untuk memastikan data selalu terbaru.
-                                </p>
-                            </div>
-                        </motion.div>
+                        <AnimatePresence>
+                            {toast2 && (
+                                <motion.div
+                                    key="toast2"
+                                    variants={{
+                                        hidden:  { opacity: 0, y: 20, scale: 0.95, filter: 'blur(4px)' },
+                                        visible: { opacity: 1, y: 0,  scale: 1,    filter: 'blur(0px)', transition: { type: 'spring', stiffness: 320, damping: 28 } },
+                                        exit:    { opacity: 0, y: 12, scale: 0.95, filter: 'blur(4px)', transition: { duration: 0.18 } },
+                                    }}
+                                    initial="hidden"
+                                    animate="visible"
+                                    exit="exit"
+                                    className="hidden sm:flex w-[min(380px,calc(100vw-2rem))] bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-3.5 gap-3.5 items-start pointer-events-auto ring-1 ring-white/5 relative"
+                                >
+                                    <div className="text-lg shrink-0 pt-0.5 drop-shadow-md">💡</div>
+                                    <div className="flex-1 mt-0.5 pr-6">
+                                        <p className="text-xs text-slate-400 leading-relaxed font-medium">
+                                            <strong className="text-slate-200">Pengecekan Otomatis:</strong> Sistem memeriksa status kamera secara berkala dan bertahap untuk memastikan data selalu terbaru.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => setToast2(false)}
+                                        className="absolute top-2.5 right-2.5 text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto"
+                                        title="Tutup"
+                                    >
+                                        <CloseIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
-                        {/* Toast 3: Disclaimer - hidden on mobile */}
-                        <motion.div
-                            variants={{
-                                hidden: { opacity: 0, x: -30, scale: 0.9 },
-                                visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 400, damping: 25 } },
-                                exit: { opacity: 0, x: -20, scale: 0.9 }
-                            }}
-                            className="hidden sm:flex w-[calc(100vw-2rem)] sm:w-[380px] bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-3.5 gap-3.5 items-start pointer-events-auto ring-1 ring-white/5"
-                        >
-                            <div className="text-lg shrink-0 pt-0.5 drop-shadow-md">🙏</div>
-                            <div className="flex-1 mt-0.5">
-                                <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
-                                    <strong className="text-slate-200">Perlu diketahui:</strong> Status <span className="text-emerald-400">online</span> / <span className="text-rose-400">offline</span> yang tertera <strong className="text-slate-300">dapat berubah sewaktu-waktu</strong> karena kondisi jaringan. Mohon maaf jika terdapat perbedaan status.
-                                </p>
-                            </div>
-                        </motion.div>
+                        {/* Toast 1: Info Streaming — always visible */}
+                        <AnimatePresence>
+                            {toast1 && (
+                                <motion.div
+                                    key="toast1"
+                                    variants={{
+                                        hidden:  { opacity: 0, y: 20, scale: 0.95, filter: 'blur(4px)' },
+                                        visible: { opacity: 1, y: 0,  scale: 1,    filter: 'blur(0px)', transition: { type: 'spring', stiffness: 320, damping: 28 } },
+                                        exit:    { opacity: 0, y: 12, scale: 0.95, filter: 'blur(4px)', transition: { duration: 0.18 } },
+                                    }}
+                                    initial="hidden"
+                                    animate="visible"
+                                    exit="exit"
+                                    className="w-[min(380px,calc(100vw-2rem))] bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/30 shadow-2xl rounded-2xl p-4 flex gap-3.5 items-start pointer-events-auto ring-1 ring-white/5 relative"
+                                >
+                                    <div className="p-2 bg-yellow-500/10 rounded-xl shrink-0">
+                                        <Info className="w-5 h-5 text-yellow-500" />
+                                    </div>
+                                    <div className="flex-1 mt-0.5 pr-6">
+                                        <h4 className="text-sm font-bold text-white tracking-wide">Informasi Streaming</h4>
+                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                                            Proses memuat video CCTV membutuhkan waktu beberapa saat. Kecepatan bergantung pada <span className="text-slate-300 font-bold">stabilitas jaringan</span> di masing-masing lokasi.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => setToast1(false)}
+                                        className="absolute top-3 right-3 text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto"
+                                        title="Tutup"
+                                    >
+                                        <CloseIcon className="w-4 h-4" />
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Info Re-open Button */}
+
+            {/* Info Re-open Button — muncul hanya jika semua toast sudah ditutup */}
             <AnimatePresence>
-                {!showDelayNotice && (
+                {allToastsClosed && (
                     <motion.button
-                        initial={{ opacity: 0, scale: 0.5, rotate: -90 }}
-                        animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                        exit={{ opacity: 0, scale: 0.5, rotate: 90 }}
-                        transition={{ duration: 0.3 }}
-                        onClick={() => setShowDelayNotice(true)}
-                        className={`fixed z-[1900] ${selectedLocation ? 'hidden md:flex' : 'flex'} items-center justify-center border transition-all group ${sharedMode ? 'bottom-24 left-4 sm:bottom-6 sm:left-[220px] w-[48px] h-[48px] rounded-2xl bg-slate-900/80 backdrop-blur-2xl border-white/10 shadow-2xl hover:bg-slate-800/90 hover:border-yellow-500/50' : 'bottom-4 left-4 sm:left-[150px] px-3 py-2 rounded-2xl border-white/10 shadow-2xl hover:bg-white/5'}`}
+                        initial={{ opacity: 0, scale: 0.5, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.5, y: 10 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                        onClick={() => { setToast1(true); setToast2(true); setToast3(true); }}
+                        className={`fixed z-[1900] ${selectedLocation ? 'hidden md:flex' : 'flex'} items-center justify-center border transition-all group ${
+                            sharedMode
+                                ? 'bottom-6 left-4 w-[44px] h-[44px] rounded-2xl bg-slate-900/80 backdrop-blur-2xl border-white/10 shadow-2xl hover:bg-slate-800/90 hover:border-yellow-500/50'
+                                : 'bottom-4 left-4 sm:left-[150px] px-3 py-2 rounded-2xl border-white/10 shadow-2xl hover:bg-white/5'
+                        }`}
                         style={!sharedMode ? { backdropFilter: 'blur(20px)', background: 'rgba(2, 6, 23, 0.85)' } : {}}
                         title="Informasi Delay Streaming"
                     >
@@ -675,6 +694,7 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                 )}
             </AnimatePresence>
 
+
             {/* Resource Monitor — hidden in shared mode */}
             {!sharedMode && (
                 <div className={selectedLocation ? 'hidden md:block' : 'block'}>
@@ -682,7 +702,8 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                 </div>
             )}
 
-            {/* PT Brantas Abipraya — Brand Identity Watermark */}
+            {/* PT Brantas Abipraya — Brand Identity Watermark (hidden in sharedMode, page.tsx has its own BrandingOverlay) */}
+            {!sharedMode && (
             <div className={`fixed bottom-4 right-4 z-[500] pointer-events-none transition-all duration-700 ${selectedLocation ? 'opacity-0' : 'opacity-100'}`}>
                 <div className="flex items-center gap-2.5 bg-slate-950/70 backdrop-blur-xl rounded-2xl px-3.5 py-2.5 border border-white/5 shadow-2xl">
                     <img
@@ -697,6 +718,7 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Side Panel for Camera Details */}
             <div className={`fixed inset-y-0 right-0 z-[1000] w-full md:w-[520px] bg-slate-950/80 backdrop-blur-3xl border-l border-white/5 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transform transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedLocation ? 'translate-x-0' : 'translate-x-full'}`}>
