@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ComposedChart, Line, CartesianGrid, BarChart, Bar, Cell } from 'recharts';
-import { Loader2, Users, Eye, BarChart3, Smartphone, TrendingUp, Activity, Globe, MapPin, Share2, Layout, Monitor, Sparkles } from 'lucide-react';
+import { Loader2, Users, Eye, BarChart3, Smartphone, TrendingUp, Activity, Globe, MapPin, Share2, Layout, Monitor, Sparkles, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { containerVariants, cardVariants } from '@/components/admin/shared';
 import { PageHeader } from '@/components/admin/AdminUI';
@@ -42,6 +42,59 @@ const SOURCE_ICONS: Record<string, React.ElementType> = {
     shared: Share2,
     app: Globe,
 };
+
+// ── CSV Export Helper ──────────────────────────────────────────────────────
+function exportStatsToCSV(data: StatsData, days: number) {
+    const sections: string[] = [];
+
+    // Summary
+    sections.push('=== RINGKASAN ===' );
+    sections.push(`Periode,${days} hari terakhir`);
+    sections.push(`Total Kunjungan,${data.summary.totalVisits}`);
+    sections.push(`Pengunjung Unik,${data.summary.uniqueVisitors}`);
+    sections.push(`Sedang Aktif,${data.summary.liveVisitors}`);
+    sections.push('');
+
+    // Daily Visits
+    sections.push('=== KUNJUNGAN HARIAN ===');
+    sections.push('Tanggal,Total Views,Pengunjung Unik');
+    data.dailyVisits.forEach(d => {
+        sections.push(`${d.date},${d.views},${d.unique}`);
+    });
+    sections.push('');
+
+    // Device Stats
+    sections.push('=== PERANGKAT ===');
+    sections.push('Perangkat,Jumlah Kunjungan');
+    data.deviceStats.forEach(d => {
+        sections.push(`${d.name},${d.value}`);
+    });
+    sections.push('');
+
+    // Visit Sources
+    sections.push('=== SUMBER KUNJUNGAN ===');
+    sections.push('Halaman,Jumlah');
+    data.visitsBySource.forEach(s => {
+        sections.push(`${s.label},${s.count}`);
+    });
+    sections.push('');
+
+    // Popular Links
+    sections.push('=== TOP SHARE LINKS ===');
+    sections.push('Nama,Token,Views');
+    data.popularLinks.forEach(l => {
+        sections.push(`"${l.name}",${l.token},${l.views}`);
+    });
+
+    const blob = new Blob([sections.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tengok-statistik-${days}hari-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 export default function StatisticsPage() {
     const [data, setData] = useState<StatsData | null>(null);
@@ -140,20 +193,32 @@ export default function StatisticsPage() {
                         </p>
                     </div>
 
-                    {/* Period Selector */}
-                    <div className="flex items-center bg-slate-900/60 rounded-2xl border border-white/10 p-1 shrink-0">
-                        {[7, 14, 30].map(d => (
-                            <button
-                                key={d}
-                                onClick={() => setDays(d)}
-                                className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${days === d
-                                    ? 'bg-yellow-500 text-slate-950 shadow-lg shadow-yellow-500/20'
-                                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                                    }`}
-                            >
-                                {d} Hari
-                            </button>
-                        ))}
+                    {/* Period Selector + Export */}
+                    <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center bg-slate-900/60 rounded-2xl border border-white/10 p-1">
+                            {[7, 14, 30].map(d => (
+                                <button
+                                    key={d}
+                                    onClick={() => setDays(d)}
+                                    className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${days === d
+                                        ? 'bg-yellow-500 text-slate-950 shadow-lg shadow-yellow-500/20'
+                                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                        }`}
+                                >
+                                    {d} Hari
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            onClick={() => data && exportStatsToCSV(data, days)}
+                            disabled={!data}
+                            className="flex items-center gap-2 px-4 py-3 bg-slate-900/60 hover:bg-emerald-500/10 border border-white/10 hover:border-emerald-500/30 rounded-2xl text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-emerald-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Export statistik ke CSV"
+                            aria-label="Download statistik sebagai file CSV"
+                        >
+                            <Download className="w-4 h-4" />
+                            <span className="hidden sm:inline">Export CSV</span>
+                        </button>
                     </div>
                 </div>
 

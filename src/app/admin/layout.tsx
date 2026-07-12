@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Monitor, MapPin, Tags, ArrowLeft, Shield, Link2, BarChart3, Activity, MoreHorizontal, X } from 'lucide-react';
+import { Monitor, MapPin, Tags, ArrowLeft, Shield, Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sidebarVariants, navItemVariants } from '@/components/admin/shared';
 
@@ -19,6 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'Share Links', href: '/admin/share-links', icon: Link2 },
         { name: 'Statistik', href: '/admin/statistics', icon: BarChart3 },
         { name: 'Uptime', href: '/admin/uptime', icon: Activity },
+        { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
     ];
 
     // Mobile: show first 4, put rest in "More" menu

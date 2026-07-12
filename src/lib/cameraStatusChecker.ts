@@ -19,8 +19,10 @@ import StatusLog from '@/models/StatusLog';
 
 const BATCH_SIZE = 5;           // Concurrent RTSP probes (increased for faster cycles)
 const PROBE_TIMEOUT_MS = 10000; // 10s max per camera
-const CHECK_INTERVAL_MS = 1 * 60 * 1000;  // Check every 1 minute (isRunning guard prevents overlap)
 const INITIAL_DELAY_MS = 5 * 1000;        // Wait 5s after server start before first check
+// Adaptive interval: slower when all cameras are healthy, faster when some are offline
+const INTERVAL_ALL_ONLINE_MS  = 2 * 60 * 1000; // 2 minutes — less load when healthy
+const INTERVAL_HAS_OFFLINE_MS = 1 * 60 * 1000; // 1 minute — faster recovery detection
 
 // Probe a single RTSP URL using ffprobe
 export function probeCamera(rtspUrl: string): Promise<'online' | 'offline'> {
@@ -82,25 +84,32 @@ class CameraStatusChecker {
     private isRunning = false;
 
     start() {
-        console.log(`[StatusChecker] Started — first check in ${INITIAL_DELAY_MS / 1000}s, then every ${CHECK_INTERVAL_MS / 60000} min`);
+        console.log(`[StatusChecker] Started — first check in ${INITIAL_DELAY_MS / 1000}s`);
         // Delay first check so server can fully start up
         setTimeout(() => {
-            this.runCheck();
-            this.timer = setInterval(() => this.runCheck(), CHECK_INTERVAL_MS);
+            this.scheduleNext(INTERVAL_HAS_OFFLINE_MS);
         }, INITIAL_DELAY_MS);
+    }
+
+    private scheduleNext(intervalMs: number) {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(async () => {
+            const nextInterval = await this.runCheck();
+            this.scheduleNext(nextInterval);
+        }, intervalMs);
     }
 
     stop() {
         if (this.timer) {
-            clearInterval(this.timer);
+            clearTimeout(this.timer);
             this.timer = null;
         }
     }
 
-    async runCheck() {
+    async runCheck(): Promise<number> {
         if (this.isRunning) {
             console.log('[StatusChecker] Previous check still running, skipping...');
-            return;
+            return INTERVAL_HAS_OFFLINE_MS;
         }
         this.isRunning = true;
         const startTime = Date.now();
@@ -111,7 +120,7 @@ class CameraStatusChecker {
                 .select('_id streamUrl status')
                 .lean();
 
-            if (cameras.length === 0) return;
+            if (cameras.length === 0) return INTERVAL_ALL_ONLINE_MS;
 
             // Skip cameras that are currently being actively streamed
             // to avoid RTSP connection conflicts (many cameras only allow 1 connection)
@@ -129,7 +138,12 @@ class CameraStatusChecker {
                 const status = await probeCamera(cam.streamUrl);
                 if (status === 'online') onlineCount++;
                 else offlineCount++;
-                await Camera.updateOne({ _id: cam._id }, { $set: { status, lastCheckedAt: now } });
+
+                const updateFields: Record<string, any> = { status, lastCheckedAt: now };
+                if (status === 'online') {
+                    updateFields.lastOnlineAt = now;
+                }
+                await Camera.updateOne({ _id: cam._id }, { $set: updateFields });
                 // Log status change to history (only if changed)
                 if (cam.status !== status) {
                     await StatusLog.create({ cameraId: cam._id, status, checkedBy: 'auto' });
@@ -139,10 +153,14 @@ class CameraStatusChecker {
             });
 
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            console.log(`[StatusChecker] Done in ${elapsed}s → ${onlineCount} online, ${offlineCount} offline`);
+            // Adaptive interval: if everything is healthy, check less frequently
+            const nextInterval = offlineCount === 0 ? INTERVAL_ALL_ONLINE_MS : INTERVAL_HAS_OFFLINE_MS;
+            console.log(`[StatusChecker] Done in ${elapsed}s → ${onlineCount} online, ${offlineCount} offline. Next check in ${nextInterval / 1000}s`);
+            return nextInterval;
 
         } catch (err: any) {
             console.error('[StatusChecker] Error:', err.message);
+            return INTERVAL_HAS_OFFLINE_MS;
         } finally {
             this.isRunning = false;
         }

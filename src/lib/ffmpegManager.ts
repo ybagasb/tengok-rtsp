@@ -131,11 +131,27 @@ class FfmpegManager {
     public stopStream(cameraId: string) {
         const session = this.streams.get(cameraId);
         if (session) {
-            session.process.kill('SIGKILL');
+            // Graceful shutdown: SIGTERM first (lets FFmpeg flush HLS segments),
+            // then SIGKILL after 2s if the process hasn't exited cleanly.
+            const proc = session.process;
             this.streams.delete(cameraId);
-            console.log(`[FFmpegManager] Stopped ${cameraId}`);
-            const outDir = path.join(this.streamsDir, cameraId);
-            if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
+            console.log(`[FFmpegManager] Stopping ${cameraId} (SIGTERM)...`);
+
+            proc.kill('SIGTERM');
+
+            const forceKillTimer = setTimeout(() => {
+                if (!proc.killed) {
+                    console.warn(`[FFmpegManager] Force-killing ${cameraId} (SIGKILL)`);
+                    proc.kill('SIGKILL');
+                }
+            }, 2000);
+
+            proc.once('close', () => {
+                clearTimeout(forceKillTimer);
+                console.log(`[FFmpegManager] Stopped ${cameraId}`);
+                const outDir = path.join(this.streamsDir, cameraId);
+                if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
+            });
         }
     }
 

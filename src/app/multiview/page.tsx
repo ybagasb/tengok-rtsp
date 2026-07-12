@@ -62,19 +62,38 @@ export default function MultiViewPage() {
         );
     }, [locations, searchQuery]);
 
+    const MAX_CAMERAS = 9; // Server load safety limit for multi-view
+
     const toggleLocation = (id: string) => {
-        setSelectedLocationIds(prev =>
-            prev.includes(id)
-                ? prev.filter(item => item !== id)
-                : [...prev, id]
-        );
+        setSelectedLocationIds(prev => {
+            if (prev.includes(id)) {
+                return prev.filter(item => item !== id);
+            }
+            // Check if adding this location would exceed the camera limit
+            const loc = locations.find(l => l._id === id);
+            const wouldAdd = loc?.cameras?.length || 0;
+            const currentCount = prev.reduce((acc, locId) => {
+                const l = locations.find(ll => ll._id === locId);
+                return acc + (l?.cameras?.length || 0);
+            }, 0);
+            if (currentCount + wouldAdd > MAX_CAMERAS) {
+                // Allow adding but show a warning — cameras will be capped in the grid
+                return [...prev, id];
+            }
+            return [...prev, id];
+        });
     };
 
     const selectedCameras = useMemo(() => {
-        const cameras: any[] = [];
+        const cameras: Array<{
+            _id: string;
+            name: string;
+            status: string;
+            locationName: string;
+        }> = [];
         locations.forEach(loc => {
             if (selectedLocationIds.includes(loc._id)) {
-                loc.cameras.forEach(cam => {
+                loc.cameras.forEach((cam: { _id: string; name: string; status: string }) => {
                     cameras.push({
                         ...cam,
                         locationName: loc.name
@@ -82,7 +101,17 @@ export default function MultiViewPage() {
                 });
             }
         });
-        return cameras;
+        // Cap at MAX_CAMERAS to prevent server overload
+        return cameras.slice(0, MAX_CAMERAS);
+    }, [locations, selectedLocationIds, MAX_CAMERAS]);
+
+    const totalSelectedCameras = useMemo(() => {
+        return locations.reduce((acc, loc) => {
+            if (selectedLocationIds.includes(loc._id)) {
+                return acc + (loc.cameras?.length || 0);
+            }
+            return acc;
+        }, 0);
     }, [locations, selectedLocationIds]);
 
     // Calculate grid columns
@@ -217,7 +246,8 @@ export default function MultiViewPage() {
                             <button
                                 onClick={() => setIsSidebarOpen(true)}
                                 className="p-2.5 sm:p-3 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl text-white hover:bg-slate-800 transition-all shadow-2xl group"
-                                title="Open Sidebar"
+                                title="Buka Sidebar"
+                                aria-label="Buka sidebar pemilihan lokasi"
                             >
                                 <PanelLeftOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />
                             </button>
@@ -247,7 +277,20 @@ export default function MultiViewPage() {
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6 pt-24">
                     <AnimatePresence mode="popLayout">
                         {selectedCameras.length > 0 ? (
-                            <motion.div
+                            <>
+                                {/* Warning if cameras were capped */}
+                                {totalSelectedCameras > MAX_CAMERAS && (
+                                    <div className="mb-4 px-5 py-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-sm">
+                                        <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                        </svg>
+                                        <span className="text-amber-300 font-semibold">
+                                            Menampilkan {MAX_CAMERAS} dari {totalSelectedCameras} kamera.
+                                            <span className="text-amber-400/70 font-normal ml-1">Kurangi pilihan lokasi untuk melihat semua kamera.</span>
+                                        </span>
+                                    </div>
+                                )}
+                                <motion.div
                                 layout
                                 className={`grid ${gridCols} ${selectedCameras.length > 9 ? 'gap-3' : 'gap-6'} auto-rows-fr`}
                             >
@@ -284,15 +327,16 @@ export default function MultiViewPage() {
                                             </div>
                                         </div>
 
+                                        {/* cameraId only — no RTSP URL exposed to client */}
                                         <OptimizedVideoPlayer
                                             cameraId={cam._id}
-                                            streamUrl={cam.streamUrl}
                                             manager={streamManager}
                                             onStatusChange={(status) => setRealtimeStatus(prev => ({ ...prev, [cam._id]: status }))}
                                         />
                                     </motion.div>
                                 ))}
                             </motion.div>
+                            </>
                         ) : (
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
@@ -320,22 +364,6 @@ export default function MultiViewPage() {
                     </AnimatePresence>
                 </div>
             </main>
-
-            <style jsx global>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 6px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: rgba(255, 255, 255, 0.1);
-                    border-radius: 10px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: rgba(255, 255, 255, 0.2);
-                }
-            `}</style>
         </div>
     );
 }

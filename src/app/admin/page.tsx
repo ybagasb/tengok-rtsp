@@ -305,33 +305,75 @@ export default function AdminPage() {
                     let offlineLabel = 'Tidak ada';
                     if (offlineCount === 1) offlineLabel = '1 kali';
                     else if (offlineCount > 1) offlineLabel = `${offlineCount} kali`;
+
+                    let lastOnlineStr = 'Belum terekam';
+                    if (cam.status === 'online') {
+                        lastOnlineStr = 'Aktif Sekarang';
+                    } else if (cam.lastOnlineAt) {
+                        const lastOnlineDate = new Date(cam.lastOnlineAt);
+                        const formattedDate = lastOnlineDate.toLocaleString('id-ID', { 
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: '2-digit', 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                        });
+                        const diffMs = Date.now() - lastOnlineDate.getTime();
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        
+                        if (diffDays >= 1) {
+                            lastOnlineStr = `${formattedDate}\n(Mati ${diffDays} hari)`;
+                        } else {
+                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                            if (diffHours >= 1) {
+                                lastOnlineStr = `${formattedDate}\n(Mati ${diffHours} jam)`;
+                            } else {
+                                lastOnlineStr = `${formattedDate}\n(Baru saja mati)`;
+                            }
+                        }
+                    } else if (cam.createdAt) {
+                        const createdDate = new Date(cam.createdAt);
+                        const diffMs = Date.now() - createdDate.getTime();
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        if (diffDays >= 1) {
+                            lastOnlineStr = `Belum aktif\n(${diffDays} hari sejak daftar)`;
+                        } else {
+                            lastOnlineStr = 'Belum pernah aktif';
+                        }
+                    }
+
+                    let statusKeterangan = 'Baik';
+                    if (cam.status === 'offline') {
+                        statusKeterangan = 'Kritis';
+                    } else if (offlineCount > 0) {
+                        statusKeterangan = offlineCount <= 2 ? 'Perlu Perhatian' : 'Kritis';
+                    }
+
                     return [
                         idx + 1,
                         cam.name,
                         cam.status === 'online' ? 'Aktif' : 'Tidak Aktif',
-                        cam.lastCheckedAt
-                            ? new Date(cam.lastCheckedAt).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
-                            : 'Belum dicek',
+                        lastOnlineStr,
                         offlineLabel,
-                        offlineCount === 0 ? 'Baik' : offlineCount <= 2 ? 'Perlu Perhatian' : 'Kritis',
+                        statusKeterangan,
                     ];
                 });
 
                 autoTable(doc, {
                     startY: y,
-                    head: [['No.', 'Nama Kamera', 'Status', 'Pengecekan Terakhir', 'Gangguan Hari Ini', 'Keterangan']],
+                    head: [['No.', 'Nama Kamera', 'Status', 'Terakhir Online', 'Gangguan Hari Ini', 'Keterangan']],
                     body: tableData,
                     theme: 'grid',
-                    headStyles: { fillColor: [20, 20, 80], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold', cellPadding: 2.5 },
+                    headStyles: { fillColor: [20, 20, 80], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold', cellPadding: 1.8 },
                     bodyStyles: { fontSize: 7.5, cellPadding: 2.2 },
                     alternateRowStyles: { fillColor: [248, 249, 252] },
                     columnStyles: {
-                        0: { cellWidth: 9, halign: 'center' },
-                        1: { cellWidth: 50 },
-                        2: { cellWidth: 22, halign: 'center' },
-                        3: { cellWidth: 32, halign: 'center' },
+                        0: { cellWidth: 12, halign: 'center' },
+                        1: { cellWidth: 48 },
+                        2: { cellWidth: 18, halign: 'center' },
+                        3: { cellWidth: 38, halign: 'center' },
                         4: { cellWidth: 30, halign: 'center' },
-                        5: { cellWidth: 30, halign: 'center' },
+                        5: { cellWidth: 26, halign: 'center' },
                     },
                     didParseCell: (data: any) => {
                         if (data.cell.section !== 'body') return;

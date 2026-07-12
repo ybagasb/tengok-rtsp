@@ -13,6 +13,7 @@ interface UptimeData {
     category: string;
     currentStatus: 'online' | 'offline';
     lastCheckedAt: string | null;
+    lastOnlineAt?: string | null;
     uptimePercent: number;
     totalChecks: number;
     onlineChecks: number;
@@ -331,8 +332,13 @@ export default function UptimePage() {
                                                                     </div>
                                                                     <div>
                                                                         <div className="text-sm font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-[200px]">{cam.cameraName}</div>
-                                                                        <div className="text-[9px] font-medium text-slate-500 mt-0.5">
-                                                                            Cek: {formatRelativeTime(cam.lastCheckedAt)}
+                                                                        <div className="text-[9px] font-medium text-slate-500 mt-0.5 flex flex-col gap-0.5">
+                                                                            <span>Cek: {formatRelativeTime(cam.lastCheckedAt)}</span>
+                                                                            {!isOnline && (
+                                                                                <span className="text-yellow-500/80 font-semibold">
+                                                                                    Terakhir Online: {cam.lastOnlineAt ? formatRelativeTime(cam.lastOnlineAt) : 'Belum terekam'}
+                                                                                </span>
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </div>

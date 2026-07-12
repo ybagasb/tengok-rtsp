@@ -3,6 +3,32 @@ import CognitoProvider from "next-auth/providers/cognito";
 import { cookies } from "next/headers";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+    // ── DEBUG: aktifkan untuk melihat detail error SSO di production log ──────
+    // Hapus atau set false setelah masalah teridentifikasi
+    logger: {
+        error(error: Error) {
+            const cause = (error as any).cause;
+            console.error('[AUTH ERROR]', error.message);
+            if (cause) {
+                console.error('[AUTH CAUSE]', {
+                    message: cause?.message,
+                    code:    cause?.code,      // e.g. ECONNREFUSED, ENOTFOUND
+                    errno:   cause?.errno,
+                    address: cause?.address,   // IP yang dicoba dihubungi
+                    port:    cause?.port,
+                });
+            }
+            console.error('[AUTH STACK]', error.stack);
+        },
+        warn(code: string) {
+            console.warn('[AUTH WARN]', code);
+        },
+        debug(message: string, metadata?: unknown) {
+            if (process.env.NODE_ENV !== 'production') return; // skip di lokal
+            console.debug('[AUTH DEBUG]', message, metadata);
+        },
+    },
+    // ─────────────────────────────────────────────────────────────────────────
     providers: [
         CognitoProvider({
             clientId: process.env.COGNITO_CLIENT_ID!,

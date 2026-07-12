@@ -15,12 +15,12 @@ import MarkerClusterGroup from 'react-leaflet-cluster';
 import ResourceMonitor from './ResourceMonitor';
 import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 
-// Fix Leaflet blank marker issue
+// Fix Leaflet blank marker issue — use local icons (no CDN dependency)
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconRetinaUrl: '/leaflet/marker-icon-2x.png',
+    iconUrl: '/leaflet/marker-icon.png',
+    shadowUrl: '/leaflet/marker-shadow.png',
 });
 
 // Custom Icons based on status
@@ -331,6 +331,7 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                         onClick={() => router.push('/categories')}
                         className="p-3 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-white hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
                         title="Kembali ke Kategori"
+                        aria-label="Kembali ke halaman kategori"
                     >
                         <Home className="w-5 h-5 group-hover:-translate-y-1 transition-transform" />
                     </button>
@@ -338,6 +339,7 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                         onClick={() => router.push('/multiview')}
                         className="p-3 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-yellow-500 hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
                         title="Ke Halaman Multi-View"
+                        aria-label="Buka halaman multi-view kamera"
                     >
                         <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" />
                     </button>
@@ -373,7 +375,8 @@ export default function MapComponent({ category: propCategory, allowedLocationId
                                     setShowSuggestions(false);
                                 }}
                                 className="absolute inset-y-0 right-2 flex items-center px-2 group/clear transition-all"
-                                title="Clear search"
+                                title="Hapus pencarian"
+                                aria-label="Hapus teks pencarian"
                             >
                                 <div className="p-1.5 rounded-full bg-white/5 group-hover/clear:bg-red-500/20 text-slate-400 group-hover/clear:text-red-400 transition-all border border-white/5">
                                     <CloseIcon className="w-3.5 h-3.5" />

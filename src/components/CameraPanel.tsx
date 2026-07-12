@@ -3,9 +3,33 @@ import { X, Phone, User, Signal, SignalZero } from 'lucide-react';
 import axios from 'axios';
 import OptimizedVideoPlayer from './OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
+import { ICameraData } from '@/models/Camera';
+
+// ── Typed interfaces ──────────────────────────────────────────────────────────
+
+export interface IPopulatedCamera extends ICameraData {
+    _id: string;
+}
+
+export interface IPopulatedLocation {
+    _id: string;
+    name: string;
+    category: string;
+    description?: string;
+    image?: string;
+    lat: number;
+    lng: number;
+    pmName?: string;
+    pmPhone?: string;
+    cameras: IPopulatedCamera[];
+    onlineCount: number;
+    offlineCount: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface CameraPanelProps {
-    location: any;
+    location: IPopulatedLocation;
     onClose: () => void;
     onStatusChange?: (id: string, status: 'online' | 'offline') => void;
     realtimeStatuses?: Record<string, 'online' | 'offline'>;
@@ -13,7 +37,6 @@ interface CameraPanelProps {
 }
 
 export default function CameraPanel({ location, onClose, onStatusChange, realtimeStatuses, lastCheckedTimes }: CameraPanelProps) {
-    // Reset global stream manager when we switch locations
     const streamManager = useStreamManager();
     const [statuses, setStatuses] = useState<Record<string, 'online' | 'offline'>>({});
 
@@ -30,7 +53,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
     useEffect(() => {
         const initial: Record<string, 'online' | 'offline'> = {};
         if (location?.cameras) {
-            location.cameras.forEach((cam: any) => {
+            location.cameras.forEach((cam) => {
                 initial[cam._id] = cam.status || 'offline';
             });
         }
@@ -54,7 +77,9 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
         }
     };
 
-    const dynamicOnlineCount = location?.cameras?.filter((c: any) => (realtimeStatuses?.[c._id] || statuses[c._id] || c.status) === 'online').length || 0;
+    const dynamicOnlineCount = location?.cameras?.filter((c) =>
+        (realtimeStatuses?.[c._id] || statuses[c._id] || c.status) === 'online'
+    ).length || 0;
     const dynamicOfflineCount = (location?.cameras?.length || 0) - dynamicOnlineCount;
 
     return (
@@ -68,6 +93,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                 </div>
                 <button
                     onClick={onClose}
+                    aria-label="Tutup panel kamera"
                     className="p-2 bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-400 rounded-lg transition-colors"
                 >
                     <X className="w-5 h-5" />
@@ -131,6 +157,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                     href={`https://wa.me/${location.pmPhone.replace(/\D/g, '')}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    aria-label={`Chat WhatsApp dengan ${location.pmName || 'PIC'}`}
                                     className="p-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all shadow-lg shadow-green-900/20 active:scale-95 group"
                                     title="Chat on WhatsApp"
                                 >
@@ -167,7 +194,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {location.cameras && location.cameras.map((cam: any) => {
+                        {location.cameras && location.cameras.map((cam) => {
                             const currentStatus = realtimeStatuses?.[cam._id] || statuses[cam._id] || cam.status || 'offline';
                             return (
                                 <div key={cam._id} className="relative rounded-2xl overflow-hidden border border-white/5 bg-slate-900/50 group hover:border-white/20 transition-all duration-500 shadow-xl hover:shadow-2xl hover:-translate-y-1">
@@ -194,17 +221,16 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                         </div>
                                     </div>
 
-                                    {/* Video Area */}
+                                    {/* Video Area — only cameraId passed, no RTSP URL */}
                                     <div className="aspect-video bg-black flex items-center justify-center relative">
                                         <OptimizedVideoPlayer
-                                            streamUrl={cam.streamUrl}
                                             cameraId={cam._id}
                                             manager={streamManager}
                                             onStatusChange={(status: 'online' | 'offline') => handleStatusChange(cam._id, status)}
                                         />
                                     </div>
                                 </div>
-                            )
+                            );
                         })}
                     </div>
 
@@ -252,31 +278,6 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                     )}
                 </div>
             </div>
-            {/* Add custom scrollbar hiding styles here or in global.css */}
-            <style jsx>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 6px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #334155;
-                    border-radius: 4px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: #475569;
-                }
-
-                .pulse-emerald {
-                    animation: pulse-emerald 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-                }
-
-                @keyframes pulse-emerald {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: .5; }
-                }
-            `}</style>
         </div>
     );
 }

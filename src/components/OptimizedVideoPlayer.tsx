@@ -6,26 +6,33 @@ import { Loader2, Play, Maximize2, WifiOff } from 'lucide-react';
 import { StreamManager } from '@/lib/StreamManager';
 
 interface OptimizedVideoPlayerProps {
-    streamUrl: string; // RTSP URL
     cameraId: string;
     manager: StreamManager;
     onStatusChange?: (status: 'online' | 'offline') => void;
 }
 
-export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onStatusChange }: OptimizedVideoPlayerProps) {
+// Exponential backoff delays (ms): 1s, 2s, 5s, 10s, 30s, then cap at 30s
+const BACKOFF_DELAYS = [1000, 2000, 5000, 10000, 30000];
+const MAX_RETRIES = 10;
+
+function getBackoffDelay(attempt: number): number {
+    const idx = Math.min(attempt, BACKOFF_DELAYS.length - 1);
+    return BACKOFF_DELAYS[idx];
+}
+
+export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange }: OptimizedVideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
     const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
     const retryCountRef = useRef(0);
-    const MAX_RETRIES = 999999; // Infinite retry untuk standby
-    const RETRY_DELAY_MS = 1000; // 1 Detik, cepat tapi aman untuk server/browser
 
     const [isLoading, setIsLoading] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [retryAttempt, setRetryAttempt] = useState(0);
 
     // Zoom & Pan State
     const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
@@ -50,7 +57,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
             if (!isFs) setTransform({ scale: 1, x: 0, y: 0 });
         };
 
-        const updateTransform = (t: any) => setTransform(t);
+        const updateTransform = (t: typeof transform) => setTransform(t);
 
         const handleWheel = (e: WheelEvent) => {
             if (!document.fullscreenElement) return;
@@ -65,7 +72,8 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
             });
         };
 
-        const getDistance = (touches: TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+        const getDistance = (touches: TouchList) =>
+            Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 
         const handleTouchStart = (e: TouchEvent) => {
             if (!document.fullscreenElement) return;
@@ -79,8 +87,8 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
 
         const handleTouchMove = (e: TouchEvent) => {
             if (!document.fullscreenElement) return;
-            if (e.touches.length > 1 || transformRef.current.scale > 1) e.preventDefault(); 
-            
+            if (e.touches.length > 1 || transformRef.current.scale > 1) e.preventDefault();
+
             if (e.touches.length === 2) {
                 const dist = getDistance(e.touches);
                 if (initialDistance.current > 0) {
@@ -119,7 +127,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
             updateTransform({ ...current, x: current.x + dx, y: current.y + dy });
         };
 
-        const handleMouseUp = () => isDragging.current = false;
+        const handleMouseUp = () => { isDragging.current = false; };
 
         document.addEventListener('fullscreenchange', handleFullscreenChange);
         container.addEventListener('wheel', handleWheel, { passive: false });
@@ -184,17 +192,30 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
         }
     }, [cameraId, stopHeartbeat, stopRetry]);
 
+    const scheduleRetry = useCallback((attempt: number) => {
+        const delay = getBackoffDelay(attempt);
+        const nextAttempt = attempt + 1;
+        setRetryAttempt(nextAttempt);
+        setError(`Mencoba ulang dalam ${delay / 1000}s... (${nextAttempt}/${MAX_RETRIES})`);
+        retryTimerRef.current = setTimeout(() => {
+            setError(null);
+            initPlayer();
+        }, delay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const initPlayer = useCallback(async () => {
-        if (!videoRef.current || !streamUrl) return;
+        if (!videoRef.current) return;
 
         setIsLoading(true);
         setError(null);
 
         try {
+            // Only cameraId is sent — server looks up RTSP URL from DB
             const res = await fetch('/api/streams/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cameraId, rtspUrl: streamUrl }),
+                body: JSON.stringify({ cameraId }),
             });
 
             const data = await res.json();
@@ -205,7 +226,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
 
             if (!videoRef.current) return;
 
-            // Start heartbeat ASAP after confirmed stream start
+            // Start heartbeat immediately after confirmed stream start
             stopHeartbeat();
             heartbeatRef.current = setInterval(() => {
                 fetch('/api/streams/heartbeat', {
@@ -238,6 +259,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
 
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
                     retryCountRef.current = 0;
+                    setRetryAttempt(0);
                     videoRef.current?.play().catch(() => {});
                     setIsPlaying(true);
                     setIsLoading(false);
@@ -256,12 +278,8 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                     hls.destroy();
 
                     if (retryCountRef.current < MAX_RETRIES) {
+                        scheduleRetry(retryCountRef.current);
                         retryCountRef.current++;
-                        setError(`Mencoba ulang (Ke-${retryCountRef.current})...`);
-                        retryTimerRef.current = setTimeout(() => {
-                            setError(null);
-                            initPlayer();
-                        }, RETRY_DELAY_MS);
                     } else {
                         destroyPlayer(true);
                         setError('Kamera Offline');
@@ -281,12 +299,8 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
         } catch (err: any) {
             console.warn(`[Player] Stream fetch failed for ${cameraId}:`, err.message);
             if (retryCountRef.current < MAX_RETRIES) {
+                scheduleRetry(retryCountRef.current);
                 retryCountRef.current++;
-                setError(`Mencoba ulang (Ke-${retryCountRef.current})...`);
-                retryTimerRef.current = setTimeout(() => {
-                    setError(null);
-                    initPlayer();
-                }, RETRY_DELAY_MS);
             } else {
                 destroyPlayer(true);
                 setError('Kamera Offline');
@@ -294,10 +308,9 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                 onStatusChange?.('offline');
             }
         }
-    }, [streamUrl, cameraId, destroyPlayer, onStatusChange, stopHeartbeat]);
+    }, [cameraId, destroyPlayer, onStatusChange, stopHeartbeat, scheduleRetry]);
 
     // Stream lifecycle: start on mount, destroy on unmount.
-    // No IntersectionObserver — streams stay alive while the panel is open.
     // StreamManager still enforces MAX_STREAMS limit if needed.
     useEffect(() => {
         manager.register(cameraId, () => initPlayer(), () => destroyPlayer());
@@ -318,7 +331,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
     };
 
     const handleVideoPointerDown = (e: React.PointerEvent) => {
-        if (e.button !== 0 && e.pointerType === 'mouse') return; // only left click
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
         clickStartPos.current = { x: e.clientX, y: e.clientY };
     };
 
@@ -344,6 +357,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                 } : {}}
                 playsInline
                 muted
+                aria-label={`Stream kamera ${cameraId}`}
                 onPointerDown={handleVideoPointerDown}
                 onPointerUp={handleVideoPointerUp}
             />
@@ -365,8 +379,9 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                     <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider text-center px-4">{error}</span>
                     {error === 'Kamera Offline' && (
                         <button
-                            onClick={() => { retryCountRef.current = 0; setError(null); initPlayer(); }}
+                            onClick={() => { retryCountRef.current = 0; setRetryAttempt(0); setError(null); initPlayer(); }}
                             className="mt-1 px-4 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-300 uppercase tracking-wider transition-all"
+                            aria-label="Coba lagi koneksi kamera"
                         >
                             Coba Lagi
                         </button>
@@ -380,6 +395,7 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
                     <button
                         onClick={() => manager.register(cameraId, initPlayer, destroyPlayer)}
                         className="w-14 h-14 rounded-full bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 flex items-center justify-center transition-all border border-yellow-500/40 hover:scale-110 active:scale-95"
+                        aria-label="Putar stream kamera"
                     >
                         <Play className="w-6 h-6 ml-1" />
                     </button>
@@ -389,17 +405,18 @@ export default function OptimizedVideoPlayer({ streamUrl, cameraId, manager, onS
             {/* Overlay buttons: Fullscreen */}
             {isPlaying && (
                 <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
+                    <button
                         onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
                         className="p-2 bg-black/60 hover:bg-black/80 rounded-xl text-white backdrop-blur-md transition-all shadow-xl border border-white/10 group/btn"
                         title="Layar Penuh"
+                        aria-label="Tampilkan layar penuh"
                     >
                         <Maximize2 className="w-5 h-5 drop-shadow-md group-hover/btn:scale-110 transition-transform" />
                     </button>
                 </div>
             )}
 
-            {/* Fullscreen Brand Watermark — large centered logo */}
+            {/* Fullscreen Brand Watermark */}
             {isFullscreen && (
                 <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
                     <img
