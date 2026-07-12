@@ -1,11 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import Category from '@/models/Category';
+import { requireAdmin } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
-export async function PUT(request: Request, context: { params: Promise<{ id: string }> | any }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> | any }) {
+    // Only admin can update categories
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     await dbConnect();
     try {
         const { id } = await context.params;
@@ -13,7 +18,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
             return NextResponse.json({ error: 'Invalid Category ID' }, { status: 400 });
         }
 
-        const body = await request.json();
+        const body = await req.json();
 
         // Prevent duplicate identifier if changing it
         if (body.identifier) {
@@ -46,7 +51,11 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     }
 }
 
-export async function DELETE(request: Request, context: { params: Promise<{ id: string }> | any }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> | any }) {
+    // Only admin can delete categories
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     await dbConnect();
     try {
         const { id } = await context.params;

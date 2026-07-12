@@ -3,19 +3,22 @@ import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
 import StatusLog from '@/models/StatusLog';
 import { cameraStatusEmitter } from '@/lib/cameraStatusEmitter';
+import { requireAuth } from '@/lib/apiAuth';
 
 /**
  * PATCH /api/cameras/[id]/status
  * Body: { status: 'online' | 'offline' }
  *
- * Called by the video player when it confirms a camera's real status
- * through actual streaming (more accurate than ffprobe).
- * Updates DB, logs changes, and broadcasts via SSE to all clients.
+ * Called by the video player when it confirms a camera's real status.
  */
 export async function PATCH(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    // Require authentication
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     try {
         const { id } = await params;
         const { status } = await req.json();
@@ -32,7 +35,11 @@ export async function PATCH(
         const previousStatus = camera?.status;
 
         // Update DB with status and timestamp
-        await Camera.updateOne({ _id: id }, { $set: { status, lastCheckedAt: now } });
+        const updateFields: Record<string, any> = { status, lastCheckedAt: now };
+        if (status === 'online') {
+            updateFields.lastOnlineAt = now;
+        }
+        await Camera.updateOne({ _id: id }, { $set: updateFields });
 
         // Log status change (only if actually changed)
         if (previousStatus && previousStatus !== status) {

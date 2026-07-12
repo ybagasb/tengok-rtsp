@@ -1,12 +1,23 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { requireAuth } from '@/lib/apiAuth';
 
 export async function GET(
-    req: Request,
+    req: NextRequest,
     context: { params: Promise<{ cameraId: string; file: string }> }
 ) {
+    // Require authentication to access stream files
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     const { cameraId, file } = await context.params;
+
+    // Prevent path traversal attacks
+    if (cameraId.includes('..') || file.includes('..') || cameraId.includes('/') || cameraId.includes('\\')) {
+        return new NextResponse("Forbidden", { status: 403 });
+    }
+
     const filePath = path.join(process.cwd(), 'public', 'streams', cameraId, file);
 
     if (!fs.existsSync(filePath)) {
@@ -19,7 +30,6 @@ export async function GET(
             const baseUrl = `/api/stream-file/${cameraId}/`;
 
             // Replace relative .ts segment lines with full API path
-            // trim() handles Windows CRLF endings \r\n
             content = content.split('\n').map((line) => {
                 const trimmed = line.trim();
                 if (trimmed.endsWith('.ts') && !trimmed.startsWith('#') && !trimmed.startsWith('http') && !trimmed.startsWith('/')) {
@@ -28,12 +38,10 @@ export async function GET(
                 return line;
             }).join('\n');
 
-            console.log(`[stream-file] Served m3u8 for ${cameraId}`);
             return new NextResponse(content, {
                 headers: {
                     'Content-Type': 'application/vnd.apple.mpegurl',
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
-                    'Access-Control-Allow-Origin': '*',
                 },
             });
         } else if (file.endsWith('.ts')) {
@@ -43,7 +51,6 @@ export async function GET(
                 headers: {
                     'Content-Type': 'video/MP2T',
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
-                    'Access-Control-Allow-Origin': '*',
                 },
             });
         }

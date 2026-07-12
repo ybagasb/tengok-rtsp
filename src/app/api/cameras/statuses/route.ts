@@ -1,16 +1,19 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
+import { requireAuth } from '@/lib/apiAuth';
 
 /**
  * GET /api/cameras/statuses
  * Lightweight endpoint — returns only { _id, status } for all cameras.
- * Used by MapComponent to poll camera statuses every few seconds
- * without fetching the full location/camera payload.
  */
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    // Require authentication
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     try {
         await dbConnect();
         const cameras = await Camera.find({})

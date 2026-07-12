@@ -1,21 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import StatusLog from '@/models/StatusLog';
 import Camera from '@/models/Camera';
+import { requireAuth } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/cameras/offline-today
  * Returns a map of { cameraId: incidentCount } — counts of real OUTAGE INCIDENTS today.
- *
- * An "incident" = a transition from online → offline (not every probe that finds it offline).
- * If a camera was offline for 2 hours straight, it counts as 1 incident, not 120.
- *
- * Logic: for each camera, fetch all logs today ordered by time, then count
- * how many times the status changed TO 'offline' from a previous 'online' entry.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+    // Require authentication
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     await dbConnect();
     try {
         const startOfDay = new Date();
@@ -38,11 +37,8 @@ export async function GET() {
         const map: Record<string, number> = {};
         for (const [camId, entries] of Object.entries(byCam)) {
             let incidents = 0;
-            let prevStatus = 'online'; // Assume online before day started
+            let prevStatus = 'online';
 
-            // If the first log today is 'offline', check yesterday's last status to see if
-            // this is a continuing outage or a new one — for simplicity, count it as 1 if
-            // first entry of the day is offline (conservative)
             for (let i = 0; i < entries.length; i++) {
                 const cur = entries[i].status;
                 if (cur === 'offline' && prevStatus === 'online') {

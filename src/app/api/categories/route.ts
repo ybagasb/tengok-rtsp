@@ -1,11 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import Category from '@/models/Category';
+import { requireAuth, requireAdmin } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    // Require authentication
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     await dbConnect();
     try {
         const categories = await Category.find().sort({ createdAt: -1 });
@@ -16,10 +21,14 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
+    // Only admin can create categories
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     await dbConnect();
     try {
-        const body = await request.json();
+        const body = await req.json();
 
         // Check if identifier already exists
         const existingCategory = await Category.findOne({ identifier: body.identifier });
@@ -39,4 +48,3 @@ export async function POST(request: Request) {
         );
     }
 }
-

@@ -1,20 +1,20 @@
 import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { cameraStatusEmitter } from '@/lib/cameraStatusEmitter';
+import { requireAuth } from '@/lib/apiAuth';
 
 // Must be Node.js runtime (not Edge) + no caching
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+    // Require authentication for SSE stream
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
-        /**
-         * Using an async start() that awaits a disconnect-triggered Promise.
-         * This is required because Next.js will close the Response stream as soon
-         * as start() returns. By awaiting here, we keep the stream alive for the
-         * full duration of the client connection.
-         */
         async start(controller) {
             // Initial handshake comment so the browser EventSource fires onopen
             controller.enqueue(encoder.encode(': connected\n\n'));
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
                 }
             }, 20000);
 
-            // Block here until the client disconnects – this keeps the stream open.
+            // Block here until the client disconnects
             await new Promise<void>((resolve) => {
                 req.signal.addEventListener('abort', () => resolve(), { once: true });
             });

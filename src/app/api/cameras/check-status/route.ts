@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
+import { requireAuth } from '@/lib/apiAuth';
 
 export async function POST(req: NextRequest) {
+    // Require authentication
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     const { url } = await req.json();
 
     if (!url) {

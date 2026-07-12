@@ -5,6 +5,7 @@ import { ffmpegManager } from '@/lib/ffmpegManager';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
 import StatusLog from '@/models/StatusLog';
+import { requireAdmin } from '@/lib/apiAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,12 +17,13 @@ let isProbing = false;
  * POST /api/cameras/probe-now
  * Body: { cameraIds: string[] }
  *
- * Returns 202 immediately. In the background:
- * - Starts the full ffmpeg → HLS pipeline for each camera
- * - Waits 3s to verify stability (catches streams that start then crash)
- * - Writes result to DB immediately → picked up by the 3s polling in MapComponent
+ * Admin-only. Triggers HLS pipeline test for selected cameras.
  */
 export async function POST(req: NextRequest) {
+    // Only admin can trigger probes
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const { cameraIds }: { cameraIds?: string[] } = body;
 
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
                     if (ffmpegManager.isStreaming(cam._id.toString())) {
                         const now = new Date();
                         const payload = { cameraId: cam._id.toString(), status: 'online' as const, lastCheckedAt: now.toISOString() };
-                        await Camera.updateOne({ _id: cam._id }, { $set: { status: 'online', lastCheckedAt: now } });
+                        await Camera.updateOne({ _id: cam._id }, { $set: { status: 'online', lastCheckedAt: now, lastOnlineAt: now } });
                         if (cam.status !== 'online') {
                             await StatusLog.create({ cameraId: cam._id, status: 'online', checkedBy: 'probe' });
                         }
@@ -66,7 +68,7 @@ export async function POST(req: NextRequest) {
                         // Test the full pipeline: ffmpeg transcodes RTSP → HLS
                         await ffmpegManager.startStream(cam._id.toString(), cam.streamUrl);
 
-                        // Wait 3s stability check: catches streams that start then immediately crash
+                        // Wait 3s stability check
                         await new Promise(r => setTimeout(r, 3000));
 
                         status = ffmpegManager.isStreaming(cam._id.toString()) ? 'online' : 'offline';
@@ -74,7 +76,6 @@ export async function POST(req: NextRequest) {
                         if (status === 'offline') {
                             try { ffmpegManager.stopStream(cam._id.toString()); } catch { /* ignore */ }
                         }
-                        // If online, leave stream alive — user may open it immediately
                     } catch {
                         status = 'offline';
                         try { ffmpegManager.stopStream(cam._id.toString()); } catch { /* ignore */ }
@@ -82,7 +83,11 @@ export async function POST(req: NextRequest) {
 
                     // Write to DB immediately
                     const now = new Date();
-                    await Camera.updateOne({ _id: cam._id }, { $set: { status, lastCheckedAt: now } });
+                    const updateFields: Record<string, any> = { status, lastCheckedAt: now };
+                    if (status === 'online') {
+                        updateFields.lastOnlineAt = now;
+                    }
+                    await Camera.updateOne({ _id: cam._id }, { $set: updateFields });
                     if (cam.status !== status) {
                         await StatusLog.create({ cameraId: cam._id, status, checkedBy: 'probe' });
                     }

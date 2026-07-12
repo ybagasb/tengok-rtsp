@@ -1,12 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import ShareLink from '@/models/ShareLink';
+import { requireAdmin } from '@/lib/apiAuth';
 
-// DELETE — Remove a share link
+// DELETE — Remove a share link (admin only)
 export async function DELETE(
-    req: Request,
+    req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     try {
         await dbConnect();
         const { id } = await params;
@@ -18,11 +22,14 @@ export async function DELETE(
     }
 }
 
-// PATCH — Toggle isActive status (revoke/reactivate)
+// PATCH — Toggle isActive status (admin only)
 export async function PATCH(
-    req: Request,
+    req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     try {
         await dbConnect();
         const { id } = await params;

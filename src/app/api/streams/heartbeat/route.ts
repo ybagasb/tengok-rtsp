@@ -1,7 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { ffmpegManager } from '@/lib/ffmpegManager';
+import { requireAuth } from '@/lib/apiAuth';
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+    // Require authentication
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     try {
         const { cameraId } = await req.json();
         

@@ -1,10 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import os from 'os';
+import { requireAdmin } from '@/lib/apiAuth';
 
 let lastCpuUsage = process.cpuUsage();
 let lastTime = Date.now();
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    // Only admin can view system stats
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     const mem = process.memoryUsage();
     const now = Date.now();
     const elapsed = (now - lastTime) / 1000; // seconds
@@ -20,13 +25,13 @@ export async function GET() {
 
     return NextResponse.json({
         memory: {
-            rss: mem.rss,           // Resident Set Size (total process memory)
-            heapUsed: mem.heapUsed, // Node.js heap used
+            rss: mem.rss,
+            heapUsed: mem.heapUsed,
             heapTotal: mem.heapTotal,
         },
         cpu: {
-            process: Math.round(cpuPercent * 10) / 10, // Process CPU %
-            systemLoad: os.loadavg()[0],               // 1-min system load average
+            process: Math.round(cpuPercent * 10) / 10,
+            systemLoad: os.loadavg()[0],
         },
         system: {
             totalMemory: os.totalmem(),

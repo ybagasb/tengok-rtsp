@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import ShareLink from '@/models/ShareLink';
 
-// POST — Verify a share link token
+// POST — Verify a share link token (public endpoint)
 export async function POST(req: Request) {
     try {
         await dbConnect();
@@ -18,6 +18,8 @@ export async function POST(req: Request) {
                 populate: {
                     path: 'cameras',
                     model: 'Camera',
+                    // IMPORTANT: Exclude streamUrl to prevent credential leakage
+                    select: '-streamUrl',
                 }
             })
             .lean();

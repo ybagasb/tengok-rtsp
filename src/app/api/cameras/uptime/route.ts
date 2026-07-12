@@ -3,21 +3,26 @@ import dbConnect from '@/lib/db';
 import StatusLog from '@/models/StatusLog';
 import Camera from '@/models/Camera';
 import Location from '@/models/Location';
+import { requireAuth } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+    // Require authentication
+    const authError = await requireAuth(req);
+    if (authError) return authError;
+
     const days = parseInt(req.nextUrl.searchParams.get('days') || '7');
     const sinceDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     await dbConnect();
 
     try {
-        // Get all cameras with their location info
+        // Get all cameras with their location info (exclude streamUrl)
         const locations = await Location.find()
             .select('name category cameras')
-            .populate('cameras', 'name status lastCheckedAt')
+            .populate('cameras', 'name status lastCheckedAt lastOnlineAt')
             .lean();
 
         // Get all status logs in the date range
@@ -42,7 +47,7 @@ export async function GET(req: NextRequest) {
                 const cameraLogs = logsByCamera[camId] || [];
                 const totalChecks = cameraLogs.length;
                 const onlineChecks = cameraLogs.filter((l: any) => l.status === 'online').length;
-                const uptimePercent = totalChecks > 0 ? Math.round((onlineChecks / totalChecks) * 100) : -1; // -1 = no data
+                const uptimePercent = totalChecks > 0 ? Math.round((onlineChecks / totalChecks) * 100) : -1;
 
                 results.push({
                     cameraId: camId,
@@ -51,6 +56,7 @@ export async function GET(req: NextRequest) {
                     category: loc.category,
                     currentStatus: cam.status || 'offline',
                     lastCheckedAt: cam.lastCheckedAt || null,
+                    lastOnlineAt: cam.lastOnlineAt || null,
                     uptimePercent,
                     totalChecks,
                     onlineChecks,

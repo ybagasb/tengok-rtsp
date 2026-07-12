@@ -1,15 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AccessLog from '@/models/AccessLog';
 import ShareLink from '@/models/ShareLink';
+import { requireAdmin } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
+export async function GET(req: NextRequest) {
+    // Only admin can view statistics
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     try {
         await dbConnect();
 
-        const { searchParams } = new URL(request.url);
+        const { searchParams } = new URL(req.url);
         const daysParam = parseInt(searchParams.get('days') || '30', 10);
         
         // Base threshold (for totals, uniques, breakdown)
@@ -49,8 +54,6 @@ export async function GET(request: Request) {
         const dailyVisits = await AccessLog.aggregate([
             { $match: { accessedAt: { $gte: trendStartDate } } },
             {
-                // We want both total views AND unique visitors per day. But unique visitors per day requires distinct IP hashes inside group.
-                // We can use $addToSet to collect unique ipHashes.
                 $group: {
                     _id: { date: { $dateToString: { format: '%Y-%m-%d', date: '$accessedAt' } } },
                     views: { $sum: 1 },

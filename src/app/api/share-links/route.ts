@@ -1,10 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import dbConnect from '@/lib/db';
 import ShareLink from '@/models/ShareLink';
+import { requireAdmin } from '@/lib/apiAuth';
 
-// GET — List all share links
-export async function GET() {
+// GET — List all share links (admin only)
+export async function GET(req: NextRequest) {
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     try {
         await dbConnect();
         const links = await ShareLink.find()
@@ -18,8 +22,11 @@ export async function GET() {
     }
 }
 
-// POST — Create a new share link
-export async function POST(req: Request) {
+// POST — Create a new share link (admin only)
+export async function POST(req: NextRequest) {
+    const authError = await requireAdmin(req);
+    if (authError) return authError;
+
     try {
         await dbConnect();
         const { label, locationIds, duration } = await req.json();
