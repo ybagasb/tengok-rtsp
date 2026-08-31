@@ -452,23 +452,46 @@ export default function AdminLocations() {
                                                     <Loader2 className="animate-spin text-slate-700" />
                                                 )}
                                             </div>
-                                            <div className="bg-black/40 rounded-2xl p-6 border border-white/10 flex flex-col justify-center space-y-6">
-                                                <div className="flex items-center gap-3 mb-2">
+                                            <div className="bg-black/40 rounded-2xl p-6 border border-white/10 flex flex-col justify-center space-y-4">
+                                                <div className="flex items-center gap-3 mb-1">
                                                     <div className="p-2 rounded-lg bg-yellow-500/10">
                                                         <Compass className="w-4 h-4 text-yellow-400" />
                                                     </div>
-                                                    <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Koordinat Aktif</span>
+                                                    <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Koordinat Titik Pantau</span>
                                                 </div>
-                                                <div className="space-y-1">
-                                                    <span className="text-[10px] uppercase text-slate-500 font-bold">Latitude</span>
-                                                    <div className="text-xl font-mono text-white tracking-wider leading-none">{formData.lat?.toFixed(6)}</div>
+                                                
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] uppercase text-slate-400 font-bold flex items-center justify-between">
+                                                        <span>Latitude</span>
+                                                        <span className="text-[9px] text-slate-500 font-mono">Contoh: -6.200000</span>
+                                                    </label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="any"
+                                                        value={formData.lat ?? ''} 
+                                                        onChange={e => setFormData(prev => ({ ...prev, lat: parseFloat(e.target.value) || 0 }))} 
+                                                        className="w-full bg-slate-900 border border-white/15 focus:border-yellow-500 rounded-xl px-3 py-2 text-sm font-mono text-white tracking-wider outline-none" 
+                                                        placeholder="-6.200000"
+                                                    />
                                                 </div>
-                                                <div className="space-y-1">
-                                                    <span className="text-[10px] uppercase text-slate-500 font-bold">Longitude</span>
-                                                    <div className="text-xl font-mono text-white tracking-wider leading-none">{formData.lng?.toFixed(6)}</div>
+
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] uppercase text-slate-400 font-bold flex items-center justify-between">
+                                                        <span>Longitude</span>
+                                                        <span className="text-[9px] text-slate-500 font-mono">Contoh: 106.816666</span>
+                                                    </label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="any"
+                                                        value={formData.lng ?? ''} 
+                                                        onChange={e => setFormData(prev => ({ ...prev, lng: parseFloat(e.target.value) || 0 }))} 
+                                                        className="w-full bg-slate-900 border border-white/15 focus:border-yellow-500 rounded-xl px-3 py-2 text-sm font-mono text-white tracking-wider outline-none" 
+                                                        placeholder="106.816666"
+                                                    />
                                                 </div>
-                                                <p className="text-[11px] text-slate-600 leading-relaxed">
-                                                    * Klik pada peta untuk menyesuaikan titik koordinat secara presisi
+
+                                                <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
+                                                    * Klik pada peta untuk pinpoint koordinat atau ketik/paste manual angka di atas.
                                                 </p>
                                             </div>
                                         </div>
@@ -479,17 +502,36 @@ export default function AdminLocations() {
                                 <div>
                                     <SectionHeader icon={Video} title="Integrasi Kamera" />
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-4 bg-black/40 rounded-2xl border border-white/5 custom-scrollbar">
-                                        {allCameras.map(cam => (
-                                            <label key={cam._id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${formData.cameras?.includes(cam._id) ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-200' : 'bg-white/5 border-transparent text-slate-400 hover:bg-white/10'}`}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={formData.cameras?.includes(cam._id)}
-                                                    onChange={() => handleCameraToggle(cam._id)}
-                                                    className="w-4 h-4 rounded border-white/20 bg-black/50 accent-yellow-500"
-                                                />
-                                                <span className="text-xs font-bold truncate tracking-tight">{cam.name}</span>
-                                            </label>
-                                        ))}
+                                        {allCameras.map((cam: any) => {
+                                            const isChecked = formData.cameras?.includes(cam._id);
+                                            const isOnline = cam.status === 'online';
+                                            return (
+                                                <label 
+                                                    key={cam._id} 
+                                                    className={`flex items-center justify-between gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
+                                                        isChecked 
+                                                            ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-200' 
+                                                            : 'bg-white/5 border-transparent text-slate-400 hover:bg-white/10 hover:text-white'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isChecked}
+                                                            onChange={() => handleCameraToggle(cam._id)}
+                                                            className="w-4 h-4 rounded border-white/20 bg-black/50 accent-yellow-500 shrink-0"
+                                                        />
+                                                        <span className="text-xs font-bold truncate tracking-tight">{cam.name}</span>
+                                                    </div>
+                                                    <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                                        isOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                                                    }`}>
+                                                        <span className={`w-1 h-1 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                                                        {isOnline ? 'ONLINE' : 'OFFLINE'}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
                                         {allCameras.length === 0 && <span className="col-span-full text-slate-600 text-sm p-4 text-center">Belum ada perangkat terdaftar.</span>}
                                     </div>
                                 </div>

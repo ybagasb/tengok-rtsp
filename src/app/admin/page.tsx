@@ -1,865 +1,551 @@
 "use client";
 
-import { useState, useMemo } from 'react';
-import useSWR, { mutate } from 'swr';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import axios from 'axios';
-import { Trash2, Plus, Monitor, Loader2, Pencil, X, Check, Camera, ShieldCheck, PlayCircle, FileDown, ArrowUpAZ, ArrowDownAZ, Link, Wifi, WifiOff } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useEffect, useState, useMemo } from 'react';
+import useSWR from 'swr';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { 
+    LayoutDashboard, Monitor, MapPin, Tags, Link2, BarChart3, Activity, 
+    ClipboardList, Wifi, WifiOff, Users, ArrowUpRight, Plus, 
+    ShieldCheck, AlertTriangle, PlayCircle, RefreshCw, Eye, Sparkles,
+    CheckCircle2, Clock, Globe, ArrowRight, FileDown, Loader2
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ICameraData } from '@/models/Camera';
-import { containerVariants, itemVariants, inputCls } from '@/components/admin/shared';
-import { PageHeader, FormField, EmptyState, LoadingState, SearchBar, CountBadge, useConfirm } from '@/components/admin/AdminUI';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { PageHeader } from '@/components/admin/AdminUI';
+import { containerVariants, cardVariants } from '@/components/admin/shared';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 
-const schema = z.object({
-    name: z.string().min(1, "Nama tidak boleh kosong"),
-    streamUrl: z.string().min(1, "URL tidak boleh kosong").url("Harus berupa URL yang valid"),
-});
+const fetcher = (url: string) => fetch(url).then(res => res.json());
 
-type FormData = z.infer<typeof schema>;
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-// ── Edit Modal ────────────────────────────────────────────────────────────────
-function EditModal({
-    camera,
-    onClose,
-}: {
-    camera: ICameraData;
-    onClose: () => void;
-}) {
-    const [isSaving, setIsSaving] = useState(false);
-    const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
-        resolver: zodResolver(schema),
-        defaultValues: { name: camera.name, streamUrl: camera.streamUrl },
-    });
-
-    const onSubmit = async (data: FormData) => {
-        setIsSaving(true);
-        try {
-            await axios.put(`/api/cameras/${camera._id}`, data);
-            toast.success('Kamera berhasil diperbarui');
-            mutate('/api/cameras');
-            onClose();
-        } catch {
-            toast.error('Gagal memperbarui kamera');
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    return (
-        <AnimatePresence>
-            <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" 
-                onClick={onClose}
-            >
-                <motion.div
-                    initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                    animate={{ scale: 1, opacity: 1, y: 0 }}
-                    exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                    className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-3xl w-full max-w-lg shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden relative"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div className="absolute -top-32 -right-32 w-64 h-64 bg-yellow-500/20 rounded-full blur-[80px] pointer-events-none" />
-                    
-                    <div className="flex items-center justify-between px-8 pt-6 pb-5 border-b border-white/5 relative z-10">
-                        <h2 className="text-xl font-bold flex items-center gap-3 text-white">
-                            <div className="p-2 rounded-xl bg-yellow-500/10">
-                                <Pencil className="w-5 h-5 text-yellow-500" />
-                            </div>
-                            Edit Kamera
-                        </h2>
-                        <button onClick={onClose} className="p-2 rounded-xl text-slate-500 hover:text-white hover:bg-white/5 transition-colors">
-                            <X className="w-5 h-5" />
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleSubmit(onSubmit)} className="p-8 space-y-6 relative z-10">
-                        <FormField label="Nama Perangkat CCTV" error={errors.name?.message}>
-                            <input {...register('name')} className={inputCls()} placeholder="Contoh: Gerbang Utama" />
-                        </FormField>
-
-                        <FormField label="Stream URL (RTSP / HLS)" error={errors.streamUrl?.message}>
-                            <input {...register('streamUrl')} className={inputCls()} placeholder="rtsp://admin:pass@ip:port/stream" />
-                        </FormField>
-
-                        <div className="flex gap-4 pt-4 border-t border-white/5 mt-6">
-                            <motion.button
-                                whileTap={{ scale: 0.97 }}
-                                type="button"
-                                onClick={onClose}
-                                className="flex-1 py-4 rounded-xl border border-white/10 text-slate-400 font-bold hover:text-white hover:bg-white/5 transition-all text-sm uppercase tracking-wider"
-                            >
-                                Batal
-                            </motion.button>
-                            <motion.button
-                                whileHover={{ y: -1 }}
-                                whileTap={{ scale: 0.97 }}
-                                type="submit"
-                                disabled={isSaving}
-                                className="flex-1 py-4 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-950 font-bold transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] disabled:opacity-50 flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
-                            >
-                                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> Simpan</>}
-                            </motion.button>
-                        </div>
-                    </form>
-                </motion.div>
-            </motion.div>
-        </AnimatePresence>
-    );
+function formatDate(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ', ' +
+        d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
 }
 
-// ── Main Admin Page ───────────────────────────────────────────────────────────
-export default function AdminPage() {
-    const { data, isLoading } = useSWR('/api/cameras', fetcher);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [editingCamera, setEditingCamera] = useState<ICameraData | null>(null);
-    const [isExporting, setIsExporting] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'url'>('name-asc');
-    const [filterStatus, setFilterStatus] = useState<'all' | 'online' | 'offline'>('all');
-    const [showAddSheet, setShowAddSheet] = useState(false);
-    const ITEMS_PER_PAGE = 5;
-    const { confirm, ConfirmDialog } = useConfirm();
+export default function AdminOverviewDashboard() {
+    const router = useRouter();
+
+    // Data Fetching
+    const { data: cameraData, isLoading: loadingCameras, mutate: refreshCameras } = useSWR('/api/cameras', fetcher);
+    const { data: locationData, isLoading: loadingLocations, mutate: refreshLocations } = useSWR('/api/locations', fetcher);
+    const { data: categoryData } = useSWR('/api/categories', fetcher);
+    const { data: shareLinkData } = useSWR('/api/share-links', fetcher);
+    const { data: statsData } = useSWR('/api/stats?days=7', fetcher);
+    const { data: auditData, mutate: refreshAudit } = useSWR('/api/admin/audit-log?limit=5', fetcher);
+
+    const [currentTime, setCurrentTime] = useState<string>('');
+    const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+    useEffect(() => {
+        const updateTime = () => {
+            const now = new Date();
+            setCurrentTime(now.toLocaleDateString('id-ID', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long', 
+                year: 'numeric' 
+            }) + ' • ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB');
+        };
+        updateTime();
+        const timer = setInterval(updateTime, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const cameras = cameraData?.data || [];
+    const locations = locationData?.data || [];
+    const categories = Array.isArray(categoryData) ? categoryData : (categoryData?.data || []);
+    const shareLinks = shareLinkData?.data || [];
+    const auditLogs = auditData?.data || [];
+
+    // Computed Stats
+    const onlineCameras = cameras.filter((c: any) => c.status === 'online');
+    const offlineCameras = cameras.filter((c: any) => c.status === 'offline');
+    const totalCameras = cameras.length;
+    const availabilityRate = totalCameras > 0 
+        ? Math.round((onlineCameras.length / totalCameras) * 100) 
+        : 100;
+
+    // Assigned vs Unassigned Cameras
+    const cameraToLocationMap = useMemo(() => {
+        const map = new Map<string, { id: string; name: string }[]>();
+        locations.forEach((loc: any) => {
+            if (Array.isArray(loc.cameras)) {
+                loc.cameras.forEach((cam: any) => {
+                    const cid = typeof cam === 'string' ? cam : cam._id;
+                    if (cid) {
+                        const existing = map.get(cid) || [];
+                        existing.push({ id: loc._id, name: loc.name });
+                        map.set(cid, existing);
+                    }
+                });
+            }
+        });
+        return map;
+    }, [locations]);
+
+    const unassignedCameras = cameras.filter((c: any) => !cameraToLocationMap.has(c._id));
+
+    // Visitor Stats
+    const totalVisits = statsData?.data?.summary?.totalVisits || 0;
+    const uniqueVisitors = statsData?.data?.summary?.uniqueVisitors || 0;
+    const dailyVisits = statsData?.data?.dailyVisits || [];
+
+    const handleRefreshAll = () => {
+        refreshCameras();
+        refreshLocations();
+        refreshAudit();
+        toast.success('Data dashboard diperbarui');
+    };
 
     const handleExportPDF = async () => {
-        setIsExporting(true);
+        setIsExportingPDF(true);
         try {
             const { default: jsPDF } = await import('jspdf');
             const { default: autoTable } = await import('jspdf-autotable');
 
-            const [res, offlineRes] = await Promise.all([
-                axios.get('/api/locations'),
-                axios.get('/api/cameras/offline-today'),
-            ]);
-            const locations = res.data.data || [];
-            const offlineTodayMap: Record<string, number> = offlineRes.data.data || {};
+            const doc = new jsPDF();
+            doc.setFontSize(16);
+            doc.text('LAPORAN RINGKASAN SISTEM TENGOK CCTV', 14, 20);
+            doc.setFontSize(10);
+            doc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, 14, 28);
+            doc.text(`Total Kamera: ${totalCameras} | Online: ${onlineCameras.length} | Offline: ${offlineCameras.length} | SLA: ${availabilityRate}%`, 14, 34);
 
-            // ── Logo helper ──────────────────────────────────────────────────
-            const getBase64Image = (): Promise<string | null> =>
-                new Promise((resolve) => {
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.naturalWidth || 400;
-                        canvas.height = img.naturalHeight || 400;
-                        const ctx = canvas.getContext('2d');
-                        if (!ctx) { resolve(null); return; }
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        resolve(canvas.toDataURL('image/png'));
-                    };
-                    img.onerror = () => resolve(null);
-                    img.src = '/LOGO_ABIPRAYA.png';
-                });
-
-            const logoBase64 = await getBase64Image();
-            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-            const pageW = doc.internal.pageSize.getWidth();
-            const pageH = doc.internal.pageSize.getHeight();
-            const margin = 14;
-            const now = new Date();
-
-            const drawHeader = (pageNum: number) => {
-                if (logoBase64) doc.addImage(logoBase64, 'PNG', margin, 8, 26, 26);
-                const textX = logoBase64 ? margin + 30 : margin;
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(10);
-                doc.setTextColor(0);
-                doc.text('PT BRANTAS ABIPRAYA (PERSERO)', textX, 14);
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(7.5);
-                doc.setTextColor(80);
-                doc.text('Jl. D.I. Panjaitan Kav. 14, Jakarta 13340', textX, 19.5);
-                doc.text('Telp: (021) 8516290 | Fax: (021) 8516289', textX, 24);
-
-                const bW = 62, bX = pageW - margin - bW, bY = 8, bH = 22;
-                doc.setDrawColor(0); doc.setLineWidth(0.6);
-                doc.rect(bX, bY, bW, bH);
-                doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0);
-                doc.text('LAPORAN BULANAN', bX + bW / 2, bY + 7.5, { align: 'center' });
-                doc.text('STATUS KAMERA CCTV', bX + bW / 2, bY + 14, { align: 'center' });
-                doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80);
-                doc.text('TENGOK Surveillance System', bX + bW / 2, bY + 19.5, { align: 'center' });
-
-                doc.setDrawColor(0); doc.setLineWidth(0.8);
-                doc.line(margin, 37, pageW - margin, 37);
-                doc.setLineWidth(0.25);
-                doc.line(margin, 38.5, pageW - margin, 38.5);
-
-                if (pageNum > 1) {
-                    doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(140);
-                    doc.text(`Hal. ${pageNum}`, pageW - margin, 6, { align: 'right' });
-                }
-                doc.setTextColor(0);
-            };
-
-            drawHeader(1);
-
-            let y = 44;
-            const col1 = margin, col2 = margin + 40;
-            const metaRows = [
-                ['Nomor Dokumen', `: TGK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-001`],
-                ['Tanggal Laporan', `: ${now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`],
-                ['Periode', `: ${now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`],
-                ['Sistem Monitoring', `: TENGOK Surveillance Monitoring System`],
-            ];
-            doc.setFontSize(8.5);
-            metaRows.forEach(([label, value]) => {
-                doc.setFont('helvetica', 'bold'); doc.text(label, col1, y);
-                doc.setFont('helvetica', 'normal'); doc.text(value, col2, y);
-                y += 5.5;
+            const tableRows = cameras.map((c: any, i: number) => {
+                const locs = (cameraToLocationMap.get(c._id) || []).map(l => l.name).join(', ') || 'Belum Terpasang';
+                return [i + 1, c.name, locs, c.status.toUpperCase(), c.streamUrl || '-'];
             });
-            y += 2;
-            doc.setDrawColor(200); doc.setLineWidth(0.2);
-            doc.line(margin, y, pageW - margin, y);
-            y += 6;
-
-            doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0);
-            doc.text('RINGKASAN EKSEKUTIF', margin, y);
-            y += 5;
-
-            let totalCams = 0, totalOnline = 0, totalOffline = 0, totalOfflineEvents = 0;
-            locations.forEach((loc: any) => {
-                (loc.cameras || []).forEach((cam: any) => {
-                    totalCams++;
-                    if (cam.status === 'online') totalOnline++;
-                    else totalOffline++;
-                    totalOfflineEvents += offlineTodayMap[cam._id?.toString()] ?? 0;
-                });
-            });
-            const uptimePct = totalCams > 0 ? ((totalOnline / totalCams) * 100).toFixed(1) : '0.0';
-
-            const summaryData = [
-                ['Total Kamera Terdaftar', `${totalCams} unit`],
-                ['Kamera Aktif / Online', `${totalOnline} unit`],
-                ['Kamera Tidak Aktif / Offline', `${totalOffline} unit`],
-                [`Persentase Ketersediaan (Uptime)`, `${uptimePct}%`],
-                ['Total Kejadian Offline Hari Ini', `${totalOfflineEvents} kali (seluruh kamera)`],
-            ];
 
             autoTable(doc, {
-                startY: y,
-                body: summaryData,
-                theme: 'plain',
-                styles: { fontSize: 8.5, cellPadding: 2 },
-                columnStyles: {
-                    0: { cellWidth: 80, fontStyle: 'bold', textColor: [40, 40, 40] },
-                    1: { cellWidth: 80, textColor: [0, 0, 0] },
-                },
-                didParseCell: (data: any) => {
-                    if (data.column.index === 1) {
-                        const v = data.cell.raw as string;
-                        if (v.includes('%')) {
-                            const pct = parseFloat(v);
-                            data.cell.styles.textColor = pct >= 80 ? [22, 163, 74] : pct >= 60 ? [202, 138, 4] : [220, 38, 38];
-                            data.cell.styles.fontStyle = 'bold';
-                        }
-                    }
-                },
-                margin: { left: margin, right: margin },
-            });
-            y = (doc as any).lastAutoTable.finalY + 8;
-
-            doc.setDrawColor(200); doc.setLineWidth(0.2);
-            doc.line(margin, y, pageW - margin, y);
-            y += 6;
-            doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0);
-            doc.text('DETAIL STATUS KAMERA PER LOKASI', margin, y);
-            y += 2;
-
-            let locIdx = 0;
-            for (const loc of locations) {
-                if (!loc.cameras || loc.cameras.length === 0) continue;
-                locIdx++;
-
-                if (y > pageH - 50) {
-                    doc.addPage();
-                    drawHeader(doc.getNumberOfPages());
-                    y = 46;
-                }
-
-                y += 5;
-                const locOnline = (loc.cameras || []).filter((c: any) => c.status === 'online').length;
-                const locTotal = (loc.cameras || []).length;
-                doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(20, 20, 80);
-                doc.text(`${locIdx}. ${loc.name}`, margin, y);
-                doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(80);
-                doc.text(
-                    `Kategori: ${loc.category}   |   Person in Charge: ${loc.pmName || '-'}   |   Telp: ${loc.pmPhone || '-'}   |   ${locOnline}/${locTotal} kamera aktif`,
-                    margin, y + 4.5
-                );
-                doc.setTextColor(0);
-                y += 8;
-
-                const tableData = loc.cameras.map((cam: any, idx: number) => {
-                    const offlineCount = offlineTodayMap[cam._id?.toString()] ?? 0;
-                    let offlineLabel = 'Tidak ada';
-                    if (offlineCount === 1) offlineLabel = '1 kali';
-                    else if (offlineCount > 1) offlineLabel = `${offlineCount} kali`;
-
-                    let lastOnlineStr = 'Belum terekam';
-                    if (cam.status === 'online') {
-                        lastOnlineStr = 'Aktif Sekarang';
-                    } else if (cam.lastOnlineAt) {
-                        const lastOnlineDate = new Date(cam.lastOnlineAt);
-                        const formattedDate = lastOnlineDate.toLocaleString('id-ID', { 
-                            day: '2-digit', 
-                            month: '2-digit', 
-                            year: '2-digit', 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                        });
-                        const diffMs = Date.now() - lastOnlineDate.getTime();
-                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                        
-                        if (diffDays >= 1) {
-                            lastOnlineStr = `${formattedDate}\n(Mati ${diffDays} hari)`;
-                        } else {
-                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-                            if (diffHours >= 1) {
-                                lastOnlineStr = `${formattedDate}\n(Mati ${diffHours} jam)`;
-                            } else {
-                                lastOnlineStr = `${formattedDate}\n(Baru saja mati)`;
-                            }
-                        }
-                    } else if (cam.createdAt) {
-                        const createdDate = new Date(cam.createdAt);
-                        const diffMs = Date.now() - createdDate.getTime();
-                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                        if (diffDays >= 1) {
-                            lastOnlineStr = `Belum aktif\n(${diffDays} hari sejak daftar)`;
-                        } else {
-                            lastOnlineStr = 'Belum pernah aktif';
-                        }
-                    }
-
-                    let statusKeterangan = 'Baik';
-                    if (cam.status === 'offline') {
-                        statusKeterangan = 'Kritis';
-                    } else if (offlineCount > 0) {
-                        statusKeterangan = offlineCount <= 2 ? 'Perlu Perhatian' : 'Kritis';
-                    }
-
-                    return [
-                        idx + 1,
-                        cam.name,
-                        cam.status === 'online' ? 'Aktif' : 'Tidak Aktif',
-                        lastOnlineStr,
-                        offlineLabel,
-                        statusKeterangan,
-                    ];
-                });
-
-                autoTable(doc, {
-                    startY: y,
-                    head: [['No.', 'Nama Kamera', 'Status', 'Terakhir Online', 'Gangguan Hari Ini', 'Keterangan']],
-                    body: tableData,
-                    theme: 'grid',
-                    headStyles: { fillColor: [20, 20, 80], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: 'bold', cellPadding: 1.8 },
-                    bodyStyles: { fontSize: 7.5, cellPadding: 2.2 },
-                    alternateRowStyles: { fillColor: [248, 249, 252] },
-                    columnStyles: {
-                        0: { cellWidth: 12, halign: 'center' },
-                        1: { cellWidth: 48 },
-                        2: { cellWidth: 18, halign: 'center' },
-                        3: { cellWidth: 38, halign: 'center' },
-                        4: { cellWidth: 30, halign: 'center' },
-                        5: { cellWidth: 26, halign: 'center' },
-                    },
-                    didParseCell: (data: any) => {
-                        if (data.cell.section !== 'body') return;
-                        if (data.column.index === 2) {
-                            if (data.cell.raw === 'Aktif') { data.cell.styles.textColor = [22, 163, 74]; data.cell.styles.fontStyle = 'bold'; }
-                            else { data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fontStyle = 'bold'; }
-                        }
-                        if (data.column.index === 4 && data.cell.raw !== 'Tidak ada') {
-                            data.cell.styles.textColor = [180, 60, 0]; data.cell.styles.fontStyle = 'bold';
-                        }
-                        if (data.column.index === 5) {
-                            if (data.cell.raw === 'Kritis') { data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fontStyle = 'bold'; }
-                            else if (data.cell.raw === 'Perlu Perhatian') { data.cell.styles.textColor = [180, 100, 0]; data.cell.styles.fontStyle = 'bold'; }
-                            else { data.cell.styles.textColor = [22, 163, 74]; }
-                        }
-                    },
-                    margin: { left: margin, right: margin },
-                });
-
-                y = (doc as any).lastAutoTable.finalY + 4;
-            }
-
-            if (y > pageH - 55) { doc.addPage(); drawHeader(doc.getNumberOfPages()); y = 46; }
-            y += 8;
-            doc.setDrawColor(200); doc.setLineWidth(0.2);
-            doc.line(margin, y, pageW - margin, y);
-            y += 6;
-            doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(0);
-            doc.text('PENUTUP & PENGESAHAN', margin, y);
-            y += 5;
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-            doc.text(
-                'Laporan ini dibuat secara otomatis oleh sistem TENGOK Surveillance Monitoring berdasarkan data real-time',
-                margin, y
-            );
-            doc.text(
-                'dari seluruh kamera CCTV yang terdaftar. Mohon tindak lanjuti kamera dengan status "Kritis" sesegera mungkin.',
-                margin, y + 4.5
-            );
-            y += 14;
-
-            const sigY = y;
-            const sigCols = [margin, margin + 60, margin + 125];
-            const sigLabels = ['Disiapkan Oleh', 'Diperiksa Oleh', 'Disetujui Oleh'];
-            const sigTitles = ['Teknisi Monitoring', 'Kepala Divisi IT', 'Direktur Operasional'];
-            sigCols.forEach((sx, i) => {
-                doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(0);
-                doc.text(sigLabels[i], sx, sigY);
-                doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(100);
-                doc.text(sigTitles[i], sx, sigY + 4.5);
-                doc.setDrawColor(0); doc.setLineWidth(0.3);
-                doc.line(sx, sigY + 22, sx + 50, sigY + 22);
-                doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(0);
-                doc.text('(                                    )', sx, sigY + 26.5);
+                startY: 40,
+                head: [['No', 'Nama Kamera', 'Lokasi', 'Status', 'Stream URL']],
+                body: tableRows,
+                theme: 'grid',
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [234, 179, 8], textColor: [0, 0, 0] },
             });
 
-            const totalPages = doc.getNumberOfPages();
-            for (let i = 1; i <= totalPages; i++) {
-                doc.setPage(i);
-                doc.setFontSize(6.5); doc.setTextColor(150); doc.setFont('helvetica', 'italic');
-                doc.text(
-                    `PT Brantas Abipraya (Persero)  |  TENGOK Surveillance Monitoring  |  Dicetak: ${now.toLocaleString('id-ID')}  |  Halaman ${i} dari ${totalPages}`,
-                    pageW / 2, pageH - 7, { align: 'center' }
-                );
-                doc.setDrawColor(180); doc.setLineWidth(0.2);
-                doc.line(margin, pageH - 10, pageW - margin, pageH - 10);
-            }
-
-            const monthYear = now.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }).replace(' ', '-');
-            doc.save(`Laporan-Status-CCTV-${monthYear}.pdf`);
+            doc.save(`rekap-tengok-cctv-${new Date().toISOString().slice(0, 10)}.pdf`);
             toast.success('Laporan PDF berhasil diunduh');
         } catch (err) {
-            console.error('PDF export error:', err);
-            toast.error('Gagal mengunduh laporan');
+            console.error('Failed to export PDF', err);
+            toast.error('Gagal membuat laporan PDF');
         } finally {
-            setIsExporting(false);
+            setIsExportingPDF(false);
         }
     };
-
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
-        resolver: zodResolver(schema)
-    });
-
-    const onSubmit = async (data: FormData) => {
-        setIsSubmitting(true);
-        try {
-            await axios.post('/api/cameras', data);
-            toast.success('Kamera berhasil ditambahkan');
-            reset();
-            mutate('/api/cameras');
-        } catch {
-            toast.error('Gagal menambahkan kamera');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleDelete = async (id: string, name: string) => {
-        const ok = await confirm(`Yakin ingin menghapus kamera "${name}"? Tindakan ini tidak dapat dibatalkan.`, {
-            title: 'Hapus Kamera',
-        });
-        if (!ok) return;
-        try {
-            await axios.delete(`/api/cameras/${id}`);
-            toast.success('Kamera dihapus');
-            mutate('/api/cameras');
-        } catch {
-            toast.error('Gagal menghapus kamera');
-        }
-    };
-
-    const cameras: ICameraData[] = data?.data || [];
-
-    const filteredCameras = useMemo(() => {
-        let result = [...cameras];
-
-        // Filter by status
-        if (filterStatus !== 'all') {
-            result = result.filter(c => c.status === filterStatus);
-        }
-
-        // Filter by search query
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            result = result.filter(c =>
-                c.name.toLowerCase().includes(q) ||
-                c.streamUrl.toLowerCase().includes(q)
-            );
-        }
-
-        // Sort
-        result.sort((a, b) => {
-            if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
-            if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
-            if (sortBy === 'url') return a.streamUrl.localeCompare(b.streamUrl);
-            return 0;
-        });
-
-        return result;
-    }, [cameras, searchQuery, filterStatus, sortBy]);
-
-    const totalPages = Math.ceil(filteredCameras.length / ITEMS_PER_PAGE);
-
-    const paginatedCameras = useMemo(() => {
-        const start = (currentPage - 1) * ITEMS_PER_PAGE;
-        return filteredCameras.slice(start, start + ITEMS_PER_PAGE);
-    }, [filteredCameras, currentPage]);
-
-    const handleSearch = (val: string) => {
-        setSearchQuery(val);
-        setCurrentPage(1);
-    };
-
-    const handleFilterStatus = (val: 'all' | 'online' | 'offline') => {
-        setFilterStatus(val);
-        setCurrentPage(1);
-    };
-
-    const handleSort = (val: 'name-asc' | 'name-desc' | 'url') => {
-        setSortBy(val);
-        setCurrentPage(1);
-    };
-
-    // Count per status for badges
-    const onlineCount = cameras.filter(c => c.status === 'online').length;
-    const offlineCount = cameras.filter(c => c.status === 'offline').length;
 
     return (
-        <div className="min-h-full bg-slate-950 p-6 md:p-10 font-sans">
-            {ConfirmDialog}
-            {editingCamera && <EditModal camera={editingCamera} onClose={() => setEditingCamera(null)} />}
-
-            <div className="max-w-6xl mx-auto">
-                <PageHeader
-                    icon={Camera}
-                    title="Kamera Terpusat"
-                    subtitle="Kelola alamat stream (RTSP/HLS) perangkat CCTV sebelum dipasangkan ke dalam lokasi."
-                    actions={
-                        <motion.button
-                            whileHover={{ y: -2 }}
-                            whileTap={{ scale: 0.97 }}
-                            onClick={handleExportPDF}
-                            disabled={isExporting}
-                            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-900/80 border border-white/10 hover:border-yellow-500/30 text-slate-300 hover:text-yellow-500 transition-all text-sm font-bold uppercase tracking-wider disabled:opacity-50 shrink-0"
-                        >
-                            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-                            Export PDF
-                        </motion.button>
-                    }
-                />
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Add Camera Form (Sticky Sidebar — Desktop only) */}
-                    <div className="hidden lg:block lg:col-span-1">
-                        <motion.div 
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                            className="bg-slate-900/60 backdrop-blur-xl border border-white/10 p-8 rounded-3xl sticky top-6 shadow-[0_30px_60px_rgba(0,0,0,0.4)] relative overflow-hidden group"
-                        >
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-full blur-[40px] pointer-events-none" />
-                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-orange-500/5 rounded-full blur-[30px] pointer-events-none" />
-                            
-                            <h2 className="text-lg font-bold mb-8 flex items-center gap-3 text-white uppercase tracking-wide">
-                                <div className="p-2 rounded-xl bg-yellow-500/10">
-                                    <Plus className="w-5 h-5 text-yellow-500" />
-                                </div>
-                                Daftarkan Kamera
-                            </h2>
-
-                            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 relative z-10">
-                                <FormField label="Nama CCTV" error={errors.name?.message}>
-                                    <input {...register('name')} className={inputCls()} placeholder="Contoh: Kamera Proyek Tol Cisumdawu" />
-                                </FormField>
-                                <FormField label="Stream URL" error={errors.streamUrl?.message}>
-                                    <input {...register('streamUrl')} className={inputCls()} placeholder="rtsp://admin:pass@ip:port/stream" />
-                                </FormField>
-                                <motion.button
-                                    whileHover={{ y: -2 }}
-                                    whileTap={{ scale: 0.97 }}
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-950 font-bold py-4 rounded-xl transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-4 uppercase text-sm tracking-wider"
-                                >
-                                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Tambahkan Perangkat'}
-                                </motion.button>
-                            </form>
-                        </motion.div>
+        <div className="min-h-full bg-slate-950 p-6 md:p-10 pb-36 font-sans">
+            <div className="max-w-6xl mx-auto space-y-8">
+                {/* Page Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-6">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Sistem Berjalan Aktif</span>
+                        </div>
+                        <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                            Executive Dashboard
+                        </h1>
+                        <p className="text-xs md:text-sm text-slate-400 mt-1 font-medium">
+                            {currentTime || 'Pusat Komando & Analitik Pengawasan Terpadu TENGOK'}
+                        </p>
                     </div>
 
-                    {/* Camera List */}
-                    <div className="lg:col-span-2 space-y-6">
-                        <motion.div
-                            initial={{ opacity: 0, x: 16 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="flex items-center gap-3 mb-2 ml-1"
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <button
+                            onClick={handleExportPDF}
+                            disabled={isExportingPDF}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/10 hover:border-yellow-500/30 text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50"
                         >
-                            <h2 className="text-xl font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                                <Monitor className="w-5 h-5 text-yellow-500" />
-                                Kamera Aktif
-                            </h2>
-                            <CountBadge count={cameras.length} />
-                        </motion.div>
+                            {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin text-yellow-500" /> : <FileDown className="w-4 h-4" />}
+                            Export PDF
+                        </button>
+                        <Link
+                            href="/multiview"
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/10 hover:border-yellow-500/30 text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
+                        >
+                            <PlayCircle className="w-4 h-4 text-yellow-500" />
+                            Multi-View
+                        </Link>
+                        <button
+                            onClick={handleRefreshAll}
+                            className="p-2.5 rounded-xl bg-slate-900/80 border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                            title="Segarkan Data"
+                        >
+                            <RefreshCw className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
 
-                        {/* Search */}
-                        <SearchBar
-                            value={searchQuery}
-                            onChange={handleSearch}
-                            placeholder="Cari nama kamera atau URL..."
-                        />
-
-                        {/* Filter Status + Sort */}
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                            {/* Filter Buttons */}
-                            <div className="flex items-center bg-slate-900/60 border border-white/10 rounded-xl p-1 gap-1">
-                                {([
-                                    { val: 'all', label: 'Semua', count: cameras.length },
-                                    { val: 'online', label: 'Online', count: onlineCount },
-                                    { val: 'offline', label: 'Offline', count: offlineCount },
-                                ] as const).map(({ val, label, count }) => (
-                                    <button
-                                        key={val}
-                                        onClick={() => handleFilterStatus(val)}
-                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-                                            filterStatus === val
-                                                ? val === 'online' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                                : val === 'offline' ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                                : 'bg-yellow-500 text-slate-950'
-                                                : 'text-slate-500 hover:text-white'
-                                        }`}
-                                    >
-                                        {val === 'online' && <Wifi className="w-3 h-3" />}
-                                        {val === 'offline' && <WifiOff className="w-3 h-3" />}
-                                        {label}
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                                            filterStatus === val
-                                                ? val === 'online' ? 'bg-emerald-500/30'
-                                                : val === 'offline' ? 'bg-red-500/30'
-                                                : 'bg-black/20'
-                                                : 'bg-white/5'
-                                        }`}>{count}</span>
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Sort */}
-                            <div className="flex items-center gap-1 ml-auto">
-                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mr-1">Urut:</span>
-                                {([
-                                    { val: 'name-asc', icon: ArrowUpAZ, label: 'A-Z' },
-                                    { val: 'name-desc', icon: ArrowDownAZ, label: 'Z-A' },
-                                    { val: 'url', icon: Link, label: 'URL' },
-                                ] as const).map(({ val, icon: Icon, label }) => (
-                                    <button
-                                        key={val}
-                                        onClick={() => handleSort(val)}
-                                        title={`Urutkan: ${label}`}
-                                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                            sortBy === val
-                                                ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30'
-                                                : 'text-slate-500 hover:text-white hover:bg-white/5 border border-transparent'
-                                        }`}
-                                    >
-                                        <Icon className="w-3.5 h-3.5" />
-                                        {label}
-                                    </button>
-                                ))}
+                {/* Primary KPI Metrics Grid */}
+                <motion.div 
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="show"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+                >
+                    {/* KPI 1: CCTV Status & Health */}
+                    <motion.div 
+                        variants={cardVariants}
+                        className="bg-gradient-to-br from-slate-900/90 to-slate-900/40 border border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Kamera CCTV</span>
+                            <div className="p-2.5 rounded-2xl bg-yellow-500/10 text-yellow-500">
+                                <Monitor className="w-5 h-5" />
                             </div>
                         </div>
+                        <div className="mt-3 flex items-baseline gap-2">
+                            <span className="text-3xl font-extrabold text-white tracking-tight">{totalCameras}</span>
+                            <span className="text-xs font-bold text-slate-400">Total Unit</span>
+                        </div>
+                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-white/5">
+                            <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                                <Wifi className="w-3.5 h-3.5" />
+                                <span>{onlineCameras.length} Online</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-rose-400 font-bold">
+                                <WifiOff className="w-3.5 h-3.5" />
+                                <span>{offlineCameras.length} Offline</span>
+                            </div>
+                        </div>
+                    </motion.div>
 
-                        {isLoading ? (
-                            <LoadingState />
-                        ) : filteredCameras.length === 0 ? (
-                            <EmptyState
-                                icon={ShieldCheck}
-                                title={searchQuery ? 'Tidak ditemukan' : 'Belum ada kamera'}
-                                subtitle={searchQuery ? 'Coba ubah kata pencarian Anda' : 'Daftarkan URL streaming pertama Anda di panel samping'}
-                            />
-                        ) : (
-                            <motion.div 
-                                variants={containerVariants} 
-                                initial="hidden" 
-                                animate="show" 
-                                className="grid gap-4"
-                            >
-                                {paginatedCameras.map((cam) => (
-                                    <motion.div 
-                                        variants={itemVariants}
-                                        key={cam._id as string} 
-                                        className="bg-slate-900/60 backdrop-blur-md border border-white/5 p-4 md:p-5 rounded-2xl hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.05)] transition-all group overflow-hidden"
-                                    >
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-3 md:gap-5 min-w-0 flex-1">
-                                                <div className="hidden md:flex w-16 h-12 flex-shrink-0 bg-black/50 rounded-xl border border-white/10 items-center justify-center text-slate-700 relative overflow-hidden group-hover:border-yellow-500/30 transition-colors">
-                                                    <PlayCircle className="w-6 h-6 z-10" />
-                                                    <div className="absolute inset-0 bg-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <h3 className="font-bold text-white text-base md:text-lg tracking-tight truncate group-hover:text-yellow-400 transition-colors">{cam.name}</h3>
-                                                    <div className="flex items-center gap-2 mt-1 overflow-hidden">
-                                                        <span className="text-[9px] font-bold bg-white/5 text-slate-400 px-2 py-0.5 rounded border border-white/5 uppercase tracking-wider shrink-0">HLS/RTSP</span>
-                                                        <p className="text-slate-500 text-[10px] md:text-[11px] font-mono truncate">{cam.streamUrl}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
+                    {/* KPI 2: Overall SLA Availability Gauge */}
+                    <motion.div 
+                        variants={cardVariants}
+                        className="bg-gradient-to-br from-slate-900/90 to-slate-900/40 border border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Kesiapan Sistem (SLA)</span>
+                            <div className={`p-2.5 rounded-2xl ${availabilityRate >= 85 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                <Activity className="w-5 h-5" />
+                            </div>
+                        </div>
+                        <div className="mt-3 flex items-baseline gap-2">
+                            <span className={`text-3xl font-extrabold tracking-tight ${availabilityRate >= 85 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {availabilityRate}%
+                            </span>
+                            <span className="text-xs font-bold text-slate-400">Availability</span>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-white/5">
+                            <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full rounded-full transition-all duration-500 ${availabilityRate >= 85 ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : 'bg-gradient-to-r from-rose-500 to-amber-500'}`}
+                                    style={{ width: `${availabilityRate}%` }}
+                                />
+                            </div>
+                        </div>
+                    </motion.div>
 
-                                            <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-                                                <button
-                                                    onClick={() => setEditingCamera(cam)}
-                                                    className="p-2.5 md:p-3 text-slate-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition-all"
-                                                    title="Edit Data"
-                                                >
-                                                    <Pencil className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(cam._id as string, cam.name)}
-                                                    className="p-2.5 md:p-3 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all"
-                                                    title="Hapus Data"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </motion.div>
-                        )}
+                    {/* KPI 3: Total Projects & Locations */}
+                    <motion.div 
+                        variants={cardVariants}
+                        className="bg-gradient-to-br from-slate-900/90 to-slate-900/40 border border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Lokasi Proyek</span>
+                            <div className="p-2.5 rounded-2xl bg-blue-500/10 text-blue-400">
+                                <MapPin className="w-5 h-5" />
+                            </div>
+                        </div>
+                        <div className="mt-3 flex items-baseline gap-2">
+                            <span className="text-3xl font-extrabold text-white tracking-tight">{locations.length}</span>
+                            <span className="text-xs font-bold text-slate-400">Titik Pantau</span>
+                        </div>
+                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-white/5 text-slate-400">
+                            <span>{categories.length} Kategori</span>
+                            <Link href="/admin/locations" className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-0.5">
+                                Kelola <ArrowUpRight className="w-3 h-3" />
+                            </Link>
+                        </div>
+                    </motion.div>
 
-                        {/* Pagination Controls */}
-                        {!isLoading && totalPages > 1 && (
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-white/5 mt-6">
-                                <span className="text-sm text-slate-400 font-medium tracking-wide">
-                                    Menampilkan {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredCameras.length)} dari {filteredCameras.length}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                        disabled={currentPage === 1}
-                                        className="px-4 py-2 text-xs font-bold text-slate-300 bg-slate-900/60 border border-white/10 rounded-xl hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
-                                    >
-                                        Prev
-                                    </button>
-                                    <div className="flex items-center gap-1">
-                                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
-                                            if (totalPages > 5 && (page < currentPage - 1 || page > currentPage + 1) && page !== 1 && page !== totalPages) {
-                                                if (page === currentPage - 2 || page === currentPage + 2) return <span key={page} className="text-slate-500 mx-1">...</span>;
-                                                return null;
-                                            }
+                    {/* KPI 4: Public Share Links & Traffic */}
+                    <motion.div 
+                        variants={cardVariants}
+                        className="bg-gradient-to-br from-slate-900/90 to-slate-900/40 border border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Share Link Aktif</span>
+                            <div className="p-2.5 rounded-2xl bg-purple-500/10 text-purple-400">
+                                <Link2 className="w-5 h-5" />
+                            </div>
+                        </div>
+                        <div className="mt-3 flex items-baseline gap-2">
+                            <span className="text-3xl font-extrabold text-white tracking-tight">{shareLinks.filter((s: any) => s.isActive).length}</span>
+                            <span className="text-xs font-bold text-slate-400">Akses Dibagikan</span>
+                        </div>
+                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-white/5 text-slate-400">
+                            <span>{uniqueVisitors} Pengunjung (7h)</span>
+                            <Link href="/admin/share-links" className="text-purple-400 hover:text-purple-300 font-bold flex items-center gap-0.5">
+                                Buat Link <ArrowUpRight className="w-3 h-3" />
+                            </Link>
+                        </div>
+                    </motion.div>
+                </motion.div>
+
+                {/* Section: Alert Widgets & Traffic Chart Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left 2 Cols: Critical Alerts & Unassigned Cameras */}
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* Critical Offline Alert Widget */}
+                        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl">
+                            <div className="flex items-center justify-between pb-4 border-b border-white/5">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2.5 rounded-2xl ${offlineCameras.length > 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                        {offlineCameras.length > 0 ? <AlertTriangle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-white text-base">Status Pengawasan Kritis</h3>
+                                        <p className="text-xs text-slate-400 mt-0.5">
+                                            {offlineCameras.length > 0 
+                                                ? `${offlineCameras.length} unit CCTV membutuhkan perhatian teknis segera` 
+                                                : 'Seluruh perangkat CCTV terhubung dan streaming stabil'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Link 
+                                    href="/admin/cameras?filter=offline"
+                                    className="text-xs font-bold text-yellow-500 hover:text-yellow-400 flex items-center gap-1"
+                                >
+                                    Lihat Semua <ArrowRight className="w-3.5 h-3.5" />
+                                </Link>
+                            </div>
+
+                            <div className="mt-4">
+                                {offlineCameras.length === 0 ? (
+                                    <div className="p-6 rounded-2xl bg-emerald-500/[0.04] border border-emerald-500/20 text-center space-y-2">
+                                        <ShieldCheck className="w-10 h-10 text-emerald-400 mx-auto" />
+                                        <p className="text-sm font-bold text-emerald-300">100% Kamera Beroperasi Normal</p>
+                                        <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                            Tidak ada gangguan koneksi stream pada seluruh lokasi yang terdaftar saat ini.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2.5">
+                                        {offlineCameras.slice(0, 4).map((cam: any) => {
+                                            const locs = cameraToLocationMap.get(cam._id) || [];
                                             return (
-                                                <button
-                                                    key={page}
-                                                    onClick={() => setCurrentPage(page)}
-                                                    className={`w-9 h-9 flex items-center justify-center text-xs font-bold rounded-xl transition-all ${
-                                                        currentPage === page
-                                                            ? 'bg-yellow-500 text-slate-950 shadow-[0_4px_10px_rgba(234,179,8,0.3)]'
-                                                            : 'bg-slate-900/40 text-slate-400 hover:bg-white/5 border border-white/5 hover:text-white'
-                                                    }`}
+                                                <div 
+                                                    key={cam._id} 
+                                                    className="flex items-center justify-between p-3.5 rounded-2xl bg-rose-500/[0.03] border border-rose-500/20 hover:border-rose-500/40 transition-colors"
                                                 >
-                                                    {page}
-                                                </button>
+                                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                        <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-white text-xs truncate">{cam.name}</span>
+                                                                <span className="text-[10px] text-rose-400 font-bold uppercase bg-rose-500/10 px-2 py-0.5 rounded-full">Offline</span>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                                                📍 {locs.map(l => l.name).join(', ') || 'Belum Terpasang ke Lokasi'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <Link
+                                                        href={`/admin/cameras`}
+                                                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-all shrink-0 ml-3"
+                                                    >
+                                                        Diagnosa
+                                                    </Link>
+                                                </div>
                                             );
                                         })}
                                     </div>
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                        disabled={currentPage === totalPages}
-                                        className="px-4 py-2 text-xs font-bold text-slate-300 bg-slate-900/60 border border-white/10 rounded-xl hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
-                                    >
-                                        Next
-                                    </button>
-                                </div>
+                                )}
                             </div>
-                        )}
+                        </div>
+
+                        {/* 7-Day Traffic Trends */}
+                        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl">
+                            <div className="flex items-center justify-between pb-4 border-b border-white/5">
+                                <div>
+                                    <h3 className="font-bold text-white text-base flex items-center gap-2">
+                                        <BarChart3 className="w-5 h-5 text-yellow-500" />
+                                        Tren Kunjungan Pengawasan (7 Hari Terakhir)
+                                    </h3>
+                                    <p className="text-xs text-slate-400 mt-0.5">Total {totalVisits} impresi tayangan streaming</p>
+                                </div>
+                                <Link 
+                                    href="/admin/statistics"
+                                    className="text-xs font-bold text-yellow-500 hover:text-yellow-400 flex items-center gap-1"
+                                >
+                                    Laporan Lengkap <ArrowRight className="w-3.5 h-3.5" />
+                                </Link>
+                            </div>
+
+                            <div className="h-56 mt-4 w-full">
+                                {dailyVisits.length === 0 ? (
+                                    <div className="h-full flex items-center justify-center text-slate-500 text-xs font-bold">
+                                        Belum ada data kunjungan yang tercatat
+                                    </div>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={dailyVisits}>
+                                            <defs>
+                                                <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#eab308" stopOpacity={0.4}/>
+                                                    <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} />
+                                            <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                                            <Tooltip 
+                                                contentStyle={{ 
+                                                    backgroundColor: '#0f172a', 
+                                                    border: '1px solid rgba(255,255,255,0.1)', 
+                                                    borderRadius: '12px',
+                                                    fontSize: '11px',
+                                                    color: '#fff'
+                                                }} 
+                                            />
+                                            <Area 
+                                                type="monotone" 
+                                                dataKey="views" 
+                                                name="Total Kunjungan"
+                                                stroke="#eab308" 
+                                                strokeWidth={2}
+                                                fillOpacity={1} 
+                                                fill="url(#colorViews)" 
+                                            />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right 1 Col: Unassigned Cameras & Recent Audit Activity */}
+                    <div className="space-y-6">
+                        {/* Unassigned Cameras Card */}
+                        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl">
+                            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+                                        <AlertTriangle className="w-4 h-4" />
+                                    </div>
+                                    <h3 className="font-bold text-white text-sm">Kamera Belum Terpasang</h3>
+                                </div>
+                                <span className="text-xs font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
+                                    {unassignedCameras.length}
+                                </span>
+                            </div>
+
+                            <div className="mt-3">
+                                {unassignedCameras.length === 0 ? (
+                                    <p className="text-xs text-slate-400 py-3 text-center">
+                                        Semua kamera sudah dipasangkan ke lokasi proyek.
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                                            Kamera berikut sudah terdaftar di sistem namun belum dimasukkan ke titik lokasi manapun:
+                                        </p>
+                                        <div className="max-h-40 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+                                            {unassignedCameras.slice(0, 5).map((cam: any) => (
+                                                <div key={cam._id} className="flex items-center justify-between p-2 rounded-xl bg-white/5 text-xs">
+                                                    <span className="font-semibold text-white truncate max-w-[140px]">{cam.name}</span>
+                                                    <Link 
+                                                        href="/admin/cameras" 
+                                                        className="text-[10px] font-bold text-yellow-500 hover:text-yellow-400"
+                                                    >
+                                                        Pasangkan →
+                                                    </Link>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Recent Activity / Audit Feed */}
+                        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
+                            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-500">
+                                        <ClipboardList className="w-4 h-4" />
+                                    </div>
+                                    <h3 className="font-bold text-white text-sm">Aktivitas Terkini</h3>
+                                </div>
+                                <Link 
+                                    href="/admin/audit-log"
+                                    className="text-xs font-bold text-yellow-500 hover:text-yellow-400"
+                                >
+                                    Semua Log →
+                                </Link>
+                            </div>
+
+                            <div className="space-y-3">
+                                {auditLogs.length === 0 ? (
+                                    <p className="text-xs text-slate-500 py-4 text-center">Belum ada rekaman audit</p>
+                                ) : (
+                                    auditLogs.slice(0, 5).map((log: any) => (
+                                        <div key={log._id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
+                                            <div className="flex items-center justify-between text-[10px]">
+                                                <span className={`font-bold px-1.5 py-0.5 rounded ${
+                                                    log.action === 'CREATE' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                    log.action === 'UPDATE' ? 'bg-yellow-500/10 text-yellow-400' :
+                                                    'bg-rose-500/10 text-rose-400'
+                                                }`}>
+                                                    {log.action} • {log.entity}
+                                                </span>
+                                                <span className="text-slate-500 font-mono">{formatDate(log.timestamp)}</span>
+                                            </div>
+                                            <p className="text-xs font-bold text-white truncate">{log.entityName}</p>
+                                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                                <span className="truncate max-w-[150px]">{log.detail}</span>
+                                                <span className="text-yellow-500/90 font-medium">Oleh: {log.by}</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Bottom Quick Navigation Hub */}
+                <div className="pt-4">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4 ml-1">
+                        Pusat Akses Cepat Modul
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {[
+                            { name: 'Kamera', href: '/admin/cameras', icon: Monitor, color: 'text-yellow-400', desc: 'RTSP & Streams' },
+                            { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin, color: 'text-blue-400', desc: 'Peta & Titik CCTV' },
+                            { name: 'Kategori', href: '/admin/categories', icon: Tags, color: 'text-emerald-400', desc: 'Sektor & Wilayah' },
+                            { name: 'Share Links', href: '/admin/share-links', icon: Link2, color: 'text-purple-400', desc: 'Token Berbagi' },
+                            { name: 'Statistik', href: '/admin/statistics', icon: BarChart3, color: 'text-orange-400', desc: 'Analitik Trafik' },
+                            { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList, color: 'text-teal-400', desc: 'Log Keamanan' },
+                        ].map((item) => {
+                            const Icon = item.icon;
+                            return (
+                                <Link
+                                    key={item.name}
+                                    href={item.href}
+                                    className="p-4 rounded-2xl bg-slate-900/60 border border-white/5 hover:border-yellow-500/30 hover:bg-slate-900/90 transition-all group space-y-2"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <Icon className={`w-5 h-5 ${item.color} group-hover:scale-110 transition-transform`} />
+                                        <ArrowUpRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-white transition-colors" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-white text-xs tracking-tight">{item.name}</h4>
+                                        <p className="text-[10px] text-slate-500 mt-0.5">{item.desc}</p>
+                                    </div>
+                                </Link>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
-
-            {/* ── Mobile FAB (Add Camera) ─────────────────────────────────── */}
-            <motion.button
-                className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl shadow-[0_8px_30px_rgba(234,179,8,0.5)] flex items-center justify-center text-slate-950"
-                whileTap={{ scale: 0.92 }}
-                whileHover={{ y: -2 }}
-                onClick={() => setShowAddSheet(true)}
-                title="Tambah Kamera"
-            >
-                <Plus className="w-7 h-7 stroke-[2.5]" />
-            </motion.button>
-
-            {/* ── Mobile Slide-Up Sheet (Add Camera Form) ────────────────── */}
-            <AnimatePresence>
-                {showAddSheet && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="lg:hidden fixed inset-0 z-[70] flex items-end"
-                    >
-                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowAddSheet(false)} />
-                        <motion.div
-                            initial={{ y: '100%' }}
-                            animate={{ y: 0 }}
-                            exit={{ y: '100%' }}
-                            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                            className="relative w-full bg-slate-900/98 backdrop-blur-2xl border-t border-white/10 rounded-t-3xl p-6 pb-10 shadow-[0_-20px_60px_rgba(0,0,0,0.6)]"
-                        >
-                            {/* Handle bar */}
-                            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-6" />
-
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-3">
-                                    <div className="p-2 rounded-xl bg-yellow-500/10">
-                                        <Plus className="w-5 h-5 text-yellow-500" />
-                                    </div>
-                                    Daftarkan Kamera
-                                </h3>
-                                <button
-                                    onClick={() => setShowAddSheet(false)}
-                                    className="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-white transition-colors"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleSubmit(async (data) => {
-                                await onSubmit(data);
-                                setShowAddSheet(false);
-                            })} className="space-y-5">
-                                <FormField label="Nama CCTV" error={errors.name?.message}>
-                                    <input {...register('name')} className={inputCls()} placeholder="Contoh: Kamera Proyek Tol Cisumdawu" />
-                                </FormField>
-                                <FormField label="Stream URL" error={errors.streamUrl?.message}>
-                                    <input {...register('streamUrl')} className={inputCls()} placeholder="rtsp://admin:pass@ip:port/stream" />
-                                </FormField>
-                                <motion.button
-                                    whileTap={{ scale: 0.97 }}
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-950 font-bold py-4 rounded-xl transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] disabled:opacity-50 flex items-center justify-center gap-2 uppercase text-sm tracking-wider mt-2"
-                                >
-                                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Tambahkan Perangkat'}
-                                </motion.button>
-                            </form>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
         </div>
     );
 }

@@ -105,9 +105,9 @@ export default function UptimePage() {
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             items = items.filter(g => 
-                g.locationName.toLowerCase().includes(q) ||
-                g.category.toLowerCase().includes(q) ||
-                g.cameras.some(c => c.cameraName.toLowerCase().includes(q))
+                g.locationName?.toLowerCase().includes(q) ||
+                g.category?.toLowerCase().includes(q) ||
+                g.cameras?.some(c => c.cameraName?.toLowerCase().includes(q))
             );
         }
 

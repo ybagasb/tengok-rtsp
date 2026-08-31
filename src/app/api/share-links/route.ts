@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import dbConnect from '@/lib/db';
 import ShareLink from '@/models/ShareLink';
-import { requireAdmin } from '@/lib/apiAuth';
+import { logAudit } from '@/lib/adminAuditLog';
+import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
 
 // GET — List all share links (admin only)
 export async function GET(req: NextRequest) {
@@ -56,6 +57,16 @@ export async function POST(req: NextRequest) {
             duration,
             expiresAt,
             isActive: true,
+        });
+
+        const actor = await getAuditActor(req);
+        logAudit({
+            action: 'CREATE',
+            entity: 'ShareLink',
+            entityId: shareLink._id.toString(),
+            entityName: label,
+            by: actor,
+            detail: `Membuat link berbagi: "${label}" (${duration} menit)`,
         });
 
         const populated = await ShareLink.findById(shareLink._id)

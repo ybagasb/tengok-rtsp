@@ -82,8 +82,8 @@ function LocationSelector({
     const filtered = useMemo(() => {
         if (!search) return locations;
         return locations.filter(l =>
-            l.name.toLowerCase().includes(search.toLowerCase()) ||
-            l.category.toLowerCase().includes(search.toLowerCase())
+            l.name?.toLowerCase().includes(search.toLowerCase()) ||
+            l.category?.toLowerCase().includes(search.toLowerCase())
         );
     }, [locations, search]);
 

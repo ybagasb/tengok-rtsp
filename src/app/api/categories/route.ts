@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import Category from '@/models/Category';
-import { requireAuth, requireAdmin } from '@/lib/apiAuth';
+import { logAudit } from '@/lib/adminAuditLog';
+import { requireAuth, requireAdmin, getAuditActor } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
     await dbConnect();
     try {
         const body = await req.json();
+        const actor = await getAuditActor(req);
 
         // Check if identifier already exists
         const existingCategory = await Category.findOne({ identifier: body.identifier });
@@ -38,6 +40,15 @@ export async function POST(req: NextRequest) {
 
         const newCategory = new Category(body);
         const savedCategory = await newCategory.save();
+
+        logAudit({
+            action: 'CREATE',
+            entity: 'Category',
+            entityId: savedCategory._id.toString(),
+            entityName: savedCategory.name,
+            by: actor,
+            detail: `Membuat kategori baru: ${savedCategory.name} (${savedCategory.identifier})`,
+        });
 
         return NextResponse.json({ success: true, category: savedCategory }, { status: 201 });
     } catch (error: any) {

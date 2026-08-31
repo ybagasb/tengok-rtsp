@@ -195,9 +195,9 @@ export default function AdminCategories() {
         if (!searchQuery) return categories;
         const q = searchQuery.toLowerCase();
         return categories.filter(c =>
-            c.name.toLowerCase().includes(q) ||
-            c.identifier.toLowerCase().includes(q) ||
-            c.description.toLowerCase().includes(q)
+            c.name?.toLowerCase().includes(q) ||
+            c.identifier?.toLowerCase().includes(q) ||
+            c.description?.toLowerCase().includes(q)
         );
     }, [categories, searchQuery]);
 

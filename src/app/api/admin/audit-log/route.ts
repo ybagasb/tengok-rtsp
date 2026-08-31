@@ -3,8 +3,9 @@ import dbConnect from '@/lib/db';
 import AuditLog from '@/models/AuditLog';
 import { requireAdmin } from '@/lib/apiAuth';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
-    // Only admin (SSO) users can view audit logs
     const authError = await requireAdmin(req);
     if (authError) return authError;
 
@@ -16,10 +17,18 @@ export async function GET(req: NextRequest) {
         const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
         const entity = searchParams.get('entity');
         const action = searchParams.get('action');
+        const search = searchParams.get('search')?.trim();
 
-        const query: Record<string, string> = {};
+        const query: Record<string, any> = {};
         if (entity) query.entity = entity;
         if (action) query.action = action;
+        if (search) {
+            query.$or = [
+                { entityName: { $regex: search, $options: 'i' } },
+                { detail: { $regex: search, $options: 'i' } },
+                { by: { $regex: search, $options: 'i' } },
+            ];
+        }
 
         const skip = (page - 1) * limit;
 
@@ -39,10 +48,11 @@ export async function GET(req: NextRequest) {
                 page,
                 limit,
                 total,
-                totalPages: Math.ceil(total / limit),
+                totalPages: Math.ceil(total / limit) || 1,
             },
         });
     } catch (error: any) {
+        console.error('[audit-log] API error:', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import Category from '@/models/Category';
-import { requireAdmin } from '@/lib/apiAuth';
+import { logAudit } from '@/lib/adminAuditLog';
+import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         }
 
         const body = await req.json();
+        const actor = await getAuditActor(req);
 
         // Prevent duplicate identifier if changing it
         if (body.identifier) {
@@ -40,6 +42,15 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         if (!updatedCategory) {
             return NextResponse.json({ error: 'Category not found' }, { status: 404 });
         }
+
+        logAudit({
+            action: 'UPDATE',
+            entity: 'Category',
+            entityId: id,
+            entityName: updatedCategory.name,
+            by: actor,
+            detail: `Memperbarui kategori: ${updatedCategory.name}`,
+        });
 
         return NextResponse.json({ success: true, category: updatedCategory });
     } catch (error: any) {
@@ -63,11 +74,21 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
             return NextResponse.json({ error: 'Invalid Category ID' }, { status: 400 });
         }
 
+        const actor = await getAuditActor(req);
         const deletedCategory = await Category.findByIdAndDelete(id);
 
         if (!deletedCategory) {
             return NextResponse.json({ error: 'Category not found' }, { status: 404 });
         }
+
+        logAudit({
+            action: 'DELETE',
+            entity: 'Category',
+            entityId: id,
+            entityName: deletedCategory.name,
+            by: actor,
+            detail: `Menghapus kategori: ${deletedCategory.name}`,
+        });
 
         return NextResponse.json({ success: true, message: 'Category deleted successfully' });
     } catch (error: any) {

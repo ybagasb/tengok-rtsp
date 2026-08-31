@@ -67,9 +67,17 @@ class FfmpegManager {
         if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
         fs.mkdirSync(outDir, { recursive: true });
 
+        let safeRtspUrl = rtspUrl;
+        try {
+            const urlObj = new URL(rtspUrl);
+            safeRtspUrl = urlObj.href;
+        } catch (e) {
+            // Fallback to original URL
+        }
+
         console.log(`\n==============================`);
         console.log(`[FFmpegManager] Starting stream: ${cameraId}`);
-        console.log(`[FFmpegManager] RTSP URL: ${rtspUrl}`);
+        console.log(`[FFmpegManager] RTSP URL: ${safeRtspUrl}`);
         console.log(`[FFmpegManager] Output: ${m3u8Path}`);
         console.log(`==============================\n`);
 
@@ -81,7 +89,7 @@ class FfmpegManager {
             '-probesize', '100000',
             '-rtsp_transport', 'tcp',
             '-timeout', '5000000', // 5s tcp connection timeout
-            '-i', rtspUrl,
+            '-i', safeRtspUrl,
             '-err_detect', 'ignore_err',
             '-avioflags', 'direct',
             '-c:v', 'copy', // Stream copy mode: Immediate startup, 0% CPU, bypassing transcoding

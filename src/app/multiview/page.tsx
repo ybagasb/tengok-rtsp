@@ -57,8 +57,8 @@ export default function MultiViewPage() {
 
     const filteredLocations = useMemo(() => {
         return locations.filter(loc =>
-            loc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            loc.category.toLowerCase().includes(searchQuery.toLowerCase())
+            loc.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            loc.category?.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [locations, searchQuery]);
 

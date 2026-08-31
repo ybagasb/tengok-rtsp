@@ -3,7 +3,10 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Monitor, MapPin, Tags, ArrowLeft, Shield, Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList } from 'lucide-react';
+import { 
+    LayoutDashboard, Monitor, MapPin, Tags, ArrowLeft, Shield, 
+    Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sidebarVariants, navItemVariants } from '@/components/admin/shared';
 
@@ -13,16 +16,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const [showMore, setShowMore] = useState(false);
 
     const navigation = [
-        { name: 'Cameras', href: '/admin', icon: Monitor },
-        { name: 'Locations', href: '/admin/locations', icon: MapPin },
-        { name: 'Categories', href: '/admin/categories', icon: Tags },
+        { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+        { name: 'Kamera', href: '/admin/cameras', icon: Monitor },
+        { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin },
+        { name: 'Kategori', href: '/admin/categories', icon: Tags },
         { name: 'Share Links', href: '/admin/share-links', icon: Link2 },
         { name: 'Statistik', href: '/admin/statistics', icon: BarChart3 },
-        { name: 'Uptime', href: '/admin/uptime', icon: Activity },
+        { name: 'Uptime & SLA', href: '/admin/uptime', icon: Activity },
         { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
     ];
 
-    // Mobile: show first 4, put rest in "More" menu
+    // Mobile: show first 4 (Dashboard, Kamera, Lokasi, Kategori), put rest in "More" menu
     const mobileMainNav = navigation.slice(0, 4);
     const mobileMoreNav = navigation.slice(4);
 
@@ -53,11 +57,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     variants={sidebarVariants}
                     initial="hidden"
                     animate="show"
-                    className="flex-1 py-6 px-4 space-y-1.5 overflow-y-auto relative z-10"
+                    className="flex-1 py-6 px-4 space-y-1.5 overflow-y-auto relative z-10 custom-scrollbar"
                 >
                     {navigation.map((item) => {
                         const Icon = item.icon;
-                        const isActive = pathname === item.href;
+                        const isActive = item.href === '/admin' 
+                            ? pathname === '/admin' 
+                            : pathname.startsWith(item.href);
+
                         return (
                             <motion.div key={item.name} variants={navItemVariants}>
                                 <Link
@@ -106,7 +113,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <div className="flex items-center justify-around p-2.5">
                     {mobileMainNav.map((item) => {
                         const Icon = item.icon;
-                        const isActive = pathname === item.href;
+                        const isActive = item.href === '/admin' 
+                            ? pathname === '/admin' 
+                            : pathname.startsWith(item.href);
+
                         return (
                             <Link
                                 key={item.name}
@@ -132,7 +142,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <button
                         onClick={() => setShowMore(true)}
                         className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all ${
-                            mobileMoreNav.some(n => pathname === n.href) ? 'text-yellow-500' : 'text-slate-500'
+                            mobileMoreNav.some(n => pathname.startsWith(n.href)) ? 'text-yellow-500' : 'text-slate-500'
                         }`}
                     >
                         <MoreHorizontal className="w-5 h-5" />
@@ -170,7 +180,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             <div className="space-y-2">
                                 {mobileMoreNav.map((item) => {
                                     const Icon = item.icon;
-                                    const isActive = pathname === item.href;
+                                    const isActive = pathname.startsWith(item.href);
                                     return (
                                         <Link
                                             key={item.name}

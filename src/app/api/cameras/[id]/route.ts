@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
 import { logAudit } from '@/lib/adminAuditLog';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
 
 export async function DELETE(
     req: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
-    // Only admin (SSO) users can delete cameras
+    // Only admin users can delete cameras
     const authError = await requireAdmin(req);
     if (authError) return authError;
 
@@ -16,19 +16,21 @@ export async function DELETE(
     await dbConnect();
     try {
         const { id } = params;
+        const actor = await getAuditActor(req);
         const deletedCamera = await Camera.findByIdAndDelete(id);
 
         if (!deletedCamera) {
             return NextResponse.json({ success: false, error: 'Camera not found' }, { status: 404 });
         }
 
-        // Audit log — fire and forget (don't log streamUrl!)
+        // Audit log — fire and forget
         logAudit({
             action: 'DELETE',
             entity: 'Camera',
             entityId: id,
             entityName: deletedCamera.name,
-            detail: `Deleted camera: ${deletedCamera.name}`,
+            by: actor,
+            detail: `Menghapus kamera: ${deletedCamera.name}`,
         });
 
         return NextResponse.json({ success: true, data: {} });
@@ -41,7 +43,7 @@ export async function PUT(
     req: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
-    // Only admin (SSO) users can update cameras
+    // Only admin users can update cameras
     const authError = await requireAdmin(req);
     if (authError) return authError;
 
@@ -50,6 +52,7 @@ export async function PUT(
     try {
         const { id } = params;
         const body = await req.json();
+        const actor = await getAuditActor(req);
         const camera = await Camera.findByIdAndUpdate(id, body, {
             new: true,
             runValidators: true,
@@ -65,12 +68,11 @@ export async function PUT(
             entity: 'Camera',
             entityId: id,
             entityName: camera.name,
-            detail: `Updated camera: ${camera.name}`,
+            by: actor,
+            detail: `Memperbarui konfigurasi kamera: ${camera.name}`,
         });
 
-        // Return response without streamUrl
-        const { streamUrl, ...safeCamera } = camera.toObject();
-        return NextResponse.json({ success: true, data: safeCamera });
+        return NextResponse.json({ success: true, data: camera });
     } catch (error) {
         return NextResponse.json({ success: false, error: 'Failed to update camera' }, { status: 400 });
     }
