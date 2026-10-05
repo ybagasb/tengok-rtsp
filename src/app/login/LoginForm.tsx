@@ -69,7 +69,7 @@ export default function LoginForm() {
                 {/* Logo & Title */}
                 <div className="flex flex-col items-center mb-8">
                     <img
-                        src="https://brantas-abipraya.co.id/sites/default/files/LOGO%20ABIPRAYA%20%281%29_1.png"
+                        src="/abipraya_original.svg"
                         alt="PT Brantas Abipraya"
                         className="w-20 h-20 object-contain mb-4 drop-shadow-[0_0_16px_rgba(254,213,51,0.5)]"
                     />

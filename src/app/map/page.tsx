@@ -2,20 +2,15 @@
 
 import dynamic from 'next/dynamic';
 import { Suspense } from 'react';
-import { Loader2 } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
+import BrandLoader from '@/components/BrandLoader';
 
-// Require MapComponent dynamically with SSR disabled because Leaflet uses window object
+// Require MapComponent dynamically with SSR disabled — MapLibre GL needs the
+// browser (WebGL / window) and cannot render on the server.
 const MapComponent = dynamic(
     () => import('@/components/MapComponent'),
     {
         ssr: false,
-        loading: () => (
-            <div className="w-full h-screen flex items-center justify-center bg-slate-950">
-                <Loader2 className="w-8 h-8 animate-spin text-yellow-500" />
-                <span className="ml-3 text-slate-400">Loading Map...</span>
-            </div>
-        )
+        loading: () => <BrandLoader label="Memuat Peta" />,
     }
 );
 
@@ -24,12 +19,7 @@ import { usePageTracking } from '@/hooks/usePageTracking';
 
 export default function MapPage() {
     return (
-        <Suspense fallback={
-            <div className="w-full h-screen flex items-center justify-center bg-slate-950">
-                <Loader2 className="w-8 h-8 animate-spin text-yellow-500" />
-                <span className="ml-3 text-slate-400">Loading Map...</span>
-            </div>
-        }>
+        <Suspense fallback={<BrandLoader label="Memuat Peta" />}>
             <MapPageContent />
         </Suspense>
     );
@@ -38,6 +28,7 @@ export default function MapPage() {
 function MapPageContent() {
     const searchParams = useSearchParams();
     const category = searchParams.get('category');
+    const division = searchParams.get('division');
     usePageTracking('map');
-    return <MapComponent category={category} />;
+    return <MapComponent category={category} division={division} />;
 }

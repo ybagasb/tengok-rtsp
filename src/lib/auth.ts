@@ -3,6 +3,10 @@ import CognitoProvider from "next-auth/providers/cognito";
 import { cookies } from "next/headers";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+    // Behind nginx reverse proxy (Docker), NextAuth v5 must be told to trust the
+    // forwarded host/proto headers — otherwise SSO callbacks fail in production.
+    // Equivalent to setting AUTH_TRUST_HOST=true in env.
+    trustHost: true,
     // ── DEBUG: aktifkan untuk melihat detail error SSO di production log ──────
     // Hapus atau set false setelah masalah teridentifikasi
     logger: {
@@ -51,23 +55,28 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     callbacks: {
         async jwt({ token, account, profile }) {
-            // On initial sign-in, persist Cognito data into the JWT
+            // On initial sign-in, persist Cognito data into the JWT.
+            // IMPORTANT: do NOT store id_token/access_token here. With the JWT
+            // session strategy these are written into the (chunked) session
+            // cookie; the Cognito tokens are large and blow past nginx's header
+            // buffer, causing a 502 on the /callback response even though auth
+            // succeeded. id_token is not needed (federated-logout doesn't use it).
+            // If an ERP access_token is needed, fetch/mint it in a dedicated
+            // server route instead of parking it in the auth cookie.
             if (account && profile) {
                 token.sub = profile.sub ? String(profile.sub) : undefined;
                 token.email = profile.email as string;
                 token.name = (profile.name || profile.email) as string;
                 token.provider = "cognito";
-                token.id_token = account.id_token; // Simpan id_token untuk logout
             }
             return token;
         },
         async session({ session, token }) {
-            // Expose user info and tokens to the client session
+            // Expose only lightweight user info to the client session.
             if (session.user) {
                 session.user.id = token.sub as string;
                 session.user.email = token.email as string;
                 session.user.name = token.name as string;
-                (session as any).id_token = token.id_token; // Kirim ke client session
             }
             return session;
         },

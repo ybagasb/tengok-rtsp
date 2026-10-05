@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { 
     ClipboardList, Loader2, Trash2, Pencil, Plus, RefreshCw, Filter, 
-    Search, Camera, MapPin, Tags, Link2, Download, CheckCircle2, AlertCircle 
+    Search, Camera, MapPin, Tags, Link2, Download, CheckCircle2, AlertCircle,
+    Bell, FolderOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { containerVariants, cardVariants } from '@/components/admin/shared';
@@ -13,7 +14,7 @@ import toast from 'react-hot-toast';
 interface AuditEntry {
     _id: string;
     action: 'CREATE' | 'UPDATE' | 'DELETE';
-    entity: 'Camera' | 'Location' | 'Category' | 'ShareLink' | string;
+    entity: 'Camera' | 'Location' | 'Category' | 'ShareLink' | 'Settings' | 'Project' | string;
     entityId: string;
     entityName: string;
     by: string;
@@ -45,6 +46,8 @@ const ENTITY_ICON: Record<string, React.ElementType> = {
     Location: MapPin,
     Category: Tags,
     ShareLink: Link2,
+    Settings: Bell,
+    Project: FolderOpen,
 };
 
 function formatDate(iso: string) {
@@ -133,7 +136,7 @@ export default function AuditLogPage() {
     };
 
     return (
-        <div className="min-h-full bg-slate-950 p-6 md:p-10 pb-32 font-sans">
+        <div className="min-h-full bg-slate-100 dark:bg-slate-950 p-6 md:p-10 pb-32 font-sans">
             <div className="max-w-6xl mx-auto space-y-6">
                 <PageHeader
                     icon={ClipboardList}
@@ -146,7 +149,7 @@ export default function AuditLogPage() {
                                 whileTap={{ scale: 0.97 }}
                                 onClick={handleExportCSV}
                                 disabled={isExporting || logs.length === 0}
-                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/10 hover:border-yellow-500/30 text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50"
                             >
                                 <Download className="w-4 h-4" />
                                 Export CSV
@@ -155,7 +158,7 @@ export default function AuditLogPage() {
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={() => fetchLogs()}
-                                className="p-2.5 rounded-xl bg-slate-900/80 border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                                className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
                                 title="Segarkan Data"
                             >
                                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-yellow-500' : ''}`} />
@@ -175,33 +178,33 @@ export default function AuditLogPage() {
                     </div>
 
                     <div className="md:col-span-6 flex flex-wrap gap-2 items-center justify-start md:justify-end">
-                        <div className="flex items-center gap-1.5 bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2">
+                        <div className="flex items-center gap-1.5 bg-white/70 dark:bg-slate-900/60 border border-black/10 dark:border-white/10 rounded-xl px-3 py-2">
                             <Filter className="w-3.5 h-3.5 text-slate-500" />
                             <select
                                 value={filterEntity}
                                 onChange={e => { setFilterEntity(e.target.value); setPage(1); }}
-                                className="bg-transparent text-slate-300 text-xs focus:outline-none cursor-pointer"
+                                className="bg-transparent text-slate-600 dark:text-slate-300 text-xs focus:outline-none cursor-pointer"
                                 aria-label="Filter Entitas"
                             >
-                                <option value="" className="bg-slate-900 text-slate-300">Semua Entitas</option>
-                                <option value="Camera" className="bg-slate-900 text-slate-300">Kamera</option>
-                                <option value="Location" className="bg-slate-900 text-slate-300">Lokasi</option>
-                                <option value="Category" className="bg-slate-900 text-slate-300">Kategori</option>
-                                <option value="ShareLink" className="bg-slate-900 text-slate-300">Share Link</option>
+                                <option value="" className="bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">Semua Entitas</option>
+                                <option value="Camera" className="bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">Kamera</option>
+                                <option value="Location" className="bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">Lokasi</option>
+                                <option value="Category" className="bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">Kategori</option>
+                                <option value="ShareLink" className="bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">Share Link</option>
                             </select>
                         </div>
 
-                        <div className="flex items-center gap-1.5 bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2">
+                        <div className="flex items-center gap-1.5 bg-white/70 dark:bg-slate-900/60 border border-black/10 dark:border-white/10 rounded-xl px-3 py-2">
                             <select
                                 value={filterAction}
                                 onChange={e => { setFilterAction(e.target.value); setPage(1); }}
-                                className="bg-transparent text-slate-300 text-xs focus:outline-none cursor-pointer"
+                                className="bg-transparent text-slate-600 dark:text-slate-300 text-xs focus:outline-none cursor-pointer"
                                 aria-label="Filter Aksi"
                             >
-                                <option value="" className="bg-slate-900 text-slate-300">Semua Aksi</option>
-                                <option value="CREATE" className="bg-slate-900 text-emerald-400">CREATE (Tambah)</option>
-                                <option value="UPDATE" className="bg-slate-900 text-yellow-400">UPDATE (Ubah)</option>
-                                <option value="DELETE" className="bg-slate-900 text-rose-400">DELETE (Hapus)</option>
+                                <option value="" className="bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">Semua Aksi</option>
+                                <option value="CREATE" className="bg-white dark:bg-slate-900 text-emerald-400">CREATE (Tambah)</option>
+                                <option value="UPDATE" className="bg-white dark:bg-slate-900 text-yellow-400">UPDATE (Ubah)</option>
+                                <option value="DELETE" className="bg-white dark:bg-slate-900 text-rose-400">DELETE (Hapus)</option>
                             </select>
                         </div>
 
@@ -222,9 +225,9 @@ export default function AuditLogPage() {
                 </div>
 
                 {/* Table Container */}
-                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+                <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
                     {/* Header */}
-                    <div className="grid grid-cols-[140px_110px_100px_1fr_120px] gap-4 px-6 py-4 border-b border-white/5 text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-black/20">
+                    <div className="grid grid-cols-[140px_110px_100px_1fr_120px] gap-4 px-6 py-4 border-b border-black/5 dark:border-white/5 text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-black/[0.03] dark:bg-black/20">
                         <span>Waktu</span>
                         <span>Entitas</span>
                         <span>Aksi</span>
@@ -235,12 +238,12 @@ export default function AuditLogPage() {
                     {loading ? (
                         <div className="flex flex-col items-center justify-center py-20 gap-3">
                             <Loader2 className="w-8 h-8 animate-spin text-yellow-500" />
-                            <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Memuat riwayat audit...</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Memuat riwayat audit...</span>
                         </div>
                     ) : logs.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-slate-500">
                             <ClipboardList className="w-16 h-16 mb-4 opacity-20 text-yellow-500" />
-                            <p className="text-sm font-bold uppercase tracking-wider text-slate-400">Belum ada catatan aktivitas</p>
+                            <p className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Belum ada catatan aktivitas</p>
                             <p className="text-xs text-slate-600 mt-1 max-w-sm text-center">
                                 {searchQuery || filterEntity || filterAction 
                                     ? 'Tidak ada log yang cocok dengan kriteria pencarian Anda.' 
@@ -257,28 +260,28 @@ export default function AuditLogPage() {
                                         <motion.div
                                             key={log._id}
                                             variants={cardVariants}
-                                            className="grid grid-cols-[140px_110px_100px_1fr_120px] gap-4 px-6 py-4 border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors items-center text-xs"
+                                            className="grid grid-cols-[140px_110px_100px_1fr_120px] gap-4 px-6 py-4 border-b border-black/5 dark:border-white/5 last:border-0 hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors items-center text-xs"
                                         >
-                                            <span className="text-[11px] text-slate-400 font-mono">
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                                                 {formatDate(log.timestamp)}
                                             </span>
 
-                                            <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+                                            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-semibold">
                                                 <EntityIcon className="w-3.5 h-3.5 text-slate-500" />
                                                 <span>{log.entity}</span>
                                             </div>
 
                                             <div>
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${ACTION_STYLE[log.action] || 'bg-white/5 text-slate-300 border-white/10'}`}>
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${ACTION_STYLE[log.action] || 'bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 border-black/10 dark:border-white/10'}`}>
                                                     <ActionIcon className="w-3 h-3" />
                                                     {log.action}
                                                 </span>
                                             </div>
 
                                             <div className="min-w-0 pr-4">
-                                                <p className="font-bold text-white truncate text-xs">{log.entityName}</p>
+                                                <p className="font-bold text-slate-900 dark:text-white truncate text-xs">{log.entityName}</p>
                                                 {log.detail && (
-                                                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{log.detail}</p>
+                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{log.detail}</p>
                                                 )}
                                             </div>
 
@@ -298,14 +301,14 @@ export default function AuditLogPage() {
                 {/* Pagination */}
                 {pagination && pagination.totalPages > 1 && (
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-                        <p className="text-xs text-slate-400 font-medium">
-                            Menampilkan <span className="text-white font-bold">{logs.length}</span> dari total <span className="text-white font-bold">{pagination.total}</span> aktivitas (Halaman {pagination.page} dari {pagination.totalPages})
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                            Menampilkan <span className="text-slate-900 dark:text-white font-bold">{logs.length}</span> dari total <span className="text-slate-900 dark:text-white font-bold">{pagination.total}</span> aktivitas (Halaman {pagination.page} dari {pagination.totalPages})
                         </p>
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
                                 disabled={page <= 1}
-                                className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-900/80 border border-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                className="px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                             >
                                 ← Sebelumnya
                             </button>
@@ -315,7 +318,7 @@ export default function AuditLogPage() {
                             <button
                                 onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
                                 disabled={page >= pagination.totalPages}
-                                className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-900/80 border border-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                className="px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                             >
                                 Selanjutnya →
                             </button>

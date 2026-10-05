@@ -31,23 +31,22 @@ export async function requireAuth(req: NextRequest): Promise<NextResponse | null
 
 /**
  * Check if the request is from an authorized admin user.
- * Supports both NextAuth SSO session and PIN-based authenticated admin session.
+ *
+ * Admin access requires a NextAuth (Cognito SSO) session ONLY. PIN auth is a
+ * fast-access viewer credential and must NOT grant admin — otherwise anyone
+ * with the PIN could hit admin APIs directly, bypassing the /admin page guard
+ * in middleware. This mirrors the intended design: PIN = viewer, SSO = admin.
  */
 export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
-    // Check PIN-based authentication
-    const pinToken = req.cookies.get('auth_token');
-    if (pinToken?.value === 'authenticated') {
-        return null; // Authenticated via PIN (local admin)
-    }
-
-    // Check NextAuth (Cognito SSO) session
+    // SSO session is the only path to admin. Deliberately does NOT accept the
+    // PIN cookie (unlike requireAuth).
     const session = await auth();
     if (session?.user) {
         return null; // Authenticated via SSO
     }
 
     return NextResponse.json(
-        { success: false, error: 'Admin access required. Please log in.' },
+        { success: false, error: 'Akses admin memerlukan login SSO.' },
         { status: 403 }
     );
 }

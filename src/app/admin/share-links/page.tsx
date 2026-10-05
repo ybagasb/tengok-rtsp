@@ -108,9 +108,9 @@ function LocationSelector({
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-sm text-left flex items-center justify-between hover:border-yellow-500/50 transition-all font-medium text-slate-300"
+                className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm text-left flex items-center justify-between hover:border-yellow-500/50 transition-all font-medium text-slate-600 dark:text-slate-300"
             >
-                <span className={selected.length > 0 ? 'text-white' : 'text-slate-500'}>
+                <span className={selected.length > 0 ? 'text-slate-900 dark:text-white' : 'text-slate-500'}>
                     {selected.length > 0
                         ? `${selected.length} area terhubung`
                         : 'Pilih lokasi target...'}
@@ -125,10 +125,10 @@ function LocationSelector({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -8, scale: 0.98 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute top-full mt-2 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] z-50 overflow-hidden"
+                        className="absolute top-full mt-2 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] z-50 overflow-hidden"
                     >
                         {/* Search */}
-                        <div className="p-4 border-b border-white/5 bg-black/20">
+                        <div className="p-4 border-b border-black/5 dark:border-white/5 bg-black/[0.03] dark:bg-black/20">
                             <div className="relative">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                                 <input
@@ -136,7 +136,7 @@ function LocationSelector({
                                     placeholder="Cari nama lokasi atau kategori..."
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-[13px] focus:border-yellow-500/50 outline-none transition-all text-white placeholder:text-slate-600 focus:ring-1 focus:ring-yellow-500/50"
+                                    className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-10 pr-4 text-[13px] focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-600 focus:ring-1 focus:ring-yellow-500/50"
                                 />
                             </div>
                         </div>
@@ -145,9 +145,9 @@ function LocationSelector({
                         <button
                             type="button"
                             onClick={toggleAll}
-                            className="w-full px-5 py-3.5 text-left text-[11px] font-bold text-yellow-500 hover:bg-yellow-500/10 transition-colors border-b border-white/5 flex items-center gap-3 uppercase tracking-wider bg-white/[0.02]"
+                            className="w-full px-5 py-3.5 text-left text-[11px] font-bold text-yellow-500 hover:bg-yellow-500/10 transition-colors border-b border-black/5 dark:border-white/5 flex items-center gap-3 uppercase tracking-wider bg-white/[0.02]"
                         >
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${selected.length === locations.length ? 'bg-yellow-500 border-yellow-500' : 'border-white/20'}`}>
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${selected.length === locations.length ? 'bg-yellow-500 border-yellow-500' : 'border-black/15 dark:border-white/20'}`}>
                                 {selected.length === locations.length && <Check className="w-3 h-3 text-slate-950 stroke-[3]" />}
                             </div>
                             {selected.length === locations.length ? 'Batalkan Semua Pilihan' : 'Pilih Seluruh Area'}
@@ -162,13 +162,13 @@ function LocationSelector({
                                         type="button"
                                         key={loc._id}
                                         onClick={() => toggleLocation(loc._id)}
-                                        className={`w-full px-5 py-3.5 text-left flex items-center gap-4 transition-colors hover:bg-white/5 ${isSelected ? 'bg-yellow-500/5' : ''}`}
+                                        className={`w-full px-5 py-3.5 text-left flex items-center gap-4 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${isSelected ? 'bg-yellow-500/5' : ''}`}
                                     >
-                                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-yellow-500 border-yellow-500' : 'border-white/20'}`}>
+                                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-yellow-500 border-yellow-500' : 'border-black/15 dark:border-white/20'}`}>
                                             {isSelected && <Check className="w-3 h-3 text-slate-950 stroke-[3]" />}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <div className={`text-[13px] font-bold truncate transition-colors ${isSelected ? 'text-yellow-500' : 'text-slate-300'}`}>{loc.name}</div>
+                                            <div className={`text-[13px] font-bold truncate transition-colors ${isSelected ? 'text-yellow-500' : 'text-slate-600 dark:text-slate-300'}`}>{loc.name}</div>
                                             <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{loc.category}</div>
                                         </div>
                                     </button>
@@ -309,7 +309,7 @@ export default function ShareLinksPage() {
     const itemVariants = { hidden: { opacity: 0, scale: 0.95 }, show: { opacity: 1, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 24 } } };
 
     return (
-        <div className="min-h-full bg-slate-950 p-6 md:p-10 font-sans">
+        <div className="min-h-full bg-slate-100 dark:bg-slate-950 p-6 md:p-10 font-sans">
             {ConfirmDialog}
             <div className="max-w-6xl mx-auto">
                 <PageHeader
@@ -325,11 +325,11 @@ export default function ShareLinksPage() {
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                            className="bg-slate-900/60 backdrop-blur-xl border border-white/10 p-8 rounded-3xl sticky top-6 shadow-[0_30px_60px_rgba(0,0,0,0.5)] relative overflow-hidden group"
+                            className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 p-8 rounded-3xl sticky top-6 shadow-[0_30px_60px_rgba(0,0,0,0.5)] relative overflow-hidden group"
                         >
                             <div className="absolute top-0 right-0 w-40 h-40 bg-orange-500/10 rounded-full blur-[50px] pointer-events-none" />
 
-                            <h2 className="text-lg font-bold mb-8 flex items-center gap-3 text-white uppercase tracking-wide">
+                            <h2 className="text-lg font-bold mb-8 flex items-center gap-3 text-slate-900 dark:text-white uppercase tracking-wide">
                                 <div className="p-2 rounded-xl bg-yellow-500/10">
                                     <Plus className="w-5 h-5 text-yellow-500" />
                                 </div>
@@ -345,7 +345,7 @@ export default function ShareLinksPage() {
                                         value={label}
                                         onChange={e => setLabel(e.target.value)}
                                         placeholder="Contoh: Inspeksi K3 Lapangan"
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-white placeholder:text-slate-600 focus:ring-1 focus:ring-yellow-500/50"
+                                        className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-600 focus:ring-1 focus:ring-yellow-500/50"
                                     />
                                 </div>
 
@@ -353,7 +353,7 @@ export default function ShareLinksPage() {
                                 <div>
                                     <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Teritori / Proyek *</label>
                                     {isLoadingLocations ? (
-                                        <div className="flex items-center justify-center bg-black/40 border border-white/5 rounded-xl p-4 text-slate-500 font-bold text-xs uppercase">
+                                        <div className="flex items-center justify-center bg-black/[0.04] dark:bg-black/40 border border-black/5 dark:border-white/5 rounded-xl p-4 text-slate-500 font-bold text-xs uppercase">
                                             <Loader2 className="w-4 h-4 animate-spin mr-2 text-yellow-500" /> Memuat Peta Data...
                                         </div>
                                     ) : (
@@ -377,7 +377,7 @@ export default function ShareLinksPage() {
                                                 className={`py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
                                                     duration === opt.value
                                                         ? 'bg-gradient-to-br from-yellow-500 to-orange-500 border-orange-400 text-slate-950 shadow-[0_10px_20px_rgba(234,179,8,0.3)]'
-                                                        : 'bg-black/40 border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'
+                                                        : 'bg-black/[0.04] dark:bg-black/40 border-black/10 dark:border-white/10 text-slate-500 hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
                                                 }`}
                                             >
                                                 {opt.label}
@@ -404,7 +404,7 @@ export default function ShareLinksPage() {
                         {/* Active Links */}
                         <div>
                             <div className="flex items-center gap-3 mb-6 ml-1">
-                                <h2 className="text-xl font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                                     <CheckCircle2 className="w-6 h-6 text-emerald-500" />
                                     Tautan Tersedia
                                 </h2>
@@ -420,7 +420,7 @@ export default function ShareLinksPage() {
                                 <motion.div 
                                     initial={{ opacity: 0, scale: 0.95 }}
                                     animate={{ opacity: 1, scale: 1 }}
-                                    className="flex flex-col items-center justify-center py-20 text-slate-600 border-2 border-dashed border-white/10 rounded-[2rem] bg-slate-900/20"
+                                    className="flex flex-col items-center justify-center py-20 text-slate-600 border-2 border-dashed border-black/10 dark:border-white/10 rounded-[2rem] bg-black/[0.02] dark:bg-slate-900/20"
                                 >
                                     <Link2 className="w-20 h-20 mb-4 opacity-10" />
                                     <p className="font-bold text-lg uppercase tracking-wider opacity-30">Distribusi Kosong</p>
@@ -431,14 +431,14 @@ export default function ShareLinksPage() {
                                         <motion.div
                                             variants={itemVariants}
                                             key={link._id}
-                                            className="relative bg-slate-900/60 backdrop-blur-md border border-white/10 p-6 rounded-[2rem] hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.05)] transition-all group overflow-hidden"
+                                            className="relative bg-white/70 dark:bg-slate-900/60 backdrop-blur-md border border-black/10 dark:border-white/10 p-6 rounded-[2rem] hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.05)] transition-all group overflow-hidden"
                                         >
                                             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100px] pointer-events-none group-hover:bg-yellow-500/10 transition-colors" />
 
                                             <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-3 mb-4">
-                                                        <h3 className="font-bold text-white text-xl tracking-tight truncate group-hover:text-yellow-500 transition-colors">{link.label}</h3>
+                                                        <h3 className="font-bold text-slate-900 dark:text-white text-xl tracking-tight truncate group-hover:text-yellow-500 transition-colors">{link.label}</h3>
                                                         <span className="text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 px-3 py-1 rounded-full uppercase tracking-widest shrink-0 shadow-[0_0_10px_rgba(16,185,129,0.3)]">
                                                             Live
                                                         </span>
@@ -447,7 +447,7 @@ export default function ShareLinksPage() {
                                                     {/* Locations */}
                                                     <div className="flex flex-wrap gap-2 mb-6">
                                                         {link.locations.map((loc: any) => (
-                                                            <span key={loc._id} className="text-[10px] font-bold bg-black/40 text-slate-300 px-3 py-1.5 rounded-lg border border-white/5 flex items-center gap-1.5 hover:border-white/20 transition-colors">
+                                                            <span key={loc._id} className="text-[10px] font-bold bg-black/[0.04] dark:bg-black/40 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg border border-black/5 dark:border-white/5 flex items-center gap-1.5 hover:border-black/20 dark:hover:border-white/20 transition-colors">
                                                                 <MapPin className="w-3 h-3 text-orange-400" />
                                                                 {loc.name}
                                                             </span>
@@ -455,12 +455,12 @@ export default function ShareLinksPage() {
                                                     </div>
 
                                                     {/* Meta Stats Box */}
-                                                    <div className="flex flex-wrap items-center gap-4 bg-black/30 p-3 rounded-xl border border-white/5">
-                                                        <div className="flex items-center gap-2 text-xs font-bold text-slate-400 border-r border-white/10 pr-4">
+                                                    <div className="flex flex-wrap items-center gap-4 bg-black/[0.03] dark:bg-black/30 p-3 rounded-xl border border-black/5 dark:border-white/5">
+                                                        <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 border-r border-black/10 dark:border-white/10 pr-4">
                                                             <Timer className="w-4 h-4 text-emerald-400" />
                                                             {formatTimeLeft(link.expiresAt)}
                                                         </div>
-                                                        <div className="flex items-center gap-2 text-xs font-bold text-slate-400 border-r border-white/10 pr-4 hidden sm:flex">
+                                                        <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 border-r border-black/10 dark:border-white/10 pr-4 hidden sm:flex">
                                                             <Clock className="w-4 h-4" />
                                                             {formatDate(link.createdAt).split(',')[0]}
                                                         </div>
@@ -472,25 +472,25 @@ export default function ShareLinksPage() {
                                                 </div>
 
                                                 {/* Actions Vertical */}
-                                                <div className="flex md:flex-col items-center gap-3 shrink-0 bg-black/20 p-2 rounded-2xl border border-white/5">
+                                                <div className="flex md:flex-col items-center gap-3 shrink-0 bg-black/[0.03] dark:bg-black/20 p-2 rounded-2xl border border-black/5 dark:border-white/5">
                                                     <button
                                                         onClick={() => handleCopy(link.token, link._id)}
-                                                        className={`p-3.5 rounded-xl transition-all flex items-center justify-center relative ${copiedId === link._id ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-slate-950 hover:bg-yellow-500'}`}
+                                                        className={`p-3.5 rounded-xl transition-all flex items-center justify-center relative ${copiedId === link._id ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 dark:text-slate-400 hover:text-slate-950 hover:bg-yellow-500'}`}
                                                         title="Salin Tautan"
                                                     >
                                                         {copiedId === link._id ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                                                     </button>
-                                                    <div className="w-px h-6 md:w-6 md:h-px bg-white/10" />
+                                                    <div className="w-px h-6 md:w-6 md:h-px bg-black/[0.06] dark:bg-white/10" />
                                                     <button
                                                         onClick={() => handleToggle(link._id)}
-                                                        className="p-3.5 text-slate-500 hover:text-white hover:bg-slate-700 rounded-xl transition-all"
+                                                        className="p-3.5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-700 rounded-xl transition-all"
                                                         title="Bekukan Akses"
                                                     >
                                                         <ToggleRight className="w-5 h-5" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleDelete(link._id)}
-                                                        className="p-3.5 text-slate-500 hover:text-white hover:bg-red-500 rounded-xl transition-all"
+                                                        className="p-3.5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-red-500 rounded-xl transition-all"
                                                         title="Hapus Data"
                                                     >
                                                         <Trash2 className="w-5 h-5" />
@@ -505,18 +505,18 @@ export default function ShareLinksPage() {
 
                         {/* Expired / Revoked Links */}
                         {expiredLinks.length > 0 && (
-                            <div className="pt-6 border-t border-white/5">
+                            <div className="pt-6 border-t border-black/5 dark:border-white/5">
                                 <button
                                     onClick={() => setShowExpired(!showExpired)}
-                                    className="flex items-center justify-between w-full bg-slate-900/40 border border-white/5 hover:border-white/10 p-4 rounded-2xl transition-all group"
+                                    className="flex items-center justify-between w-full bg-white/60 dark:bg-slate-900/40 border border-black/5 dark:border-white/5 hover:border-black/10 dark:hover:border-white/10 p-4 rounded-2xl transition-all group"
                                 >
                                     <div className="flex items-center gap-3">
                                         <XCircle className="w-6 h-6 text-red-500/50 group-hover:text-red-500 transition-colors" />
-                                        <span className="text-sm font-bold uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">
+                                        <span className="text-sm font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 group-hover:text-white transition-colors">
                                             Log Kedaluwarsa ({expiredLinks.length})
                                         </span>
                                     </div>
-                                    <div className="p-2 bg-black/40 rounded-lg group-hover:bg-black/60 transition-colors text-slate-500 group-hover:text-white">
+                                    <div className="p-2 bg-black/[0.04] dark:bg-black/40 rounded-lg group-hover:bg-black/60 transition-colors text-slate-500 group-hover:text-white">
                                         {showExpired ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                     </div>
                                 </button>
@@ -532,11 +532,11 @@ export default function ShareLinksPage() {
                                             {expiredLinks.map(link => (
                                                 <div
                                                     key={link._id}
-                                                    className="bg-black/40 border border-red-500/10 p-5 rounded-2xl opacity-70 hover:opacity-100 hover:border-red-500/30 transition-all flex items-center justify-between"
+                                                    className="bg-black/[0.04] dark:bg-black/40 border border-red-500/10 p-5 rounded-2xl opacity-70 hover:opacity-100 hover:border-red-500/30 transition-all flex items-center justify-between"
                                                 >
                                                     <div className="min-w-0 pr-4">
                                                         <div className="flex items-center gap-3 mb-1">
-                                                            <h3 className="font-bold text-slate-300 truncate text-base">{link.label}</h3>
+                                                            <h3 className="font-bold text-slate-600 dark:text-slate-300 truncate text-base">{link.label}</h3>
                                                             <span className="text-[9px] font-bold bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded uppercase tracking-wider">
                                                                 {!link.isActive ? 'Dicabut' : 'Habis'}
                                                             </span>
@@ -549,7 +549,7 @@ export default function ShareLinksPage() {
                                                     </div>
                                                     <button
                                                         onClick={() => handleDelete(link._id)}
-                                                        className="p-3 bg-white/5 text-slate-500 hover:text-white hover:bg-red-500 rounded-xl transition-all shrink-0"
+                                                        className="p-3 bg-black/[0.04] dark:bg-white/5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-red-500 rounded-xl transition-all shrink-0"
                                                         title="Hapus Permanen"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
@@ -591,17 +591,17 @@ export default function ShareLinksPage() {
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
                             transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                            className="relative w-full bg-slate-900/98 backdrop-blur-2xl border-t border-white/10 rounded-t-3xl p-6 pb-10 max-h-[90vh] overflow-y-auto"
+                            className="relative w-full bg-white/98 dark:bg-slate-900/98 backdrop-blur-2xl border-t border-black/10 dark:border-white/10 rounded-t-3xl p-6 pb-10 max-h-[90vh] overflow-y-auto"
                         >
                             <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-6" />
                             <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-3">
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-3">
                                     <div className="p-2 rounded-xl bg-yellow-500/10">
                                         <Plus className="w-5 h-5 text-yellow-500" />
                                     </div>
                                     Form Link Baru
                                 </h3>
-                                <button onClick={() => setShowAddSheet(false)} className="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-white">
+                                <button onClick={() => setShowAddSheet(false)} className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
@@ -609,7 +609,7 @@ export default function ShareLinksPage() {
                                 <div>
                                     <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Judul Hak Akses *</label>
                                     <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="Contoh: Inspeksi K3 Lapangan"
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-white placeholder:text-slate-600"
+                                        className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-600"
                                     />
                                 </div>
                                 <div>
@@ -621,7 +621,7 @@ export default function ShareLinksPage() {
                                     <div className="grid grid-cols-2 gap-3 mt-2">
                                         {DURATION_OPTIONS.map(opt => (
                                             <button key={opt.value} type="button" onClick={() => setDuration(opt.value)}
-                                                className={`py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${duration === opt.value ? 'bg-gradient-to-br from-yellow-500 to-orange-500 border-orange-400 text-slate-950 shadow-[0_10px_20px_rgba(234,179,8,0.3)]' : 'bg-black/40 border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
+                                                className={`py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${duration === opt.value ? 'bg-gradient-to-br from-yellow-500 to-orange-500 border-orange-400 text-slate-950 shadow-[0_10px_20px_rgba(234,179,8,0.3)]' : 'bg-black/[0.04] dark:bg-black/40 border-black/10 dark:border-white/10 text-slate-500 hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'}`}
                                             >{opt.label}</button>
                                         ))}
                                     </div>

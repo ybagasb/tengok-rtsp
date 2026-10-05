@@ -29,7 +29,8 @@ export default function AdminOverviewDashboard() {
     const router = useRouter();
 
     // Data Fetching
-    const { data: cameraData, isLoading: loadingCameras, mutate: refreshCameras } = useSWR('/api/cameras', fetcher);
+    // includeStreamUrl=1: dashboard PDF export includes the stream URL column.
+    const { data: cameraData, isLoading: loadingCameras, mutate: refreshCameras } = useSWR('/api/cameras?includeStreamUrl=1', fetcher);
     const { data: locationData, isLoading: loadingLocations, mutate: refreshLocations } = useSWR('/api/locations', fetcher);
     const { data: categoryData } = useSWR('/api/categories', fetcher);
     const { data: shareLinkData } = useSWR('/api/share-links', fetcher);
@@ -138,19 +139,19 @@ export default function AdminOverviewDashboard() {
     };
 
     return (
-        <div className="min-h-full bg-slate-950 p-6 md:p-10 pb-36 font-sans">
+        <div className="min-h-full bg-slate-100 dark:bg-slate-950 p-6 md:p-10 pb-36 font-sans">
             <div className="max-w-6xl mx-auto space-y-8">
                 {/* Page Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-black/5 dark:border-white/5 pb-6">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
                             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Sistem Berjalan Aktif</span>
                         </div>
-                        <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+                        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
                             Executive Dashboard
                         </h1>
-                        <p className="text-xs md:text-sm text-slate-400 mt-1 font-medium">
+                        <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
                             {currentTime || 'Pusat Komando & Analitik Pengawasan Terpadu TENGOK'}
                         </p>
                     </div>
@@ -159,21 +160,21 @@ export default function AdminOverviewDashboard() {
                         <button
                             onClick={handleExportPDF}
                             disabled={isExportingPDF}
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/10 hover:border-yellow-500/30 text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50"
                         >
                             {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin text-yellow-500" /> : <FileDown className="w-4 h-4" />}
                             Export PDF
                         </button>
                         <Link
                             href="/multiview"
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/10 hover:border-yellow-500/30 text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
                         >
                             <PlayCircle className="w-4 h-4 text-yellow-500" />
                             Multi-View
                         </Link>
                         <button
                             onClick={handleRefreshAll}
-                            className="p-2.5 rounded-xl bg-slate-900/80 border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                            className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
                             title="Segarkan Data"
                         >
                             <RefreshCw className="w-4 h-4" />
@@ -191,19 +192,19 @@ export default function AdminOverviewDashboard() {
                     {/* KPI 1: CCTV Status & Health */}
                     <motion.div 
                         variants={cardVariants}
-                        className="bg-gradient-to-br from-slate-900/90 to-slate-900/40 border border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
+                        className="bg-gradient-to-br from-white/90 dark:from-slate-900/90 to-slate-200/50 dark:to-slate-900/40 border border-black/10 dark:border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
                     >
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Kamera CCTV</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Kamera CCTV</span>
                             <div className="p-2.5 rounded-2xl bg-yellow-500/10 text-yellow-500">
                                 <Monitor className="w-5 h-5" />
                             </div>
                         </div>
                         <div className="mt-3 flex items-baseline gap-2">
-                            <span className="text-3xl font-extrabold text-white tracking-tight">{totalCameras}</span>
-                            <span className="text-xs font-bold text-slate-400">Total Unit</span>
+                            <span className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">{totalCameras}</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Total Unit</span>
                         </div>
-                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-white/5">
+                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-black/5 dark:border-white/5">
                             <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
                                 <Wifi className="w-3.5 h-3.5" />
                                 <span>{onlineCameras.length} Online</span>
@@ -218,10 +219,10 @@ export default function AdminOverviewDashboard() {
                     {/* KPI 2: Overall SLA Availability Gauge */}
                     <motion.div 
                         variants={cardVariants}
-                        className="bg-gradient-to-br from-slate-900/90 to-slate-900/40 border border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
+                        className="bg-gradient-to-br from-white/90 dark:from-slate-900/90 to-slate-200/50 dark:to-slate-900/40 border border-black/10 dark:border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
                     >
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Kesiapan Sistem (SLA)</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Kesiapan Sistem (SLA)</span>
                             <div className={`p-2.5 rounded-2xl ${availabilityRate >= 85 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
                                 <Activity className="w-5 h-5" />
                             </div>
@@ -230,10 +231,10 @@ export default function AdminOverviewDashboard() {
                             <span className={`text-3xl font-extrabold tracking-tight ${availabilityRate >= 85 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                 {availabilityRate}%
                             </span>
-                            <span className="text-xs font-bold text-slate-400">Availability</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Availability</span>
                         </div>
-                        <div className="mt-4 pt-3 border-t border-white/5">
-                            <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                        <div className="mt-4 pt-3 border-t border-black/5 dark:border-white/5">
+                            <div className="w-full bg-black/[0.04] dark:bg-white/5 h-2 rounded-full overflow-hidden">
                                 <div 
                                     className={`h-full rounded-full transition-all duration-500 ${availabilityRate >= 85 ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : 'bg-gradient-to-r from-rose-500 to-amber-500'}`}
                                     style={{ width: `${availabilityRate}%` }}
@@ -245,19 +246,19 @@ export default function AdminOverviewDashboard() {
                     {/* KPI 3: Total Projects & Locations */}
                     <motion.div 
                         variants={cardVariants}
-                        className="bg-gradient-to-br from-slate-900/90 to-slate-900/40 border border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
+                        className="bg-gradient-to-br from-white/90 dark:from-slate-900/90 to-slate-200/50 dark:to-slate-900/40 border border-black/10 dark:border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
                     >
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Lokasi Proyek</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Lokasi Proyek</span>
                             <div className="p-2.5 rounded-2xl bg-blue-500/10 text-blue-400">
                                 <MapPin className="w-5 h-5" />
                             </div>
                         </div>
                         <div className="mt-3 flex items-baseline gap-2">
-                            <span className="text-3xl font-extrabold text-white tracking-tight">{locations.length}</span>
-                            <span className="text-xs font-bold text-slate-400">Titik Pantau</span>
+                            <span className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">{locations.length}</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Titik Pantau</span>
                         </div>
-                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-white/5 text-slate-400">
+                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400">
                             <span>{categories.length} Kategori</span>
                             <Link href="/admin/locations" className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-0.5">
                                 Kelola <ArrowUpRight className="w-3 h-3" />
@@ -268,19 +269,19 @@ export default function AdminOverviewDashboard() {
                     {/* KPI 4: Public Share Links & Traffic */}
                     <motion.div 
                         variants={cardVariants}
-                        className="bg-gradient-to-br from-slate-900/90 to-slate-900/40 border border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
+                        className="bg-gradient-to-br from-white/90 dark:from-slate-900/90 to-slate-200/50 dark:to-slate-900/40 border border-black/10 dark:border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
                     >
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Share Link Aktif</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Share Link Aktif</span>
                             <div className="p-2.5 rounded-2xl bg-purple-500/10 text-purple-400">
                                 <Link2 className="w-5 h-5" />
                             </div>
                         </div>
                         <div className="mt-3 flex items-baseline gap-2">
-                            <span className="text-3xl font-extrabold text-white tracking-tight">{shareLinks.filter((s: any) => s.isActive).length}</span>
-                            <span className="text-xs font-bold text-slate-400">Akses Dibagikan</span>
+                            <span className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">{shareLinks.filter((s: any) => s.isActive).length}</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Akses Dibagikan</span>
                         </div>
-                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-white/5 text-slate-400">
+                        <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400">
                             <span>{uniqueVisitors} Pengunjung (7h)</span>
                             <Link href="/admin/share-links" className="text-purple-400 hover:text-purple-300 font-bold flex items-center gap-0.5">
                                 Buat Link <ArrowUpRight className="w-3 h-3" />
@@ -294,15 +295,15 @@ export default function AdminOverviewDashboard() {
                     {/* Left 2 Cols: Critical Alerts & Unassigned Cameras */}
                     <div className="lg:col-span-2 space-y-6">
                         {/* Critical Offline Alert Widget */}
-                        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl">
-                            <div className="flex items-center justify-between pb-4 border-b border-white/5">
+                        <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl">
+                            <div className="flex items-center justify-between pb-4 border-b border-black/5 dark:border-white/5">
                                 <div className="flex items-center gap-3">
                                     <div className={`p-2.5 rounded-2xl ${offlineCameras.length > 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
                                         {offlineCameras.length > 0 ? <AlertTriangle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
                                     </div>
                                     <div>
-                                        <h3 className="font-bold text-white text-base">Status Pengawasan Kritis</h3>
-                                        <p className="text-xs text-slate-400 mt-0.5">
+                                        <h3 className="font-bold text-slate-900 dark:text-white text-base">Status Pengawasan Kritis</h3>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                             {offlineCameras.length > 0 
                                                 ? `${offlineCameras.length} unit CCTV membutuhkan perhatian teknis segera` 
                                                 : 'Seluruh perangkat CCTV terhubung dan streaming stabil'}
@@ -322,7 +323,7 @@ export default function AdminOverviewDashboard() {
                                     <div className="p-6 rounded-2xl bg-emerald-500/[0.04] border border-emerald-500/20 text-center space-y-2">
                                         <ShieldCheck className="w-10 h-10 text-emerald-400 mx-auto" />
                                         <p className="text-sm font-bold text-emerald-300">100% Kamera Beroperasi Normal</p>
-                                        <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                                             Tidak ada gangguan koneksi stream pada seluruh lokasi yang terdaftar saat ini.
                                         </p>
                                     </div>
@@ -339,10 +340,10 @@ export default function AdminOverviewDashboard() {
                                                         <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="font-bold text-white text-xs truncate">{cam.name}</span>
+                                                                <span className="font-bold text-slate-900 dark:text-white text-xs truncate">{cam.name}</span>
                                                                 <span className="text-[10px] text-rose-400 font-bold uppercase bg-rose-500/10 px-2 py-0.5 rounded-full">Offline</span>
                                                             </div>
-                                                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                                            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                                                                 📍 {locs.map(l => l.name).join(', ') || 'Belum Terpasang ke Lokasi'}
                                                             </p>
                                                         </div>
@@ -350,7 +351,7 @@ export default function AdminOverviewDashboard() {
 
                                                     <Link
                                                         href={`/admin/cameras`}
-                                                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-all shrink-0 ml-3"
+                                                        className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all shrink-0 ml-3"
                                                     >
                                                         Diagnosa
                                                     </Link>
@@ -363,14 +364,14 @@ export default function AdminOverviewDashboard() {
                         </div>
 
                         {/* 7-Day Traffic Trends */}
-                        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl">
-                            <div className="flex items-center justify-between pb-4 border-b border-white/5">
+                        <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl">
+                            <div className="flex items-center justify-between pb-4 border-b border-black/5 dark:border-white/5">
                                 <div>
-                                    <h3 className="font-bold text-white text-base flex items-center gap-2">
+                                    <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
                                         <BarChart3 className="w-5 h-5 text-yellow-500" />
                                         Tren Kunjungan Pengawasan (7 Hari Terakhir)
                                     </h3>
-                                    <p className="text-xs text-slate-400 mt-0.5">Total {totalVisits} impresi tayangan streaming</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Total {totalVisits} impresi tayangan streaming</p>
                                 </div>
                                 <Link 
                                     href="/admin/statistics"
@@ -424,13 +425,13 @@ export default function AdminOverviewDashboard() {
                     {/* Right 1 Col: Unassigned Cameras & Recent Audit Activity */}
                     <div className="space-y-6">
                         {/* Unassigned Cameras Card */}
-                        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl">
-                            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                        <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl">
+                            <div className="flex items-center justify-between pb-3 border-b border-black/5 dark:border-white/5">
                                 <div className="flex items-center gap-2">
                                     <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
                                         <AlertTriangle className="w-4 h-4" />
                                     </div>
-                                    <h3 className="font-bold text-white text-sm">Kamera Belum Terpasang</h3>
+                                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">Kamera Belum Terpasang</h3>
                                 </div>
                                 <span className="text-xs font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
                                     {unassignedCameras.length}
@@ -439,18 +440,18 @@ export default function AdminOverviewDashboard() {
 
                             <div className="mt-3">
                                 {unassignedCameras.length === 0 ? (
-                                    <p className="text-xs text-slate-400 py-3 text-center">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 py-3 text-center">
                                         Semua kamera sudah dipasangkan ke lokasi proyek.
                                     </p>
                                 ) : (
                                     <div className="space-y-2">
-                                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                                             Kamera berikut sudah terdaftar di sistem namun belum dimasukkan ke titik lokasi manapun:
                                         </p>
                                         <div className="max-h-40 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
                                             {unassignedCameras.slice(0, 5).map((cam: any) => (
-                                                <div key={cam._id} className="flex items-center justify-between p-2 rounded-xl bg-white/5 text-xs">
-                                                    <span className="font-semibold text-white truncate max-w-[140px]">{cam.name}</span>
+                                                <div key={cam._id} className="flex items-center justify-between p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-xs">
+                                                    <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[140px]">{cam.name}</span>
                                                     <Link 
                                                         href="/admin/cameras" 
                                                         className="text-[10px] font-bold text-yellow-500 hover:text-yellow-400"
@@ -466,13 +467,13 @@ export default function AdminOverviewDashboard() {
                         </div>
 
                         {/* Recent Activity / Audit Feed */}
-                        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
-                            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+                        <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
+                            <div className="flex items-center justify-between pb-3 border-b border-black/5 dark:border-white/5">
                                 <div className="flex items-center gap-2">
                                     <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-500">
                                         <ClipboardList className="w-4 h-4" />
                                     </div>
-                                    <h3 className="font-bold text-white text-sm">Aktivitas Terkini</h3>
+                                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">Aktivitas Terkini</h3>
                                 </div>
                                 <Link 
                                     href="/admin/audit-log"
@@ -487,7 +488,7 @@ export default function AdminOverviewDashboard() {
                                     <p className="text-xs text-slate-500 py-4 text-center">Belum ada rekaman audit</p>
                                 ) : (
                                     auditLogs.slice(0, 5).map((log: any) => (
-                                        <div key={log._id} className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
+                                        <div key={log._id} className="p-3 rounded-2xl bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
                                             <div className="flex items-center justify-between text-[10px]">
                                                 <span className={`font-bold px-1.5 py-0.5 rounded ${
                                                     log.action === 'CREATE' ? 'bg-emerald-500/10 text-emerald-400' :
@@ -498,8 +499,8 @@ export default function AdminOverviewDashboard() {
                                                 </span>
                                                 <span className="text-slate-500 font-mono">{formatDate(log.timestamp)}</span>
                                             </div>
-                                            <p className="text-xs font-bold text-white truncate">{log.entityName}</p>
-                                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                            <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{log.entityName}</p>
+                                            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
                                                 <span className="truncate max-w-[150px]">{log.detail}</span>
                                                 <span className="text-yellow-500/90 font-medium">Oleh: {log.by}</span>
                                             </div>
@@ -513,7 +514,7 @@ export default function AdminOverviewDashboard() {
 
                 {/* Bottom Quick Navigation Hub */}
                 <div className="pt-4">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4 ml-1">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4 ml-1">
                         Pusat Akses Cepat Modul
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -530,14 +531,14 @@ export default function AdminOverviewDashboard() {
                                 <Link
                                     key={item.name}
                                     href={item.href}
-                                    className="p-4 rounded-2xl bg-slate-900/60 border border-white/5 hover:border-yellow-500/30 hover:bg-slate-900/90 transition-all group space-y-2"
+                                    className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 hover:border-yellow-500/30 hover:bg-slate-900/90 transition-all group space-y-2"
                                 >
                                     <div className="flex items-center justify-between">
                                         <Icon className={`w-5 h-5 ${item.color} group-hover:scale-110 transition-transform`} />
                                         <ArrowUpRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-white transition-colors" />
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-white text-xs tracking-tight">{item.name}</h4>
+                                        <h4 className="font-bold text-slate-900 dark:text-white text-xs tracking-tight">{item.name}</h4>
                                         <p className="text-[10px] text-slate-500 mt-0.5">{item.desc}</p>
                                     </div>
                                 </Link>

@@ -45,3 +45,11 @@ public/streams/
 public/streams/*
 
 docker-compose.yml
+
+# editor / IDE
+.kiro/
+
+# file data sumber (kerja, bukan bagian aplikasi)
+*.xlsx
+*.pptx
+Segmentasi Proyek.pdf

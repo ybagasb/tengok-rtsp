@@ -6,13 +6,14 @@ import axios from 'axios';
 import {
     Plus, Trash2, Edit2, Loader2, Image as ImageIcon,
     MapPin, Search, Save, RotateCcw,
-    User, Phone, Video, ClipboardList, Compass
+    User, Phone, Video, ClipboardList
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import 'leaflet/dist/leaflet.css';
 import { containerVariants, cardVariants, inputCls, selectCls } from '@/components/admin/shared';
 import { PageHeader, SectionHeader, FormField, EmptyState, SearchBar, CountBadge, useConfirm } from '@/components/admin/AdminUI';
+import CoordinateInput, { isValidLat, isValidLng } from '@/components/admin/CoordinateInput';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
@@ -29,6 +30,8 @@ interface Location {
     _id: string;
     name: string;
     category: string;
+    division?: 'DIVISI 1' | 'DIVISI 2' | 'DIVISI 3' | '';
+    projectType?: 'JO' | 'NON_JO' | '';
     description: string;
     image: string;
     lat: number;
@@ -75,9 +78,37 @@ export default function AdminLocations() {
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const searchRef = useRef<HTMLDivElement>(null);
 
+    const imageInputRef = useRef<HTMLInputElement>(null);
+    const [uploadingImage, setUploadingImage] = useState(false);
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploadingImage(true);
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('prefix', 'location-images');
+            const res = await axios.post('/api/uploads/image', fd);
+            if (res.data?.success && res.data.url) {
+                setFormData(prev => ({ ...prev, image: res.data.url }));
+                toast.success('Foto berhasil diunggah');
+            } else {
+                toast.error(res.data?.error || 'Gagal mengunggah foto');
+            }
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Gagal mengunggah foto');
+        } finally {
+            setUploadingImage(false);
+            if (imageInputRef.current) imageInputRef.current.value = '';
+        }
+    };
+
     const [formData, setFormData] = useState<Partial<Location>>({
         name: '',
         category: '',
+        division: '',
+        projectType: '',
         description: '',
         image: '',
         lat: -4.4943173,
@@ -203,12 +234,21 @@ export default function AdminLocations() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        // Block invalid coordinates before hitting the API (prevents the
+        // "longitude 122470322" class of bad data).
+        if (!isValidLat(formData.lat ?? null) || !isValidLng(formData.lng ?? null)) {
+            toast.error('Koordinat tidak valid. Latitude -90..90, Longitude -180..180.');
+            return;
+        }
         setIsSubmitting(true);
         try {
-            const payload = {
+            const payload: Record<string, any> = {
                 ...formData,
-                category: formData.category || (categories.length > 0 ? categories[0].identifier : '')
+                category: formData.category || (categories.length > 0 ? categories[0].identifier : ''),
             };
+            // Enum tidak menerima string kosong. Kirim null agar ter-unset (bukan '').
+            if (!payload.division) payload.division = null;
+            if (!payload.projectType) payload.projectType = null;
             if (payload._id) {
                 await axios.put('/api/locations', payload);
                 toast.success('Lokasi berhasil diperbarui');
@@ -250,6 +290,8 @@ export default function AdminLocations() {
         setFormData({
             name: '',
             category: categories.length > 0 ? categories[0].identifier : '',
+            division: '',
+            projectType: '',
             description: '',
             image: '',
             lat: -6.2088,
@@ -289,10 +331,10 @@ export default function AdminLocations() {
         return items;
     }, [locations, searchQuery, filterCategory]);
 
-    if (loading) return <div className="flex justify-center items-center h-screen bg-slate-950"><Loader2 className="w-8 h-8 animate-spin text-yellow-500" /></div>;
+    if (loading) return <div className="flex justify-center items-center h-screen bg-slate-100 dark:bg-slate-950"><Loader2 className="w-8 h-8 animate-spin text-yellow-500" /></div>;
 
     return (
-        <div className="min-h-full bg-slate-950 p-6 md:p-10 font-sans">
+        <div className="min-h-full bg-slate-100 dark:bg-slate-950 p-6 md:p-10 font-sans">
             {ConfirmDialog}
             <div className="max-w-6xl mx-auto">
                 <PageHeader
@@ -304,7 +346,7 @@ export default function AdminLocations() {
                             whileHover={{ y: showForm ? 0 : -2 }}
                             whileTap={{ scale: 0.97 }}
                             onClick={() => { if (showForm) handleReset(); else setShowForm(true); }}
-                            className={`px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-sm uppercase tracking-wider ${showForm ? 'bg-slate-800 text-slate-400 border border-white/5 hover:text-white hover:bg-slate-700' : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-950 shadow-[0_4px_20px_rgba(234,179,8,0.4)]'}`}
+                            className={`px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-sm uppercase tracking-wider ${showForm ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-black/5 dark:border-white/5 hover:text-slate-900 dark:hover:text-white hover:bg-slate-700' : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-950 shadow-[0_4px_20px_rgba(234,179,8,0.4)]'}`}
                         >
                             {showForm ? 'Batal' : <><Plus className="w-5 h-5" /><span className="hidden sm:inline">Daftarkan Proyek</span><span className="sm:hidden">Tambah</span></>}
                         </motion.button>
@@ -318,7 +360,7 @@ export default function AdminLocations() {
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: -20, scale: 0.98 }}
                             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                            className="bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-white/10 mb-12 shadow-[0_30px_60px_rgba(0,0,0,0.4)] overflow-hidden relative group"
+                            className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-black/10 dark:border-white/10 mb-12 shadow-[0_30px_60px_rgba(0,0,0,0.4)] overflow-hidden relative group"
                         >
                             <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/5 blur-[100px] pointer-events-none" />
                             <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/5 blur-[80px] pointer-events-none" />
@@ -339,17 +381,65 @@ export default function AdminLocations() {
                                                 ))}
                                             </select>
                                         </FormField>
+                                        <FormField label="Divisi">
+                                            <select value={formData.division ?? ''} onChange={e => setFormData({ ...formData, division: e.target.value as Location['division'] })} className={selectCls}>
+                                                <option value="">— Tanpa Divisi —</option>
+                                                <option value="DIVISI 1">DIVISI 1</option>
+                                                <option value="DIVISI 2">DIVISI 2</option>
+                                                <option value="DIVISI 3">DIVISI 3</option>
+                                            </select>
+                                        </FormField>
+                                        <FormField label="Tipe Proyek">
+                                            <select value={formData.projectType ?? ''} onChange={e => setFormData({ ...formData, projectType: e.target.value as Location['projectType'] })} className={selectCls}>
+                                                <option value="">— Pilih Tipe —</option>
+                                                <option value="NON_JO">Proyek Non-JO</option>
+                                                <option value="JO">Proyek JO</option>
+                                            </select>
+                                        </FormField>
                                         <div className="md:col-span-2">
                                             <FormField label="Deskripsi Singkat">
                                                 <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className={inputCls()} rows={3} placeholder="Ceritakan sedikit tentang proyek ini..." />
                                             </FormField>
                                         </div>
                                         <div className="md:col-span-2">
-                                            <FormField label="Upload Photo (URL)">
-                                                <div className="flex gap-4 items-center">
-                                                    <input type="text" value={formData.image} onChange={e => setFormData({ ...formData, image: e.target.value })} className={`flex-1 ${inputCls()}`} placeholder="https://..." />
-                                                    {formData.image && <img src={formData.image} alt="Preview" className="w-16 h-16 rounded-xl object-cover border border-white/10 shadow-lg" />}
+                                            <FormField label="Foto Proyek">
+                                                <div className="flex gap-4 items-center flex-wrap">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => imageInputRef.current?.click()}
+                                                        disabled={uploadingImage}
+                                                        className="flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-700 border border-black/10 dark:border-white/10 text-sm font-bold text-slate-900 dark:text-white transition-colors disabled:opacity-60"
+                                                    >
+                                                        {uploadingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                                                        {formData.image ? 'Ganti Foto' : 'Unggah Foto'}
+                                                    </button>
+                                                    <input
+                                                        ref={imageInputRef}
+                                                        type="file"
+                                                        accept="image/*"
+                                                        className="hidden"
+                                                        onChange={handleImageUpload}
+                                                    />
+                                                    {formData.image && (
+                                                        <>
+                                                            <img src={formData.image} alt="Preview" className="w-16 h-16 rounded-xl object-cover border border-black/10 dark:border-white/10 shadow-lg" />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setFormData(prev => ({ ...prev, image: '' }))}
+                                                                className="text-[11px] text-slate-500 hover:text-rose-400 font-bold uppercase tracking-wider transition-colors"
+                                                            >
+                                                                Hapus
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
+                                                <input
+                                                    type="text"
+                                                    value={formData.image}
+                                                    onChange={e => setFormData({ ...formData, image: e.target.value })}
+                                                    className={`mt-2 w-full ${inputCls()}`}
+                                                    placeholder="atau tempel URL gambar: https://..."
+                                                />
                                             </FormField>
                                         </div>
                                     </div>
@@ -390,7 +480,7 @@ export default function AdminLocations() {
                                                         type="button"
                                                         onClick={() => handleSearchLocation()}
                                                         disabled={isSearching}
-                                                        className="bg-slate-800 p-4 rounded-xl text-white hover:bg-slate-700 transition-colors border border-white/5"
+                                                        className="bg-slate-200 dark:bg-slate-800 p-4 rounded-xl text-slate-900 dark:text-white hover:bg-slate-700 transition-colors border border-black/5 dark:border-white/5"
                                                     >
                                                         {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
                                                     </button>
@@ -403,7 +493,7 @@ export default function AdminLocations() {
                                                         initial={{ opacity: 0, y: -8 }}
                                                         animate={{ opacity: 1, y: 0 }}
                                                         exit={{ opacity: 0, y: -8 }}
-                                                        className="absolute top-full left-0 right-0 z-[2000] mt-3 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden"
+                                                        className="absolute top-full left-0 right-0 z-[2000] mt-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden"
                                                     >
                                                         <div className="max-h-60 overflow-y-auto custom-scrollbar">
                                                             {searchResults.map((res: any, idx: number) => (
@@ -412,13 +502,13 @@ export default function AdminLocations() {
                                                                     type="button"
                                                                     onClick={() => selectSearchResult(res)}
                                                                     onMouseEnter={() => setSelectedIndex(idx)}
-                                                                    className={`w-full text-left p-4 border-b border-white/5 text-slate-300 text-sm transition-all flex items-center gap-4 group ${selectedIndex === idx ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                                                                    className={`w-full text-left p-4 border-b border-black/5 dark:border-white/5 text-slate-600 dark:text-slate-300 text-sm transition-all flex items-center gap-4 group ${selectedIndex === idx ? 'bg-black/[0.06] dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
                                                                 >
-                                                                    <div className={`p-2 rounded-lg bg-slate-800 transition-colors ${selectedIndex === idx ? 'bg-yellow-500/20 text-yellow-500' : 'text-slate-500'}`}>
+                                                                    <div className={`p-2 rounded-lg bg-slate-200 dark:bg-slate-800 transition-colors ${selectedIndex === idx ? 'bg-yellow-500/20 text-yellow-500' : 'text-slate-500'}`}>
                                                                         <MapPin className="w-4 h-4" />
                                                                     </div>
                                                                     <div className="min-w-0 flex-1">
-                                                                        <div className={`font-bold transition-colors truncate ${selectedIndex === idx ? 'text-white' : 'text-slate-300'}`}>
+                                                                        <div className={`font-bold transition-colors truncate ${selectedIndex === idx ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>
                                                                             {res.display_name.split(',')[0]}
                                                                         </div>
                                                                         <div className="text-[10px] text-slate-500 truncate mt-0.5">
@@ -434,7 +524,7 @@ export default function AdminLocations() {
                                         </div>
 
                                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                            <div className="lg:col-span-2 rounded-2xl overflow-hidden border border-white/10 h-80 bg-slate-950 flex items-center justify-center shadow-inner">
+                                            <div className="lg:col-span-2 rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 h-80 bg-slate-100 dark:bg-slate-950 flex items-center justify-center shadow-inner">
                                                 {typeof window !== 'undefined' && RL && L ? (
                                                     <MapContainer
                                                         center={[formData.lat || -4.4943173, formData.lng || 113.2007588]}
@@ -452,48 +542,15 @@ export default function AdminLocations() {
                                                     <Loader2 className="animate-spin text-slate-700" />
                                                 )}
                                             </div>
-                                            <div className="bg-black/40 rounded-2xl p-6 border border-white/10 flex flex-col justify-center space-y-4">
-                                                <div className="flex items-center gap-3 mb-1">
-                                                    <div className="p-2 rounded-lg bg-yellow-500/10">
-                                                        <Compass className="w-4 h-4 text-yellow-400" />
-                                                    </div>
-                                                    <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Koordinat Titik Pantau</span>
-                                                </div>
-                                                
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] uppercase text-slate-400 font-bold flex items-center justify-between">
-                                                        <span>Latitude</span>
-                                                        <span className="text-[9px] text-slate-500 font-mono">Contoh: -6.200000</span>
-                                                    </label>
-                                                    <input 
-                                                        type="number" 
-                                                        step="any"
-                                                        value={formData.lat ?? ''} 
-                                                        onChange={e => setFormData(prev => ({ ...prev, lat: parseFloat(e.target.value) || 0 }))} 
-                                                        className="w-full bg-slate-900 border border-white/15 focus:border-yellow-500 rounded-xl px-3 py-2 text-sm font-mono text-white tracking-wider outline-none" 
-                                                        placeholder="-6.200000"
-                                                    />
-                                                </div>
-
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[10px] uppercase text-slate-400 font-bold flex items-center justify-between">
-                                                        <span>Longitude</span>
-                                                        <span className="text-[9px] text-slate-500 font-mono">Contoh: 106.816666</span>
-                                                    </label>
-                                                    <input 
-                                                        type="number" 
-                                                        step="any"
-                                                        value={formData.lng ?? ''} 
-                                                        onChange={e => setFormData(prev => ({ ...prev, lng: parseFloat(e.target.value) || 0 }))} 
-                                                        className="w-full bg-slate-900 border border-white/15 focus:border-yellow-500 rounded-xl px-3 py-2 text-sm font-mono text-white tracking-wider outline-none" 
-                                                        placeholder="106.816666"
-                                                    />
-                                                </div>
-
-                                                <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
-                                                    * Klik pada peta untuk pinpoint koordinat atau ketik/paste manual angka di atas.
-                                                </p>
-                                            </div>
+                                            <CoordinateInput
+                                                lat={formData.lat ?? null}
+                                                lng={formData.lng ?? null}
+                                                onChange={(lat, lng) => setFormData(prev => ({
+                                                    ...prev,
+                                                    lat: lat ?? undefined,
+                                                    lng: lng ?? undefined,
+                                                }))}
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -501,7 +558,7 @@ export default function AdminLocations() {
                                 {/* Section 4: Kamera CCTV */}
                                 <div>
                                     <SectionHeader icon={Video} title="Integrasi Kamera" />
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-4 bg-black/40 rounded-2xl border border-white/5 custom-scrollbar">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-4 bg-black/[0.04] dark:bg-black/40 rounded-2xl border border-black/5 dark:border-white/5 custom-scrollbar">
                                         {allCameras.map((cam: any) => {
                                             const isChecked = formData.cameras?.includes(cam._id);
                                             const isOnline = cam.status === 'online';
@@ -511,7 +568,7 @@ export default function AdminLocations() {
                                                     className={`flex items-center justify-between gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
                                                         isChecked 
                                                             ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-200' 
-                                                            : 'bg-white/5 border-transparent text-slate-400 hover:bg-white/10 hover:text-white'
+                                                            : 'bg-black/[0.04] dark:bg-white/5 border-transparent text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white'
                                                     }`}
                                                 >
                                                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -519,7 +576,7 @@ export default function AdminLocations() {
                                                             type="checkbox"
                                                             checked={isChecked}
                                                             onChange={() => handleCameraToggle(cam._id)}
-                                                            className="w-4 h-4 rounded border-white/20 bg-black/50 accent-yellow-500 shrink-0"
+                                                            className="w-4 h-4 rounded border-black/15 dark:border-white/20 bg-black/50 accent-yellow-500 shrink-0"
                                                         />
                                                         <span className="text-xs font-bold truncate tracking-tight">{cam.name}</span>
                                                     </div>
@@ -543,7 +600,7 @@ export default function AdminLocations() {
                                         whileTap={{ scale: 0.98 }}
                                         type="button"
                                         onClick={handleReset}
-                                        className="px-8 py-4 rounded-2xl border border-white/10 text-slate-400 font-bold hover:bg-white/5 hover:text-white transition-all flex items-center gap-2 uppercase text-xs tracking-wider"
+                                        className="px-8 py-4 rounded-2xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition-all flex items-center gap-2 uppercase text-xs tracking-wider"
                                     >
                                         <RotateCcw className="w-4 h-4" /> Reset
                                     </motion.button>
@@ -568,7 +625,7 @@ export default function AdminLocations() {
                         animate={{ opacity: 1, x: 0 }}
                         className="flex items-center gap-3 mb-4 ml-1"
                     >
-                        <h2 className="text-xl font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                             <MapPin className="w-5 h-5 text-yellow-500" />
                             Daftar Proyek Aktif
                         </h2>
@@ -589,7 +646,7 @@ export default function AdminLocations() {
                                 onClick={() => setFilterCategory('all')}
                                 className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all ${filterCategory === 'all'
                                     ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-                                    : 'bg-white/5 text-slate-400 border-transparent hover:border-white/10'
+                                    : 'bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 border-transparent hover:border-black/10 dark:hover:border-white/10'
                                 }`}
                             >
                                 Semua ({locations.length})
@@ -602,7 +659,7 @@ export default function AdminLocations() {
                                         onClick={() => setFilterCategory(cat.identifier)}
                                         className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all ${filterCategory === cat.identifier
                                             ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-                                            : 'bg-white/5 text-slate-400 border-transparent hover:border-white/10'
+                                            : 'bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 border-transparent hover:border-black/10 dark:hover:border-white/10'
                                         }`}
                                     >
                                         {cat.name} ({count})
@@ -629,26 +686,26 @@ export default function AdminLocations() {
                                 <motion.div
                                     variants={cardVariants}
                                     key={loc._id}
-                                    className="group bg-slate-900/60 backdrop-blur-md rounded-3xl border border-white/10 overflow-hidden hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.06)] transition-all flex flex-col"
+                                    className="group bg-white/70 dark:bg-slate-900/60 backdrop-blur-md rounded-3xl border border-black/10 dark:border-white/10 overflow-hidden hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.06)] transition-all flex flex-col"
                                 >
-                                    <div className="h-40 bg-slate-800 relative overflow-hidden">
+                                    <div className="h-40 bg-slate-200 dark:bg-slate-800 relative overflow-hidden">
                                         {loc.image ? (
                                             <img src={loc.image} alt={loc.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-slate-700"><ImageIcon className="w-12 h-12" /></div>
                                         )}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-100 dark:from-slate-950 via-transparent to-transparent opacity-80" />
                                         <div className="absolute top-4 right-4 px-3 py-1 bg-yellow-500/90 backdrop-blur rounded-lg text-[10px] font-bold text-slate-950 uppercase tracking-tight shadow-[0_4px_12px_rgba(234,179,8,0.3)]">
                                             {loc.category}
                                         </div>
-                                        <h3 className="absolute bottom-4 left-6 pr-4 font-bold text-xl text-white tracking-tight uppercase leading-none truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                                        <h3 className="absolute bottom-4 left-6 pr-4 font-bold text-xl text-slate-900 dark:text-white tracking-tight uppercase leading-none truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
                                             {loc.name}
                                         </h3>
                                     </div>
 
                                     <div className="p-6 flex-1 flex flex-col">
                                         <div className="space-y-3 flex-1 mb-6">
-                                            <div className="flex items-center gap-3 text-slate-400">
+                                            <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
                                                 <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0">
                                                     <User className="w-4 h-4 text-yellow-400" />
                                                 </div>
@@ -658,7 +715,7 @@ export default function AdminLocations() {
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center gap-3 text-slate-400">
+                                            <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
                                                 <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
                                                     <Video className="w-4 h-4 text-orange-400" />
                                                 </div>
@@ -669,8 +726,8 @@ export default function AdminLocations() {
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                                            <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 bg-white/5 px-2 py-1 rounded">
+                                        <div className="flex items-center justify-between pt-4 border-t border-black/5 dark:border-white/5">
+                                            <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 bg-black/[0.04] dark:bg-white/5 px-2 py-1 rounded">
                                                 <MapPin className="w-3 h-3" />
                                                 {loc.lat?.toFixed(3)}, {loc.lng?.toFixed(3)}
                                             </div>

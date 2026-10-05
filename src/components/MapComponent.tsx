@@ -1,40 +1,41 @@
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import 'leaflet.markercluster/dist/MarkerCluster.css';
-import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import L from 'leaflet';
+import Map, { Marker, Popup, type MapRef } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import axios from 'axios';
-import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Info } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import CameraPanel from './CameraPanel';
-import MarkerClusterGroup from 'react-leaflet-cluster';
-import ResourceMonitor from './ResourceMonitor';
-import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
+import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Layers, Mountain, Compass, Plus, Minus, Filter, Globe, FolderTree,
+    School, Construction, TrafficCone, Waves, Droplets, Droplet, Zap, Flame, AlertTriangle, BusFront, Building2, type LucideIcon } from 'lucide-react';
 
-// Fix Leaflet blank marker issue — use local icons (no CDN dependency)
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconRetinaUrl: '/leaflet/marker-icon-2x.png',
-    iconUrl: '/leaflet/marker-icon.png',
-    shadowUrl: '/leaflet/marker-shadow.png',
-});
-
-// Custom Icons based on status
-const createIcon = (color: string, isLive: boolean = false) => {
-    return L.divIcon({
-        className: 'custom-div-icon',
-        html: `<div class="${isLive ? 'marker-pulse' : ''}" style="background-color: ${color}; width: 22px; height: 22px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 15px rgba(0,0,0,0.3);"></div>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11]
-    });
+// Ikon marker peta per kategori proyek. Kunci = Category.identifier.
+const CATEGORY_ICON: Record<string, LucideIcon> = {
+    'sekolah-rakyat': School,
+    'jembatan': Construction,
+    'jalan-tol': TrafficCone,
+    'bendungan': Waves,
+    'sungai-pantai': Waves,
+    'irigasi': Droplets,
+    'jiat': Droplets,
+    'pipa-air': Droplets,
+    'embung': Droplet,
+    'pltm': Zap,
+    'pipa-gas': Flame,
+    'bencana': AlertTriangle,
+    'brt': BusFront,
+    'sewerage': Droplets,
+    'lainnya': Building2,
 };
-
-const iconGreen = createIcon('#22c55e', true); // Green + Pulse
-const iconRed = createIcon('#ef4444', false); // Red
+function categoryIcon(category?: string): LucideIcon {
+    return (category && CATEGORY_ICON[category]) || MapPin;
+}
+import { AnimatePresence, motion } from 'framer-motion';
+import CameraPanel from './CameraPanel';
+import ResourceMonitor from './ResourceMonitor';
+import CctvNotices from './CctvNotices';
+import BrandLoader from './BrandLoader';
+import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
+import { MAP_STYLES, MAP_STYLE_META, type MapStyleId } from '@/lib/mapStyles';
 
 interface LocationData {
     _id: string;
@@ -49,45 +50,121 @@ interface LocationData {
     cameras: any[];
     onlineCount: number;
     offlineCount: number;
+    // Hierarki organisasi
+    division?: 'DIVISI 1' | 'DIVISI 2' | 'DIVISI 3';
+    projectType?: 'JO' | 'NON_JO';
+    // Ikhtiar
+    cpi?: number;
+    spi?: number;
+    // Finansial (ringkas)
+    cashIn?: number;
+    cashOut?: number;
+    saldoKas?: number;
+    saldoHutang?: number;
+    bad?: number;
+    piutang?: number;
+    ccc?: number;
+    bebanKonstruksi?: number;
+    hasilUsaha?: { pendapatan: number; biaya: number; laba: number };
+    // Operasi (ringkas)
+    pu?: number;
+    bk?: number;
+    lk?: number;
+    // Identitas proyek
+    penggunaJasa?: string;
+    pengawas?: string;
+    penyediaJasa?: string;
+    contractor?: string;
+    status?: string;
+    // Kontrak
+    contractNumber?: string;
+    contractValue?: number;
+    startDate?: string;
+    endDate?: string;
+    // Progress
+    progressPercent?: number;
+    progressRencana?: number;
+    progressDeviasi?: number;
+    // Operasional
+    lingkupPekerjaan?: string[];
+    sumberDaya?: { namaAlat: string; jumlah: number; kategori?: string; satuan?: string }[];
+    milestones?: { title: string; done: boolean; date?: string; progress?: number }[];
+    isuStrategis?: { isu: string; usulan: string }[];
+    kendala?: { masalah: string; status: string }[];
+    monitoringPengadaan?: { nama: string; persentase: number }[];
+    changeManagement?: { judul: string; jenis?: 'PERUBAHAN_HARGA' | 'PERUBAHAN_LINGKUP' | 'KLAIM' | 'LEGAL_ISSUE' | 'LAINNYA'; deskripsi?: string; dampak?: string; mitigasi?: string; nilai?: number; tanggal?: string; target?: string; pic?: string; status: 'USULAN' | 'DISETUJUI' | 'DITOLAK'; dariKendala?: boolean }[];
 }
 
-function ChangeView({ center, zoom }: { center: [number, number], zoom: number }) {
-    const map = useMap();
-    useEffect(() => {
-        map.setView(center, zoom);
-    }, [center, zoom, map]);
-    return null;
-}
+// Indonesia overview default (lng, lat) — note MapLibre uses [lng, lat].
+const DEFAULT_CENTER: [number, number] = [113.4942317, -4.944993];
+const DEFAULT_ZOOM = 4.5;
+const FOCUS_ZOOM = 15;
+const FOCUS_PITCH = 45; // 3D tilt when focusing a location
+const OVERVIEW_PITCH = 0;
 
-function MapResize({ selectedLocation }: { selectedLocation: any }) {
-    const map = useMap();
-    useEffect(() => {
-        // Wait for CSS transition to complete before invalidating size
-        const timeout = setTimeout(() => {
-            map.invalidateSize();
-        }, 350);
-        return () => clearTimeout(timeout);
-    }, [selectedLocation, map]);
-    return null;
-}
-
-export default function MapComponent({ category: propCategory, allowedLocationIds, sharedMode = false }: { category?: string | null; allowedLocationIds?: string[]; sharedMode?: boolean }) {
+export default function MapComponent({
+    category: propCategory,
+    division: propDivision,
+    allowedLocationIds,
+    sharedMode = false,
+}: {
+    category?: string | null;
+    division?: string | null;
+    allowedLocationIds?: string[];
+    sharedMode?: boolean;
+}) {
     const searchParams = useSearchParams();
     const router = useRouter();
     const category = propCategory || searchParams.get('category');
+    const division = propDivision || searchParams.get('division');
+    const mapRef = useRef<MapRef | null>(null);
+
+    // Project scope on the map:
+    // - 'context' (DEFAULT): only the opened division + category (from the URL).
+    // - 'division': every category within the opened division (lintas kategori).
+    // - 'all': every Brantas Abipraya project, lintas divisi (no filter).
+    // Shared pages always stay scoped to their allowedLocationIds, so this
+    // toggle is only shown/used in normal mode.
+    const hasCategory = Boolean(category);
+    const hasDivision = Boolean(division);
+    const hasContext = hasCategory || hasDivision;
+    const [scopeMode, setScopeMode] = useState<'context' | 'division' | 'all'>('context');
+    const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
+
+    // The scope actually used when fetching:
+    // - 'all'      → clear both filters (lintas divisi).
+    // - 'division' → keep division, drop category (lintas kategori).
+    // - 'context'  → keep both.
+    const effectiveCategory = scopeMode === 'context' ? category : null;
+    const effectiveDivision = scopeMode === 'all' ? null : division;
 
     const [locations, setLocations] = useState<LocationData[]>([]);
     const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+    const [hovered, setHovered] = useState<LocationData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [center, setCenter] = useState<[number, number]>([-4.944993, 113.4942317]);
-    const [defaultZoom, setDefaultZoom] = useState(6.25);
+    const [mapStyleId, setMapStyleId] = useState<MapStyleId>('satellite');
+    const [styleMenuOpen, setStyleMenuOpen] = useState(false);
+    const compassRef = useRef<SVGSVGElement | null>(null); // compass needle, rotated via DOM (no re-render)
+
+    const [initialView, setInitialView] = useState({
+        longitude: DEFAULT_CENTER[0],
+        latitude: DEFAULT_CENTER[1],
+        zoom: DEFAULT_ZOOM,
+        pitch: OVERVIEW_PITCH,
+        bearing: 0,
+    });
+
     const { realtimeStatuses, setRealtimeStatuses, lastCheckedTimes } = useCameraStatusSSE();
-    const [showDelayNotice, setShowDelayNotice] = useState(true); // kept for potential future use
-    // Individual toast visibility
-    const [toast1, setToast1] = useState(true); // Info Streaming (always on mobile)
-    const [toast2, setToast2] = useState(true); // Pengecekan Otomatis (sm+)
-    const [toast3, setToast3] = useState(true); // Disclaimer (sm+)
-    const allToastsClosed = !toast1 && !toast2 && !toast3;
+
+    // Parents (e.g. the shared page) pass allowedLocationIds as a fresh array
+    // literal on every render. Derive a STABLE string key so the fetch effect
+    // below only re-runs when the actual ids change — not on every parent
+    // re-render (which the 1s countdown timer would otherwise trigger, causing
+    // an infinite fetch/setState loop).
+    const allowedKey = useMemo(
+        () => (allowedLocationIds ?? []).join(','),
+        [allowedLocationIds]
+    );
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -97,7 +174,30 @@ export default function MapComponent({ category: propCategory, allowedLocationId
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const searchRef = useRef<HTMLDivElement>(null);
 
-    // Click outside listener
+    // Compute majority-online status for a location (uses realtime overrides).
+    const isMajorityOnline = useCallback((loc: LocationData) => {
+        let on = 0, off = 0;
+        (loc.cameras || []).forEach((cam: any) => {
+            if ((realtimeStatuses[cam._id] || cam.status) === 'online') on++;
+            else off++;
+        });
+        return on >= off;
+    }, [realtimeStatuses]);
+
+    // ── Fly camera helper ────────────────────────────────────────────────────
+    const flyTo = useCallback((lng: number, lat: number, opts?: { zoom?: number; pitch?: number }) => {
+        const map = mapRef.current;
+        if (!map) return;
+        map.flyTo({
+            center: [lng, lat],
+            zoom: opts?.zoom ?? FOCUS_ZOOM,
+            pitch: opts?.pitch ?? FOCUS_PITCH,
+            duration: 1600,
+            essential: true,
+        });
+    }, []);
+
+    // Click outside to close search suggestions.
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
@@ -108,150 +208,123 @@ export default function MapComponent({ category: propCategory, allowedLocationId
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setToast1(false);
-            setToast2(false);
-            setToast3(false);
-        }, 10000);
-        return () => clearTimeout(timer);
-    }, []);
-
-    // Fetch category data for custom map defaults
+    // Fetch category defaults for initial map center/zoom.
     useEffect(() => {
         if (!category || sharedMode) return;
         axios.get('/api/categories')
             .then(res => {
                 const cats = res.data || [];
                 const cat = cats.find((c: any) => c.identifier === category);
-                if (cat) {
-                    if (cat.defaultLat && cat.defaultLng) {
-                        setCenter([cat.defaultLat, cat.defaultLng]);
-                    }
-                    if (cat.defaultZoom) {
-                        setDefaultZoom(cat.defaultZoom);
-                    }
+                if (cat?.defaultLat && cat?.defaultLng) {
+                    setInitialView(v => ({
+                        ...v,
+                        longitude: cat.defaultLng,
+                        latitude: cat.defaultLat,
+                        zoom: cat.defaultZoom || v.zoom,
+                    }));
+                    // If the map is already mounted, ease to the new default.
+                    mapRef.current?.jumpTo({
+                        center: [cat.defaultLng, cat.defaultLat],
+                        zoom: cat.defaultZoom || DEFAULT_ZOOM,
+                    });
                 }
             })
-            .catch(() => {}); // Fail silently, use defaults
+            .catch(() => {});
     }, [category, sharedMode]);
 
+    // Fetch locations + on first load trigger probe + prewarm.
     useEffect(() => {
         let isMounted = true;
         const controller = new AbortController();
         let hasProbed = false;
 
-        if (!category && !sharedMode) {
+        if (!category && !division && !sharedMode) {
             router.push('/categories');
             return;
         }
 
         const fetchLocations = async () => {
             try {
-                const apiUrl = category ? `/api/locations?category=${category}` : '/api/locations';
+                const params = new URLSearchParams();
+                if (effectiveCategory) params.set('category', effectiveCategory);
+                if (effectiveDivision) params.set('division', effectiveDivision);
+                const qs = params.toString();
+                const apiUrl = qs ? `/api/locations?${qs}` : '/api/locations';
                 const res = await axios.get(apiUrl, { signal: controller.signal });
                 let rawLocations = res.data.data;
-                // Filter locations if allowedLocationIds is provided (shared mode)
                 if (allowedLocationIds && allowedLocationIds.length > 0) {
                     rawLocations = rawLocations.filter((loc: any) => allowedLocationIds.includes(loc._id));
                 }
-                const fetchedLocations = rawLocations.map((loc: any) => {
-                    let onlineCount = 0;
-                    let offlineCount = 0;
-                    if (loc.cameras) {
-                        loc.cameras.forEach((cam: any) => {
-                            if (cam.status === 'online') onlineCount++;
-                            else offlineCount++;
-                        });
-                    }
+                const fetched = rawLocations.map((loc: any) => {
+                    let onlineCount = 0, offlineCount = 0;
+                    (loc.cameras || []).forEach((cam: any) => {
+                        if (cam.status === 'online') onlineCount++;
+                        else offlineCount++;
+                    });
                     return { ...loc, onlineCount, offlineCount };
                 });
 
                 if (!isMounted) return;
-                setLocations(fetchedLocations);
+                setLocations(fetched);
 
-                // On first load: trigger background probe — results flow into DB
-                // and are picked up by the 3s polling below
                 if (!hasProbed) {
                     hasProbed = true;
-                    const allCameraIds = fetchedLocations.flatMap((loc: any) =>
-                        (loc.cameras || []).map((cam: any) => cam._id)
-                    );
+                    const allCameraIds = fetched.flatMap((loc: any) => (loc.cameras || []).map((cam: any) => cam._id));
                     if (allCameraIds.length > 0) {
-                        axios.post('/api/cameras/probe-now', { cameraIds: allCameraIds })
-                            .catch(() => {}); // Fire and forget — 202 returned immediately
+                        axios.post('/api/cameras/probe-now', { cameraIds: allCameraIds }).catch(() => {});
+                    }
+                    if (!sharedMode) {
+                        const onlineIds = fetched
+                            .flatMap((loc: any) => (loc.cameras || []).filter((c: any) => c.status === 'online').map((c: any) => c._id))
+                            .slice(0, 20);
+                        if (onlineIds.length > 0) {
+                            axios.post('/api/streams/prewarm', { cameraIds: onlineIds }).catch(() => {});
+                        }
                     }
                 }
             } catch (error) {
                 if (axios.isCancel(error)) return;
-                console.error("Failed to fetch locations", error);
+                console.error('Failed to fetch locations', error);
             } finally {
                 if (isMounted) setLoading(false);
             }
         };
 
         fetchLocations();
-
         const intervalId = setInterval(fetchLocations, 30000);
-
         return () => {
             isMounted = false;
             controller.abort();
             clearInterval(intervalId);
         };
-    }, [category, router, sharedMode, allowedLocationIds]);
+    // allowedKey (stable string) instead of allowedLocationIds (unstable array).
+    // scopeMode (string primitive) is safe in deps; effectiveCategory/Division
+    // are derived from it so they don't need to be listed separately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [category, division, router, sharedMode, allowedKey, scopeMode]);
 
-    // Polling removed in favor of Server-Sent Events (useCameraStatusSSE)
-
-    // Update online/offline counts for locations whenever realtimeStatuses changes
+    // Keep the selectedLocation object fresh when the locations list is
+    // replaced (e.g. after a poll). Realtime status is read live elsewhere
+    // (isMajorityOnline / LocationTooltip), so this must NOT depend on
+    // realtimeStatuses — doing so re-ran on every SSE tick and caused churn.
     useEffect(() => {
-        setLocations(prevLocations => {
-            return prevLocations.map(loc => {
-                let currentOnlineCount = 0;
-                let currentOfflineCount = 0;
-                loc.cameras.forEach(cam => {
-                    const status = realtimeStatuses[cam._id] || cam.status;
-                    if (status === 'online') {
-                        currentOnlineCount++;
-                    } else if (status === 'offline') {
-                        currentOfflineCount++;
-                    }
-                });
-                return {
-                    ...loc,
-                    onlineCount: currentOnlineCount,
-                    offlineCount: currentOfflineCount
-                };
-            });
+        setSelectedLocation(prev => {
+            if (!prev) return prev;
+            return locations.find(l => l._id === prev._id) || prev;
         });
+    }, [locations]);
 
-        // Also update selectedLocation if it's currently open
-        setSelectedLocation(prevSelected => {
-            if (prevSelected) {
-                const updatedSelected = locations.find((l: any) => l._id === prevSelected._id);
-                if (updatedSelected) return updatedSelected;
-            }
-            return prevSelected;
-        });
+    // When the side panel opens/closes the map container width changes. Tell
+    // MapLibre to resize once (next frame) so it adjusts cleanly instead of
+    // jittering while flyTo animates.
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const id = requestAnimationFrame(() => map.resize());
+        return () => cancelAnimationFrame(id);
+    }, [selectedLocation]);
 
-    }, [realtimeStatuses]); // Depend on realtimeStatuses
-
-    // Custom Glassmorphic Scrollbar + hide Leaflet attribution
-    const scrollbarStyles = `
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.1); }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(234, 179, 8, 0.2); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(234, 179, 8, 0.4); }
-        .leaflet-control-attribution { display: none !important; }
-        .leaflet-tooltip.custom-tooltip { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
-        .leaflet-tooltip-top.custom-tooltip:before { border-top-color: transparent !important; }
-        .pulse-emerald { animation: pulse-emerald 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes pulse-emerald { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-        .marker-pulse { animation: marker-pulse 1.5s ease-in-out infinite; }
-        @keyframes marker-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); } 70% { box-shadow: 0 0 0 10px rgba(34,197,94,0); } }
-    `;
-
-    // Handle Search Logic
+    // ── Search (local project filtering) ───────────────────────────────────────
     useEffect(() => {
         if (searchQuery.length < 3) {
             setSuggestions([]);
@@ -259,477 +332,488 @@ export default function MapComponent({ category: propCategory, allowedLocationId
             setSelectedIndex(-1);
             return;
         }
-
-        const delayDebounceFn = setTimeout(() => {
+        const t = setTimeout(() => {
             setIsSearching(true);
             setShowSuggestions(true);
-            try {
-                // Local Filtering - Filter projects only
-                const localMatches = locations
-                    .filter(loc => loc.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                    .map(loc => ({
-                        id: loc._id,
-                        display_name: loc.name,
-                        lat: loc.lat,
-                        lon: loc.lng,
-                        type: 'local',
-                        fullData: loc
-                    }));
-
-                setSuggestions(localMatches);
-                setSelectedIndex(localMatches.length > 0 ? 0 : -1);
-            } catch (error) {
-                console.error("Search error:", error);
-            } finally {
-                setIsSearching(false);
-            }
-        }, 300);
-
-        return () => clearTimeout(delayDebounceFn);
+            const matches = locations
+                .filter(loc => loc.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map(loc => ({ id: loc._id, display_name: loc.name, lat: loc.lat, lon: loc.lng, fullData: loc }));
+            setSuggestions(matches);
+            setSelectedIndex(matches.length > 0 ? 0 : -1);
+            setIsSearching(false);
+        }, 250);
+        return () => clearTimeout(t);
     }, [searchQuery, locations]);
 
-    const handleSelectSuggestion = (suggestion: any) => {
-        if (!suggestion || !suggestion.fullData) return;
-        const coords: [number, number] = [suggestion.lat, suggestion.lon];
+    const openLocation = useCallback((loc: LocationData) => {
+        setSelectedLocation(loc);
+        setHovered(null);
+        flyTo(loc.lng, loc.lat, { zoom: FOCUS_ZOOM, pitch: FOCUS_PITCH });
+    }, [flyTo]);
 
-        setCenter(coords);
-        setSearchQuery(suggestion.display_name);
+    const handleSelectSuggestion = (s: any) => {
+        if (!s?.fullData) return;
+        setSearchQuery(s.display_name);
         setShowSuggestions(false);
         setSelectedIndex(-1);
-        setSelectedLocation(suggestion.fullData);
+        openLocation(s.fullData);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setSelectedIndex(prev => (prev < suggestions.length - 1 ? prev + 1 : prev));
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setSelectedIndex(prev => (prev > 0 ? prev - 1 : prev));
-        } else if (e.key === 'Enter') {
-            if (selectedIndex >= 0) {
-                handleSelectSuggestion(suggestions[selectedIndex]);
-            } else if (suggestions.length > 0) {
-                handleSelectSuggestion(suggestions[0]);
-            }
-        } else if (e.key === 'Escape') {
-            setShowSuggestions(false);
-        }
+        if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(p => (p < suggestions.length - 1 ? p + 1 : p)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(p => (p > 0 ? p - 1 : p)); }
+        else if (e.key === 'Enter') {
+            if (selectedIndex >= 0) handleSelectSuggestion(suggestions[selectedIndex]);
+            else if (suggestions.length > 0) handleSelectSuggestion(suggestions[0]);
+        } else if (e.key === 'Escape') setShowSuggestions(false);
     };
+
+    const closePanel = useCallback(() => {
+        setSelectedLocation(null);
+        // Zoom-out kembali ke tampilan awal (pusat & zoom default kategori/overview)
+        // agar SEMUA marker kembali terlihat, bukan sekadar menutup panel.
+        mapRef.current?.flyTo({
+            center: [initialView.longitude, initialView.latitude],
+            zoom: initialView.zoom,
+            pitch: OVERVIEW_PITCH,
+            bearing: 0,
+            duration: 1000,
+            essential: true,
+        });
+    }, [initialView]);
+
+
+
+    // Compass drag: drag left/right to rotate (bearing), up/down to tilt (pitch).
+    // A short click (no drag) resets north + level.
+    const handleCompassPointerDown = useCallback((e: React.PointerEvent) => {
+        const map = mapRef.current;
+        if (!map) return;
+        e.preventDefault();
+        e.stopPropagation();
+        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startBearing = map.getBearing();
+        const startPitch = map.getPitch();
+        let moved = false;
+
+        const onMoveDrag = (ev: PointerEvent) => {
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+            // dx → bearing (deg per px), dy → pitch (clamped 0..70)
+            const nextBearing = startBearing + dx * 0.5;
+            const nextPitch = Math.max(0, Math.min(70, startPitch - dy * 0.4));
+            map.jumpTo({ bearing: nextBearing, pitch: nextPitch });
+        };
+        const onUp = (ev: PointerEvent) => {
+            window.removeEventListener('pointermove', onMoveDrag);
+            window.removeEventListener('pointerup', onUp);
+            // Treat as a click (reset north) if the pointer barely moved.
+            if (!moved) {
+                map.easeTo({ bearing: 0, pitch: OVERVIEW_PITCH, duration: 600 });
+            }
+            void ev;
+        };
+        window.addEventListener('pointermove', onMoveDrag);
+        window.addEventListener('pointerup', onUp);
+    }, []);
 
     if (!category && !sharedMode) return null;
 
     return (
-        <div className="flex h-screen w-full bg-slate-950 overflow-hidden relative">
-            {/* Header / Nav overlay */}
-            <div className="absolute top-4 sm:top-6 left-2 sm:left-6 right-2 sm:right-6 z-[400] flex items-start justify-between pointer-events-none gap-2 sm:gap-3">
-                
-                {/* Navigation Buttons Group — hidden in shared mode */}
-                {!sharedMode && (
-                <div className={`flex flex-col gap-2 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] pointer-events-auto ${selectedLocation ? 'opacity-0 -translate-x-6 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
-                    <button
-                        onClick={() => router.push('/categories')}
-                        className="p-3 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-white hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
-                        title="Kembali ke Kategori"
-                        aria-label="Kembali ke halaman kategori"
-                    >
-                        <Home className="w-5 h-5 group-hover:-translate-y-1 transition-transform" />
-                    </button>
-                    <button
-                        onClick={() => router.push('/multiview')}
-                        className="p-3 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-yellow-500 hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
-                        title="Ke Halaman Multi-View"
-                        aria-label="Buka halaman multi-view kamera"
-                    >
-                        <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    </button>
+        <div className="flex h-screen w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
+            <style>{customStyles}</style>
 
-                </div>
+            {/* Loader bermerek selama data lokasi belum selesai dimuat. */}
+            {loading && <BrandLoader label={sharedMode ? 'Memuat' : 'Memuat Peta'} />}
+
+            {/* ── MAP ─────────────────────────────────────────────────────────── */}
+            {/* No width transition here: animating the map container's width while
+                flyTo runs made MapLibre jitter/jump. The side panel animates on
+                its own; the map just resizes once (see effect below). */}
+            <div className={`absolute inset-0 ${selectedLocation ? 'md:pr-[520px]' : ''}`}>
+                {!loading && (
+                    <Map
+                        ref={mapRef}
+                        initialViewState={initialView}
+                        mapStyle={MAP_STYLES[mapStyleId]}
+                        attributionControl={false}
+                        // Satellite tiles are capped at source z17 (see mapStyles.ts)
+                        // and MapLibre overzooms from there, so no missing-tile text
+                        // appears. Pitch/rotate/zoom all work normally now.
+                        maxPitch={70}
+                        maxZoom={22}
+                        dragRotate
+                        style={{ width: '100%', height: '100%' }}
+                        onClick={() => { setStyleMenuOpen(false); }}
+                        onLoad={(e) => {
+                            // Rotate the compass needle via DOM (ref) on every map
+                            // rotate — NOT via React state. Using state here re-rendered
+                            // the whole component on every animation frame of flyTo,
+                            // which fought the camera animation and caused jitter/jumps.
+                            const map = e.target;
+                            const sync = () => {
+                                if (compassRef.current) {
+                                    compassRef.current.style.transform = `rotate(${-map.getBearing()}deg)`;
+                                }
+                            };
+                            map.on('rotate', sync);
+                            sync();
+                        }}
+                    >
+                        {/* Location markers (custom HTML pins) */}
+                        {locations.map((loc) => {
+                            const online = isMajorityOnline(loc);
+                            return (
+                                <Marker
+                                    key={loc._id}
+                                    longitude={loc.lng}
+                                    latitude={loc.lat}
+                                    anchor="bottom"
+                                    onClick={(e) => {
+                                        e.originalEvent.stopPropagation();
+                                        openLocation(loc);
+                                    }}
+                                >
+                                    <div
+                                        className="cursor-pointer group/marker"
+                                        onMouseEnter={() => setHovered(loc)}
+                                        onMouseLeave={() => setHovered(null)}
+                                    >
+                                        <MapPin3D online={online} count={(loc.cameras || []).length} category={loc.category} />
+                                    </div>
+                                </Marker>
+                            );
+                        })}
+
+                        {/* Hover tooltip popup */}
+                        {hovered && (
+                            <Popup
+                                longitude={hovered.lng}
+                                latitude={hovered.lat}
+                                anchor="bottom"
+                                offset={38}
+                                closeButton={false}
+                                closeOnClick={false}
+                                className="tengok-popup"
+                            >
+                                <LocationTooltip loc={hovered} realtimeStatuses={realtimeStatuses} lastCheckedTimes={lastCheckedTimes} />
+                            </Popup>
+                        )}
+
+                    </Map>
+                )}
+            </div>
+
+            {/* ── TOP OVERLAY: nav + search + category ─────────────────────────── */}
+            <div className="absolute top-4 sm:top-6 left-2 sm:left-6 right-2 sm:right-6 z-[400] flex items-start justify-between pointer-events-none gap-2 sm:gap-3">
+                {!sharedMode && (
+                    <div className={`flex flex-col gap-2 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] pointer-events-auto ${selectedLocation ? 'opacity-0 -translate-x-6 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
+                        <button
+                            onClick={() => router.push('/categories')}
+                            className="p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
+                            title="Kembali ke Kategori"
+                        >
+                            <Home className="w-5 h-5 group-hover:-translate-y-1 transition-transform" />
+                        </button>
+                        <button
+                            onClick={() => {
+                                // Forward the current project scope so multiview
+                                // defaults the same way.
+                                const p = new URLSearchParams();
+                                if (scopeMode !== 'all') {
+                                    if (division) p.set('division', division);
+                                    if (scopeMode === 'context' && category) p.set('category', category);
+                                }
+                                const qs = p.toString();
+                                router.push(qs ? `/multiview?${qs}` : '/multiview');
+                            }}
+                            className="p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-yellow-500 hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
+                            title="Ke Halaman Multi-View"
+                        >
+                            <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        </button>
+
+                        {/* Project scope filter: proyek ini / se-divisi / lintas divisi */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setScopeMenuOpen(o => !o)}
+                                className={`relative p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border transition-all group shrink-0 hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 ${
+                                    scopeMode !== 'context' ? 'border-yellow-500/40 text-yellow-400' : 'border-black/10 dark:border-white/10 text-slate-900 dark:text-white'
+                                }`}
+                                title="Filter proyek yang ditampilkan"
+                            >
+                                <Filter className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                {scopeMode !== 'context' && (
+                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-yellow-500 border-2 border-slate-900" />
+                                )}
+                            </button>
+                            <AnimatePresence>
+                                {scopeMenuOpen && (
+                                    <motion.div
+                                        initial={{ opacity: 0, x: -10, scale: 0.95 }}
+                                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                                        exit={{ opacity: 0, x: -10, scale: 0.95 }}
+                                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                                        className="absolute left-full ml-2 top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-2xl border border-black/10 dark:border-white/10 shadow-2xl overflow-hidden w-60"
+                                    >
+                                        <div className="px-4 py-2.5 border-b border-black/5 dark:border-white/5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                            Tampilkan Proyek
+                                        </div>
+                                        {/* 1. Proyek ini (divisi + kategori yang dibuka) */}
+                                        <button
+                                            onClick={() => {
+                                                setScopeMode('context');
+                                                setScopeMenuOpen(false);
+                                            }}
+                                            disabled={!hasCategory}
+                                            className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
+                                                scopeMode === 'context' ? 'bg-yellow-500/15 text-yellow-400' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
+                                            } ${!hasCategory ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                        >
+                                            <FolderTree className="w-4 h-4 shrink-0" />
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-bold uppercase tracking-wider">Kategori Ini</div>
+                                                <div className="text-[10px] text-slate-500 truncate">
+                                                    {[division, category].filter(Boolean).join(' • ') || 'Konteks saat ini'}
+                                                </div>
+                                            </div>
+                                        </button>
+                                        {/* 2. Se-divisi (semua kategori dalam divisi yang dibuka) */}
+                                        <button
+                                            onClick={() => {
+                                                setScopeMode('division');
+                                                setScopeMenuOpen(false);
+                                                setSelectedLocation(null);
+                                            }}
+                                            disabled={!hasDivision}
+                                            className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
+                                                scopeMode === 'division' ? 'bg-yellow-500/15 text-yellow-400' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
+                                            } ${!hasDivision ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                        >
+                                            <Layers className="w-4 h-4 shrink-0" />
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-bold uppercase tracking-wider">Satu Divisi</div>
+                                                <div className="text-[10px] text-slate-500 truncate">
+                                                    Semua kategori di {division || 'divisi ini'}
+                                                </div>
+                                            </div>
+                                        </button>
+                                        {/* 3. Lintas divisi (semua proyek Brantas Abipraya) */}
+                                        <button
+                                            onClick={() => {
+                                                setScopeMode('all');
+                                                setScopeMenuOpen(false);
+                                                setSelectedLocation(null);
+                                                // Zoom back out so every marker is visible.
+                                                mapRef.current?.flyTo({
+                                                    center: DEFAULT_CENTER,
+                                                    zoom: DEFAULT_ZOOM,
+                                                    pitch: OVERVIEW_PITCH,
+                                                    duration: 1200,
+                                                    essential: true,
+                                                });
+                                            }}
+                                            className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
+                                                scopeMode === 'all' ? 'bg-yellow-500/15 text-yellow-400' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
+                                            }`}
+                                        >
+                                            <Globe className="w-4 h-4 shrink-0" />
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-bold uppercase tracking-wider">Semua Proyek</div>
+                                                <div className="text-[10px] text-slate-500 truncate">Lintas divisi (Brantas Abipraya)</div>
+                                            </div>
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    </div>
                 )}
 
-                {/* Search Bar — hidden in shared mode */}
                 {!sharedMode && (
-                <div ref={searchRef} className={`flex-1 sm:max-w-xl sm:mx-8 relative pointer-events-auto transition-all duration-700 ${selectedLocation ? 'opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
-                    <div className="relative group">
-                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-yellow-500 transition-colors">
-                            {isSearching ? (
-                                <Loader2 className="w-4 h-4 animate-spin text-yellow-500" />
-                            ) : (
-                                <Search className="w-4 h-4" />
+                    <div ref={searchRef} className={`flex-1 sm:max-w-xl sm:mx-8 relative pointer-events-auto transition-all duration-700 ${selectedLocation ? 'opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-yellow-500 transition-colors">
+                                {isSearching ? <Loader2 className="w-4 h-4 animate-spin text-yellow-500" /> : <Search className="w-4 h-4" />}
+                            </div>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onFocus={() => setShowSuggestions(true)}
+                                onKeyDown={handleKeyDown}
+                                placeholder={`Cari ${category || 'lokasi'}...`}
+                                className="w-full bg-white/85 dark:bg-slate-900/80 backdrop-blur-2xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm py-3 sm:py-4 pl-9 sm:pl-11 pr-10 sm:pr-12 rounded-2xl border border-black/10 dark:border-white/10 focus:border-yellow-500/50 focus:ring-4 focus:ring-yellow-500/10 transition-all outline-none shadow-2xl"
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => { setSearchQuery(''); setSuggestions([]); setShowSuggestions(false); }}
+                                    className="absolute inset-y-0 right-2 flex items-center px-2 group/clear transition-all"
+                                    title="Hapus pencarian"
+                                >
+                                    <div className="p-1.5 rounded-full bg-white/5 group-hover/clear:bg-red-500/20 text-slate-500 dark:text-slate-400 group-hover/clear:text-red-400 transition-all border border-black/5 dark:border-white/5">
+                                        <CloseIcon className="w-3.5 h-3.5" />
+                                    </div>
+                                </button>
                             )}
                         </div>
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            onFocus={() => setShowSuggestions(true)}
-                            onKeyDown={handleKeyDown}
-                            placeholder={`Search ${category || 'location'}...`}
-                            className="w-full bg-slate-900/80 backdrop-blur-2xl text-white placeholder:text-slate-400 text-xs sm:text-sm py-3 sm:py-4 pl-9 sm:pl-11 pr-10 sm:pr-12 rounded-2xl border border-white/10 focus:border-yellow-500/50 focus:ring-4 focus:ring-yellow-500/10 transition-all outline-none shadow-2xl"
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => {
-                                    setSearchQuery('');
-                                    setSuggestions([]);
-                                    setShowSuggestions(false);
-                                }}
-                                className="absolute inset-y-0 right-2 flex items-center px-2 group/clear transition-all"
-                                title="Hapus pencarian"
-                                aria-label="Hapus teks pencarian"
-                            >
-                                <div className="p-1.5 rounded-full bg-white/5 group-hover/clear:bg-red-500/20 text-slate-400 group-hover/clear:text-red-400 transition-all border border-white/5">
-                                    <CloseIcon className="w-3.5 h-3.5" />
-                                </div>
-                            </button>
-                        )}
-                    </div>
 
-                    {/* Suggestions Dropdown */}
-                    {showSuggestions && (searchQuery.length >= 3) && (
-                        <div className="absolute top-full mt-3 left-0 right-0 bg-slate-900/90 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[600]">
-                            <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                                {suggestions.length > 0 ? (
-                                    suggestions.map((item, idx) => (
+                        {showSuggestions && searchQuery.length >= 3 && (
+                            <div className="absolute top-full mt-3 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-2xl border border-black/10 dark:border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-[600]">
+                                <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                                    {suggestions.length > 0 ? suggestions.map((item, idx) => (
                                         <button
                                             key={`${item.id}-${idx}`}
                                             onClick={() => handleSelectSuggestion(item)}
                                             onMouseEnter={() => setSelectedIndex(idx)}
-                                            className={`w-full px-5 py-3.5 flex items-center gap-4 transition-colors text-left group border-b border-white/5 last:border-0 ${selectedIndex === idx ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                                            className={`w-full px-5 py-3.5 flex items-center gap-4 transition-colors text-left group border-b border-black/5 dark:border-white/5 last:border-0 ${selectedIndex === idx ? 'bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
                                         >
                                             <div className="p-2 rounded-lg shrink-0 bg-yellow-500/10">
                                                 <MapPin className="w-4 h-4 text-yellow-500" />
                                             </div>
                                             <div className="min-w-0 flex-1">
-                                                <div className="text-sm font-bold text-white truncate flex items-center justify-between gap-2">
-                                                    {item.display_name}
-                                                    <span className="text-[9px] bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-1.5 py-0.5 rounded-md uppercase tracking-tight opacity-70">
-                                                        View Result
-                                                    </span>
-                                                </div>
-                                                <div className="text-[10px] text-slate-500 truncate mt-0.5 font-medium">
-                                                    Project Location in {category}
-                                                </div>
+                                                <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{item.display_name}</div>
+                                                <div className="text-[10px] text-slate-500 truncate mt-0.5 font-medium">Lokasi proyek di {category}</div>
                                             </div>
                                         </button>
-                                    ))
-                                ) : !isSearching && searchQuery.length >= 3 ? (
-                                    <div className="px-5 py-8 text-center">
-                                        <div className="text-slate-500 text-sm mb-1">No results found for</div>
-                                        <div className="text-white font-bold text-sm truncate px-4">"{searchQuery}"</div>
-                                    </div>
-                                ) : null}
+                                    )) : !isSearching ? (
+                                        <div className="px-5 py-8 text-center">
+                                            <div className="text-slate-500 text-sm mb-1">Tidak ada hasil untuk</div>
+                                            <div className="text-slate-900 dark:text-white font-bold text-sm truncate px-4">&quot;{searchQuery}&quot;</div>
+                                        </div>
+                                    ) : null}
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
                 )}
 
-                {/* Category badge — hidden in shared mode */}
                 {!sharedMode && (
-                <div className="hidden sm:flex px-4 sm:px-6 py-3.5 bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 text-white font-bold uppercase tracking-wider items-center gap-3 pointer-events-auto text-xs">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.8)] animate-pulse" />
-                    <span className="truncate max-w-[100px] sm:max-w-none">{category}</span>
-                </div>
+                    <div className="hidden sm:flex px-4 sm:px-6 py-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-slate-900 dark:text-white font-bold uppercase tracking-wider items-center gap-3 pointer-events-auto text-xs">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.8)] animate-pulse" />
+                        <span className="truncate max-w-[100px] sm:max-w-none">{
+                            scopeMode === 'all' ? 'Semua Proyek'
+                                : scopeMode === 'division' ? (division || 'Satu Divisi')
+                                : (category || division || 'Semua Proyek')
+                        }</span>
+                    </div>
                 )}
             </div>
 
-            {/* Map Container - Absolute inset-0 ensures it fills the background regardless of flex flow */}
-            <div className={`absolute inset-0 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedLocation ? 'md:pr-[520px]' : ''}`}>
-                <style>{scrollbarStyles}</style>
-                {!loading && (
-                    <MapContainer
-                        center={center}
-                        zoom={defaultZoom}
-                        zoomSnap={0.25}
-                        style={{ height: '100%', width: '100%', zIndex: 0 }}
-                        zoomControl={false}
-                        attributionControl={false}
-                    >
-                        <TileLayer
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
-                        <MapResize selectedLocation={selectedLocation} />
-                        <ChangeView center={center} zoom={selectedLocation ? 14 : defaultZoom} />
-
-                        <MarkerClusterGroup chunkedLoading>
-                            {locations.map((loc) => {
-                                let dynamicOnlineCount = 0;
-                                let dynamicOfflineCount = 0;
-
-                                if (loc.cameras) {
-                                    loc.cameras.forEach(cam => {
-                                        if ((realtimeStatuses[cam._id] || cam.status) === 'online') {
-                                            dynamicOnlineCount++;
-                                        } else {
-                                            dynamicOfflineCount++;
-                                        }
-                                    });
-                                }
-
-                                const isMajorityOnline = dynamicOnlineCount >= dynamicOfflineCount;
-
-                                return (
-                                    <Marker
-                                        key={loc._id}
-                                        position={[loc.lat, loc.lng]}
-                                        icon={isMajorityOnline ? iconGreen : iconRed}
-                                        eventHandlers={{
-                                            click: () => {
-                                                setSelectedLocation(loc);
-                                                setCenter([loc.lat, loc.lng]);
-                                            }
-                                        }}
-                                    >
-                                        <Tooltip
-                                            direction="top"
-                                            offset={[0, -15]}
-                                            opacity={1}
-                                            className="custom-tooltip"
-                                            permanent={true}
-                                            interactive={true}
+            {/* ── MAP CONTROLS (right side, single column) ─────────────────────── */}
+            {!sharedMode && (
+                <div className={`absolute z-[500] flex flex-col gap-2 pointer-events-auto transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] bottom-6 sm:bottom-8 ${
+                    selectedLocation
+                        ? 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto right-4 md:right-[536px]'
+                        : 'opacity-100 right-4'
+                }`}>
+                    {/* Style switcher */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setStyleMenuOpen(o => !o)}
+                            className="w-11 h-11 flex items-center justify-center bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-yellow-500 hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
+                            title="Ganti mode peta"
+                        >
+                            <Layers className="w-5 h-5" />
+                        </button>
+                        <AnimatePresence>
+                            {styleMenuOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, x: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                                    exit={{ opacity: 0, x: 10, scale: 0.95 }}
+                                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                                    className="absolute right-full mr-2 top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-2xl border border-black/10 dark:border-white/10 shadow-2xl overflow-hidden w-32"
+                                >
+                                    {MAP_STYLE_META.map(s => (
+                                        <button
+                                            key={s.id}
+                                            onClick={() => { setMapStyleId(s.id); setStyleMenuOpen(false); }}
+                                            className={`w-full px-4 py-3 text-left text-xs font-bold transition-colors ${mapStyleId === s.id ? 'bg-yellow-500/15 text-yellow-400' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'}`}
                                         >
-                                            <div className="flex flex-col min-w-[160px] overflow-hidden rounded-2xl shadow-2xl border border-white/10 bg-slate-950/40 backdrop-blur-md">
-                                                {/* Tooltip Header */}
-                                                <div className="px-3.5 py-2.5 bg-slate-900/90 border-b border-white/10 flex items-center gap-2">
-                                                    <div className={`w-2 h-2 rounded-full ${isMajorityOnline ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]'} mr-1`} />
-                                                    <div className="text-[10px] font-bold text-white/90 uppercase tracking-wider truncate">
-                                                        {loc.name}
-                                                    </div>
-                                                </div>
-
-                                                {/* Tooltip Body */}
-                                                <div className="p-3 bg-slate-900/60 flex flex-col gap-2">
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        {/* Online Pill */}
-                                                        <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 group/pill">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="relative">
-                                                                    <Signal className="w-4 h-4 text-emerald-400" />
-                                                                    <div className="absolute inset-0 bg-emerald-400 blur-sm opacity-60 pulse-emerald" />
-                                                                </div>
-                                                                <span className="text-[14px] font-bold text-white leading-none">{dynamicOnlineCount}</span>
-                                                            </div>
-                                                            <span className="text-[9px] font-bold text-emerald-400/80 uppercase tracking-wider">Online</span>
-                                                        </div>
-
-                                                        {/* Offline Pill */}
-                                                        <div className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
-                                                            <div className="flex items-center gap-2">
-                                                                <SignalZero className="w-4 h-4 text-rose-400" />
-                                                                <span className="text-[14px] font-bold text-white leading-none">{dynamicOfflineCount}</span>
-                                                            </div>
-                                                            <span className="text-[9px] font-bold text-rose-400/80 uppercase tracking-wider">Offline</span>
-                                                        </div>
-                                                    </div>
-                                                    {/* Last Checked Timestamp */}
-                                                    {(() => {
-                                                        // Find most recent lastCheckedAt among this location's cameras
-                                                        let latest: string | null = null;
-                                                        loc.cameras?.forEach((cam: any) => {
-                                                            const t = lastCheckedTimes?.[cam._id] || cam.lastCheckedAt;
-                                                            if (t && (!latest || new Date(t) > new Date(latest))) latest = t;
-                                                        });
-                                                        if (!latest) return null;
-                                                        const diff = Math.floor((Date.now() - new Date(latest).getTime()) / 1000);
-                                                        let rel = 'Baru saja';
-                                                        if (diff >= 86400) rel = `${Math.floor(diff / 86400)}h lalu`;
-                                                        else if (diff >= 3600) rel = `${Math.floor(diff / 3600)}j lalu`;
-                                                        else if (diff >= 60) rel = `${Math.floor(diff / 60)}m lalu`;
-                                                        return (
-                                                            <div className="text-center pt-1 border-t border-white/5">
-                                                                <span className="text-[8px] font-semibold text-slate-500 tracking-wide">
-                                                                    Dicek {rel}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            </div>
-                                        </Tooltip>
-                                    </Marker>
-                                )
-                            })}
-                        </MarkerClusterGroup>
-                    </MapContainer>
-                )}
-            </div>
-
-            {/* Delay Notice Toast Stack */}
-            <AnimatePresence>
-                {(toast1 || toast2 || toast3) && (
-                    <motion.div
-                        className={`fixed z-[2000] flex flex-col-reverse gap-2.5 pointer-events-none ${selectedLocation ? 'hidden md:flex' : 'flex'} ${
-                            sharedMode ? 'bottom-6 left-4' : 'bottom-20 sm:bottom-4 left-4 sm:left-[220px]'
-                        }`}
-                        initial="hidden"
-                        animate="visible"
-                        exit="exit"
-                        variants={{
-                            hidden: {},
-                            visible: { transition: { staggerChildren: 0.2, staggerDirection: -1 } },
-                            exit:    { transition: { staggerChildren: 0.08, staggerDirection: 1  } },
-                        }}
-                    >
-                        {/* Toast 3: Disclaimer - hidden on mobile */}
-                        <AnimatePresence>
-                            {toast3 && (
-                                <motion.div
-                                    key="toast3"
-                                    variants={{
-                                        hidden:  { opacity: 0, y: 20, scale: 0.95, filter: 'blur(4px)' },
-                                        visible: { opacity: 1, y: 0,  scale: 1,    filter: 'blur(0px)', transition: { type: 'spring', stiffness: 320, damping: 28 } },
-                                        exit:    { opacity: 0, y: 12, scale: 0.95, filter: 'blur(4px)', transition: { duration: 0.18 } },
-                                    }}
-                                    initial="hidden"
-                                    animate="visible"
-                                    exit="exit"
-                                    className="hidden sm:flex w-[min(380px,calc(100vw-2rem))] bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-3.5 gap-3.5 items-start pointer-events-auto ring-1 ring-white/5 relative"
-                                >
-                                    <div className="text-lg shrink-0 pt-0.5 drop-shadow-md">🙏</div>
-                                    <div className="flex-1 mt-0.5 pr-6">
-                                        <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
-                                            <strong className="text-slate-200">Perlu diketahui:</strong> Status <span className="text-emerald-400">online</span> / <span className="text-rose-400">offline</span> yang tertera <strong className="text-slate-300">dapat berubah sewaktu-waktu</strong> karena kondisi jaringan. Mohon maaf jika terdapat perbedaan status.
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={() => setToast3(false)}
-                                        className="absolute top-2.5 right-2.5 text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto"
-                                        title="Tutup"
-                                    >
-                                        <CloseIcon className="w-3.5 h-3.5" />
-                                    </button>
+                                            {s.label}
+                                        </button>
+                                    ))}
                                 </motion.div>
                             )}
                         </AnimatePresence>
+                    </div>
 
-                        {/* Toast 2: Pengecekan Otomatis - hidden on mobile */}
-                        <AnimatePresence>
-                            {toast2 && (
-                                <motion.div
-                                    key="toast2"
-                                    variants={{
-                                        hidden:  { opacity: 0, y: 20, scale: 0.95, filter: 'blur(4px)' },
-                                        visible: { opacity: 1, y: 0,  scale: 1,    filter: 'blur(0px)', transition: { type: 'spring', stiffness: 320, damping: 28 } },
-                                        exit:    { opacity: 0, y: 12, scale: 0.95, filter: 'blur(4px)', transition: { duration: 0.18 } },
-                                    }}
-                                    initial="hidden"
-                                    animate="visible"
-                                    exit="exit"
-                                    className="hidden sm:flex w-[min(380px,calc(100vw-2rem))] bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl p-3.5 gap-3.5 items-start pointer-events-auto ring-1 ring-white/5 relative"
-                                >
-                                    <div className="text-lg shrink-0 pt-0.5 drop-shadow-md">💡</div>
-                                    <div className="flex-1 mt-0.5 pr-6">
-                                        <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                                            <strong className="text-slate-200">Pengecekan Otomatis:</strong> Sistem memeriksa status kamera secara berkala dan bertahap untuk memastikan data selalu terbaru.
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={() => setToast2(false)}
-                                        className="absolute top-2.5 right-2.5 text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto"
-                                        title="Tutup"
-                                    >
-                                        <CloseIcon className="w-3.5 h-3.5" />
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                    {/* Compass + Zoom + 3D — one grouped block */}
+                    <div className="flex flex-col bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 overflow-hidden">
+                        {/* Compass: drag to rotate/tilt (POV); click resets north + level */}
+                        <button
+                            onPointerDown={handleCompassPointerDown}
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all cursor-grab active:cursor-grabbing touch-none"
+                            title="Seret untuk memutar/miringkan · klik untuk reset utara"
+                        >
+                            <Compass ref={compassRef} className="w-5 h-5 pointer-events-none" />
+                        </button>
+                        <div className="h-px bg-white/10" />
+                        <button
+                            onClick={() => mapRef.current?.zoomIn({ duration: 300 })}
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all"
+                            title="Perbesar"
+                        >
+                            <Plus className="w-5 h-5" />
+                        </button>
+                        <div className="h-px bg-white/10" />
+                        <button
+                            onClick={() => mapRef.current?.zoomOut({ duration: 300 })}
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all"
+                            title="Perkecil"
+                        >
+                            <Minus className="w-5 h-5" />
+                        </button>
+                        <div className="h-px bg-white/10" />
+                        {/* Toggle 3D pitch */}
+                        <button
+                            onClick={() => mapRef.current?.easeTo({ pitch: (mapRef.current?.getPitch() || 0) > 10 ? 0 : FOCUS_PITCH, duration: 700 })}
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all"
+                            title="Tampilan 3D"
+                        >
+                            <Mountain className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
-                        {/* Toast 1: Info Streaming — always visible */}
-                        <AnimatePresence>
-                            {toast1 && (
-                                <motion.div
-                                    key="toast1"
-                                    variants={{
-                                        hidden:  { opacity: 0, y: 20, scale: 0.95, filter: 'blur(4px)' },
-                                        visible: { opacity: 1, y: 0,  scale: 1,    filter: 'blur(0px)', transition: { type: 'spring', stiffness: 320, damping: 28 } },
-                                        exit:    { opacity: 0, y: 12, scale: 0.95, filter: 'blur(4px)', transition: { duration: 0.18 } },
-                                    }}
-                                    initial="hidden"
-                                    animate="visible"
-                                    exit="exit"
-                                    className="w-[min(380px,calc(100vw-2rem))] bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/30 shadow-2xl rounded-2xl p-4 flex gap-3.5 items-start pointer-events-auto ring-1 ring-white/5 relative"
-                                >
-                                    <div className="p-2 bg-yellow-500/10 rounded-xl shrink-0">
-                                        <Info className="w-5 h-5 text-yellow-500" />
-                                    </div>
-                                    <div className="flex-1 mt-0.5 pr-6">
-                                        <h4 className="text-sm font-bold text-white tracking-wide">Informasi Streaming</h4>
-                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                            Proses memuat video CCTV membutuhkan waktu beberapa saat. Kecepatan bergantung pada <span className="text-slate-300 font-bold">stabilitas jaringan</span> di masing-masing lokasi.
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={() => setToast1(false)}
-                                        className="absolute top-3 right-3 text-slate-500 hover:text-white p-1 hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto"
-                                        title="Tutup"
-                                    >
-                                        <CloseIcon className="w-4 h-4" />
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* CCTV notices */}
+            <CctvNotices sharedMode={sharedMode} hidden={!!selectedLocation} />
 
-
-            {/* Info Re-open Button — muncul hanya jika semua toast sudah ditutup */}
-            <AnimatePresence>
-                {allToastsClosed && (
-                    <motion.button
-                        initial={{ opacity: 0, scale: 0.5, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.5, y: 10 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                        onClick={() => { setToast1(true); setToast2(true); setToast3(true); }}
-                        className={`fixed z-[1900] ${selectedLocation ? 'hidden md:flex' : 'flex'} items-center justify-center border transition-all group ${
-                            sharedMode
-                                ? 'bottom-6 left-4 w-[44px] h-[44px] rounded-2xl bg-slate-900/80 backdrop-blur-2xl border-white/10 shadow-2xl hover:bg-slate-800/90 hover:border-yellow-500/50'
-                                : 'bottom-4 left-4 sm:left-[150px] px-3 py-2 rounded-2xl border-white/10 shadow-2xl hover:bg-white/5'
-                        }`}
-                        style={!sharedMode ? { backdropFilter: 'blur(20px)', background: 'rgba(2, 6, 23, 0.85)' } : {}}
-                        title="Informasi Delay Streaming"
-                    >
-                        <Info className="w-4 h-4 text-yellow-500 group-hover:scale-110 transition-transform" />
-                    </motion.button>
-                )}
-            </AnimatePresence>
-
-
-            {/* Resource Monitor — hidden in shared mode */}
+            {/* Resource Monitor */}
             {!sharedMode && (
                 <div className={selectedLocation ? 'hidden md:block' : 'block'}>
                     <ResourceMonitor />
                 </div>
             )}
 
-            {/* PT Brantas Abipraya — Brand Identity Watermark (hidden in sharedMode, page.tsx has its own BrandingOverlay) */}
+            {/* Watermark */}
             {!sharedMode && (
-            <div className={`fixed bottom-4 right-4 z-[500] pointer-events-none transition-all duration-700 ${selectedLocation ? 'opacity-0' : 'opacity-100'}`}>
-                <div className="flex items-center gap-2.5 bg-slate-950/70 backdrop-blur-xl rounded-2xl px-3.5 py-2.5 border border-white/5 shadow-2xl">
-                    <img
-                        src="/abipraya_original.svg"
-                        alt="PT Brantas Abipraya"
-                        className="w-7 h-7 object-contain opacity-70"
-                        draggable={false}
-                    />
-                    <div className="hidden sm:block">
-                        <p className="text-[9px] font-bold text-white/50 uppercase tracking-[0.15em] leading-none">PT Brantas Abipraya</p>
-                        <p className="text-[8px] font-medium text-white/25 uppercase tracking-wider mt-0.5">Smart Monitoring</p>
+                <div className={`fixed bottom-4 z-[450] pointer-events-none transition-all duration-700 ${selectedLocation ? 'opacity-0 right-4' : 'opacity-100 right-20 sm:right-24'}`}>
+                    <div className="flex items-center gap-2.5 bg-white/80 dark:bg-slate-950/70 backdrop-blur-xl rounded-2xl px-3.5 py-2.5 border border-black/5 dark:border-white/5 shadow-2xl">
+                        {/* Logo biru untuk light mode, logo putih/kuning untuk dark mode */}
+                        <img src="/LOGO_ABIPRAYA.png" alt="PT Brantas Abipraya" className="w-7 h-7 object-contain opacity-80 block dark:hidden" draggable={false} />
+                        <img src="/abipraya_original.svg" alt="PT Brantas Abipraya" className="w-7 h-7 object-contain opacity-70 hidden dark:block" draggable={false} />
+                        <div className="hidden sm:block">
+                            <p className="text-[9px] font-bold text-slate-500 dark:text-white/50 uppercase tracking-[0.15em] leading-none">PT Brantas Abipraya</p>
+                            <p className="text-[8px] font-medium text-slate-400 dark:text-white/25 uppercase tracking-wider mt-0.5">Smart Monitoring</p>
+                        </div>
                     </div>
                 </div>
-            </div>
             )}
 
-            {/* Side Panel for Camera Details */}
-            <div className={`fixed inset-y-0 right-0 z-[1000] w-full md:w-[520px] bg-slate-950/80 backdrop-blur-3xl border-l border-white/5 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transform transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedLocation ? 'translate-x-0' : 'translate-x-full'}`}>
+            {/* Side Panel */}
+            <div className={`fixed inset-y-0 right-0 z-[1000] w-full md:w-[520px] bg-slate-100/90 dark:bg-slate-950/80 backdrop-blur-3xl border-l border-black/10 dark:border-white/5 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transform transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedLocation ? 'translate-x-0' : 'translate-x-full'}`}>
                 {selectedLocation && (
                     <div className="h-full flex flex-col custom-scrollbar overflow-y-auto">
                         <CameraPanel
                             location={selectedLocation}
-                            onClose={() => setSelectedLocation(null)}
+                            onClose={closePanel}
                             onStatusChange={(id: string, status: 'online' | 'offline') => setRealtimeStatuses(prev => ({ ...prev, [id]: status }))}
                             realtimeStatuses={realtimeStatuses}
                             lastCheckedTimes={lastCheckedTimes}
@@ -740,3 +824,111 @@ export default function MapComponent({ category: propCategory, allowedLocationId
         </div>
     );
 }
+
+// ── Custom pin marker: ikon jenis proyek + warna status + badge jumlah kamera ──
+function MapPin3D({ online, count, category }: { online: boolean; count: number; category?: string }) {
+    const color = online ? '#22c55e' : '#ef4444';
+    const glow = online ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.55)';
+    const Icon = categoryIcon(category);
+    return (
+        <div className="relative flex flex-col items-center" style={{ filter: `drop-shadow(0 4px 8px ${glow})` }}>
+            <div
+                className={`relative w-9 h-9 rounded-full border-[3px] border-white flex items-center justify-center transition-transform group-hover/marker:scale-110 ${online ? 'marker-pulse' : ''}`}
+                style={{ backgroundColor: color }}
+            >
+                <Icon className="w-[18px] h-[18px] text-slate-900 dark:text-white" strokeWidth={2.5} />
+                {/* Badge jumlah kamera */}
+                {count > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-slate-900 border border-white/80 flex items-center justify-center text-[8px] font-black text-white leading-none">
+                        {count}
+                    </span>
+                )}
+            </div>
+            {/* pointer tail */}
+            <div
+                className="w-0 h-0 -mt-0.5"
+                style={{ borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: `8px solid ${color}` }}
+            />
+        </div>
+    );
+}
+
+// ── Hover tooltip content ──────────────────────────────────────────────────────
+function LocationTooltip({
+    loc, realtimeStatuses, lastCheckedTimes,
+}: {
+    loc: LocationData;
+    realtimeStatuses: Record<string, 'online' | 'offline'>;
+    lastCheckedTimes?: Record<string, string>;
+}) {
+    let on = 0, off = 0;
+    (loc.cameras || []).forEach((cam: any) => {
+        if ((realtimeStatuses[cam._id] || cam.status) === 'online') on++;
+        else off++;
+    });
+    const majorityOnline = on >= off;
+
+    let latest: string | null = null;
+    (loc.cameras || []).forEach((cam: any) => {
+        const t = lastCheckedTimes?.[cam._id] || cam.lastCheckedAt;
+        if (t && (!latest || new Date(t) > new Date(latest))) latest = t;
+    });
+    let rel: string | null = null;
+    if (latest) {
+        const diff = Math.floor((Date.now() - new Date(latest).getTime()) / 1000);
+        if (diff >= 86400) rel = `${Math.floor(diff / 86400)}h lalu`;
+        else if (diff >= 3600) rel = `${Math.floor(diff / 3600)}j lalu`;
+        else if (diff >= 60) rel = `${Math.floor(diff / 60)}m lalu`;
+        else rel = 'Baru saja';
+    }
+
+    return (
+        <div className="flex flex-col min-w-[160px] overflow-hidden rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 bg-white/75 dark:bg-slate-950/60 backdrop-blur-md">
+            <div className="px-3.5 py-2.5 bg-white/90 dark:bg-slate-900/90 border-b border-black/10 dark:border-white/10 flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${majorityOnline ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]'}`} />
+                <div className="text-[10px] font-bold text-slate-800 dark:text-white/90 uppercase tracking-wider truncate">{loc.name}</div>
+            </div>
+            <div className="p-3 bg-white/80 dark:bg-slate-900/70 flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 flex flex-col items-center gap-1 px-2 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
+                        <div className="flex items-center gap-2">
+                            <Signal className="w-4 h-4 text-emerald-400" />
+                            <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{on}</span>
+                        </div>
+                        <span className="text-[9px] font-bold text-emerald-400/80 uppercase tracking-wider">Online</span>
+                    </div>
+                    <div className="flex-1 flex flex-col items-center gap-1 px-2 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
+                        <div className="flex items-center gap-2">
+                            <SignalZero className="w-4 h-4 text-rose-400" />
+                            <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{off}</span>
+                        </div>
+                        <span className="text-[9px] font-bold text-rose-400/80 uppercase tracking-wider">Offline</span>
+                    </div>
+                </div>
+                {rel && (
+                    <div className="text-center pt-1 border-t border-black/5 dark:border-white/5">
+                        <span className="text-[8px] font-semibold text-slate-500 tracking-wide">Dicek {rel}</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Global styles: scrollbar, marker pulse, MapLibre control theming ───────────
+const customStyles = `
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.1); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(234, 179, 8, 0.2); border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(234, 179, 8, 0.4); }
+
+    .marker-pulse { animation: marker-pulse 1.5s ease-in-out infinite; }
+    @keyframes marker-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); } 70% { box-shadow: 0 0 0 12px rgba(34,197,94,0); } }
+
+    /* MapLibre popup — strip default chrome so our card shows cleanly */
+    .tengok-popup .maplibregl-popup-content { background: transparent !important; padding: 0 !important; box-shadow: none !important; border-radius: 16px; }
+    .tengok-popup .maplibregl-popup-tip { display: none !important; }
+
+    /* Hide MapLibre's default attribution (we use custom controls) */
+    .maplibregl-ctrl-attrib { display: none !important; }
+`;

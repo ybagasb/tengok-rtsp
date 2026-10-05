@@ -141,7 +141,7 @@ export default function UptimePage() {
     };
 
     const getUptimeColorClasses = (pct: number) => {
-        if (pct === -1) return { bg: 'bg-slate-700', text: 'text-slate-400', bar: 'bg-slate-600', border: 'border-slate-700/50' };
+        if (pct === -1) return { bg: 'bg-slate-700', text: 'text-slate-500 dark:text-slate-400', bar: 'bg-slate-600', border: 'border-slate-700/50' };
         if (pct >= 90) return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', bar: 'bg-emerald-500', border: 'border-emerald-500/20' };
         if (pct >= 70) return { bg: 'bg-yellow-500/10', text: 'text-yellow-500', bar: 'bg-yellow-500', border: 'border-yellow-500/20' };
         return { bg: 'bg-rose-500/10', text: 'text-rose-400', bar: 'bg-rose-500', border: 'border-rose-500/20' };
@@ -165,7 +165,7 @@ export default function UptimePage() {
     }
 
     return (
-        <div className="min-h-full bg-slate-950 p-6 md:p-10 font-sans pb-32">
+        <div className="min-h-full bg-slate-100 dark:bg-slate-950 p-6 md:p-10 font-sans pb-32">
             <div className="max-w-6xl mx-auto space-y-8">
                 {/* Header */}
                 <PageHeader
@@ -173,14 +173,14 @@ export default function UptimePage() {
                     title="Kendali Uptime"
                     subtitle="Pantau stabilitas sistem dan konektivitas CCTV di setiap lokasi proyek secara keseluruhan."
                     actions={
-                        <div className="flex items-center bg-slate-900/60 rounded-2xl border border-white/10 p-1 gap-1">
+                        <div className="flex items-center bg-white/70 dark:bg-slate-900/60 rounded-2xl border border-black/10 dark:border-white/10 p-1 gap-1">
                             {[7, 14, 30].map(d => (
                                 <button
                                     key={d}
                                     onClick={() => setDays(d)}
                                     className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${days === d
                                         ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/20'
-                                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
                                     }`}
                                 >
                                     {d} Hari
@@ -193,23 +193,23 @@ export default function UptimePage() {
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <motion.div variants={cardVariants} initial="hidden" animate="show"
-                        className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 relative overflow-hidden">
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Semua Kamera</p>
-                        <h2 className="text-3xl font-black text-white">{summary.total}</h2>
+                        className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 relative overflow-hidden">
+                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Semua Kamera</p>
+                        <h2 className="text-3xl font-black text-slate-900 dark:text-white">{summary.total}</h2>
                     </motion.div>
                     <motion.div variants={cardVariants} initial="hidden" animate="show"
-                        className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 relative overflow-hidden">
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Rata-rata Sistem</p>
-                        <h2 className="text-3xl font-black text-white">{summary.avgUptime}<span className="text-lg text-slate-500">%</span></h2>
+                        className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 relative overflow-hidden">
+                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Rata-rata Sistem</p>
+                        <h2 className="text-3xl font-black text-slate-900 dark:text-white">{summary.avgUptime}<span className="text-lg text-slate-500">%</span></h2>
                     </motion.div>
                     <motion.div variants={cardVariants} initial="hidden" animate="show"
-                        className="bg-slate-900/60 backdrop-blur-xl border border-emerald-500/20 rounded-3xl p-6 relative overflow-hidden group">
+                        className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-emerald-500/20 rounded-3xl p-6 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-bl-full blur-2xl" />
                         <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-2 relative z-10">Kamera Stabil</p>
                         <h2 className="text-3xl font-black text-emerald-400 relative z-10">{summary.stable}</h2>
                     </motion.div>
                     <motion.div variants={cardVariants} initial="hidden" animate="show"
-                        className="bg-slate-900/60 backdrop-blur-xl border border-rose-500/20 rounded-3xl p-6 relative overflow-hidden group">
+                        className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-rose-500/20 rounded-3xl p-6 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-bl-full blur-2xl" />
                         <p className="text-[11px] font-bold text-rose-400 uppercase tracking-wider mb-2 relative z-10">Kritis (&lt;70%)</p>
                         <h2 className="text-3xl font-black text-rose-400 relative z-10">{summary.critical}</h2>
@@ -225,7 +225,7 @@ export default function UptimePage() {
                                 onClick={() => setFilterCategory(cat)}
                                 className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all ${filterCategory === cat
                                     ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-                                    : 'bg-white/5 text-slate-400 border-transparent hover:border-white/10'
+                                    : 'bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 border-transparent hover:border-black/10 dark:hover:border-white/10'
                                 }`}
                             >
                                 {cat === 'all' ? 'Semua Kategori' : cat}
@@ -258,7 +258,7 @@ export default function UptimePage() {
                                 <motion.div 
                                     variants={cardVariants}
                                     key={group.locationName}
-                                    className={`bg-slate-900/60 backdrop-blur-xl border rounded-3xl overflow-hidden transition-colors ${isExpanded ? style.border : 'border-white/5 hover:border-white/10'}`}
+                                    className={`bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border rounded-3xl overflow-hidden transition-colors ${isExpanded ? style.border : 'border-black/5 dark:border-white/5 hover:border-black/10 dark:hover:border-white/10'}`}
                                 >
                                     {/* Location Header - Click to expand */}
                                     <button 
@@ -270,7 +270,7 @@ export default function UptimePage() {
                                                 <MapPin className="w-6 h-6" />
                                             </div>
                                             <div>
-                                                <h3 className="text-lg font-bold text-white group-hover/btn:text-yellow-400 transition-colors tracking-wide">
+                                                <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover/btn:text-yellow-400 transition-colors tracking-wide">
                                                     {group.locationName}
                                                 </h3>
                                                 <div className="flex items-center gap-3 mt-1">
@@ -293,7 +293,7 @@ export default function UptimePage() {
                                                         {group.avgUptime === -1 ? 'N/A' : `${group.avgUptime}%`}
                                                     </span>
                                                 </div>
-                                                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                                <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                                                     {group.avgUptime !== -1 && (
                                                         <div 
                                                             className={`h-full rounded-full ${style.bar}`} 
@@ -303,7 +303,7 @@ export default function UptimePage() {
                                                 </div>
                                             </div>
                                             
-                                            <div className="text-slate-500 group-hover/btn:text-white transition-colors p-2 bg-white/5 rounded-full">
+                                            <div className="text-slate-500 group-hover/btn:text-white transition-colors p-2 bg-black/[0.04] dark:bg-white/5 rounded-full">
                                                 {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                                             </div>
                                         </div>
@@ -316,7 +316,7 @@ export default function UptimePage() {
                                                 initial={{ height: 0, opacity: 0 }}
                                                 animate={{ height: "auto", opacity: 1 }}
                                                 exit={{ height: 0, opacity: 0 }}
-                                                className="border-t border-white/5 bg-slate-950/50"
+                                                className="border-t border-black/5 dark:border-white/5 bg-white/70 dark:bg-slate-950/50"
                                             >
                                                 <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {group.cameras.map(cam => {
@@ -324,14 +324,14 @@ export default function UptimePage() {
                                                         const isOnline = cam.currentStatus === 'online';
                                                         
                                                         return (
-                                                            <div key={cam.cameraId} className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
+                                                            <div key={cam.cameraId} className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-black/[0.04] dark:bg-white/5 border border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
                                                                 <div className="flex items-center gap-3">
                                                                     <div className="relative">
                                                                         <MonitorPlay className={`w-5 h-5 ${isOnline ? 'text-emerald-400' : 'text-slate-500'}`} />
                                                                         <div className={`absolute -right-1 -bottom-1 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${isOnline ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                                                                     </div>
                                                                     <div>
-                                                                        <div className="text-sm font-bold text-white tracking-wide truncate max-w-[150px] sm:max-w-[200px]">{cam.cameraName}</div>
+                                                                        <div className="text-sm font-bold text-slate-900 dark:text-white tracking-wide truncate max-w-[150px] sm:max-w-[200px]">{cam.cameraName}</div>
                                                                         <div className="text-[9px] font-medium text-slate-500 mt-0.5 flex flex-col gap-0.5">
                                                                             <span>Cek: {formatRelativeTime(cam.lastCheckedAt)}</span>
                                                                             {!isOnline && (
@@ -370,7 +370,7 @@ export default function UptimePage() {
                         <button 
                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                             disabled={currentPage === 1}
-                            className="px-4 py-2 rounded-xl bg-white/5 text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-white/10 transition-colors"
+                            className="px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                         >
                             Prev
                         </button>
@@ -381,7 +381,7 @@ export default function UptimePage() {
                         <button 
                             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                             disabled={currentPage === totalPages}
-                            className="px-4 py-2 rounded-xl bg-white/5 text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-white/10 transition-colors"
+                            className="px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                         >
                             Next
                         </button>

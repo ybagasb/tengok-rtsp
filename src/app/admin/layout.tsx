@@ -5,10 +5,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { 
     LayoutDashboard, Monitor, MapPin, Tags, ArrowLeft, Shield, 
-    Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList 
+    Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList, Bell 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sidebarVariants, navItemVariants } from '@/components/admin/shared';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
@@ -23,6 +24,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'Share Links', href: '/admin/share-links', icon: Link2 },
         { name: 'Statistik', href: '/admin/statistics', icon: BarChart3 },
         { name: 'Uptime & SLA', href: '/admin/uptime', icon: Activity },
+        { name: 'Notifikasi', href: '/admin/notifications', icon: Bell },
         { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
     ];
 
@@ -31,14 +33,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const mobileMoreNav = navigation.slice(4);
 
     return (
-        <div className="flex min-h-screen bg-slate-950 text-white font-sans">
+        <div className="flex min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white font-sans">
             {/* Sidebar (Desktop) */}
-            <div className="w-64 bg-slate-900/80 backdrop-blur-xl border-r border-white/5 flex-col hidden lg:flex sticky top-0 h-screen relative overflow-hidden">
+            <div className="w-64 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-black/5 dark:border-white/5 flex-col hidden lg:flex sticky top-0 h-screen relative overflow-hidden">
                 {/* Sidebar decoration */}
                 <div className="absolute -top-20 -left-20 w-40 h-40 bg-yellow-500/10 rounded-full blur-[60px] pointer-events-none" />
                 <div className="absolute bottom-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-[50px] pointer-events-none" />
 
-                <div className="p-6 border-b border-white/5 flex items-center gap-3 relative z-10">
+                <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-center gap-3 relative z-10">
                     <motion.div
                         initial={{ scale: 0.8, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
@@ -48,7 +50,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         <Shield className="w-5 h-5 text-slate-950 stroke-[2.5]" />
                     </motion.div>
                     <div>
-                        <h2 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-1">Admin Panel</h2>
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1">Admin Panel</h2>
                         <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Tengok System</span>
                     </div>
                 </div>
@@ -72,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                     className={`flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all group relative overflow-hidden ${
                                         isActive
                                             ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 shadow-[0_4px_20px_rgba(234,179,8,0.08)]'
-                                            : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                                            : 'text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white border border-transparent'
                                     }`}
                                 >
                                     {isActive && (
@@ -97,10 +99,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     })}
                 </motion.div>
 
-                <div className="p-4 border-t border-white/5 relative z-10">
+                <div className="p-4 border-t border-black/5 dark:border-white/5 relative z-10 space-y-2">
+                    <div className="px-1"><ThemeToggle className="w-full justify-start" /></div>
                     <button
                         onClick={() => router.push('/categories')}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition-all group"
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-slate-500 dark:text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition-all group"
                     >
                         <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                         <span className="text-sm font-bold tracking-wide">Exit Admin</span>
@@ -109,7 +112,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
 
             {/* Mobile Navigation (Bottom Bar) — 4 items + More */}
-            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 z-50 pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.4)]">
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-black/10 dark:border-white/10 z-50 pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.4)]">
                 <div className="flex items-center justify-around p-2.5">
                     {mobileMainNav.map((item) => {
                         const Icon = item.icon;
@@ -122,7 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                 key={item.name}
                                 href={item.href}
                                 className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all relative ${
-                                    isActive ? 'text-yellow-500' : 'text-slate-500 hover:text-slate-300'
+                                    isActive ? 'text-yellow-500' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
                                 }`}
                             >
                                 {isActive && (
@@ -166,13 +169,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
                             transition={{ type: "spring", stiffness: 400, damping: 35 }}
-                            className="relative w-full bg-slate-900/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl p-6 pb-safe"
+                            className="relative w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-black/10 dark:border-white/10 rounded-t-3xl p-6 pb-safe"
                         >
                             <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-white uppercase tracking-wider">Menu Lainnya</h3>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-wider">Menu Lainnya</h3>
                                 <button
                                     onClick={() => setShowMore(false)}
-                                    className="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-white transition-colors"
+                                    className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
@@ -189,7 +192,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                             className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
                                                 isActive
                                                     ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20'
-                                                    : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+                                                    : 'text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white border border-transparent'
                                             }`}
                                         >
                                             <Icon className="w-5 h-5" />
@@ -201,7 +204,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             </div>
                             <button
                                 onClick={() => { setShowMore(false); router.push('/categories'); }}
-                                className="w-full flex items-center gap-4 p-4 mt-4 rounded-2xl text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10 transition-all border-t border-white/5 pt-6"
+                                className="w-full flex items-center gap-4 p-4 mt-4 rounded-2xl text-slate-500 dark:text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10 transition-all border-t border-black/5 dark:border-white/5 pt-6"
                             >
                                 <ArrowLeft className="w-5 h-5" />
                                 <span className="text-sm font-bold">Exit Admin</span>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
+import Location from '@/models/Location';
 import { logAudit } from '@/lib/adminAuditLog';
 import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
 
@@ -22,6 +23,13 @@ export async function DELETE(
         if (!deletedCamera) {
             return NextResponse.json({ success: false, error: 'Camera not found' }, { status: 404 });
         }
+
+        // Clean up references so no location keeps a dangling camera id.
+        // (Mirrors the bulk-delete path which already does this.)
+        await Location.updateMany(
+            { cameras: id },
+            { $pull: { cameras: id } }
+        );
 
         // Audit log — fire and forget
         logAudit({

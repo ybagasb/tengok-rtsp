@@ -6,7 +6,6 @@ import dynamic from 'next/dynamic';
 import { Loader2, Clock, AlertTriangle, Link2Off, ShieldX, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import 'leaflet/dist/leaflet.css';
 
 const MapComponent = dynamic(() => import('@/components/MapComponent'), {
     ssr: false,

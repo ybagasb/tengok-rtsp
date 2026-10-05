@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import os from 'os';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireAuth } from '@/lib/apiAuth';
 
 let lastCpuUsage = process.cpuUsage();
 let lastTime = Date.now();
 
 export async function GET(req: NextRequest) {
-    // Only admin can view system stats
-    const authError = await requireAdmin(req);
+    // Any authenticated user (incl. PIN viewers) may see server health stats.
+    // Shown by ResourceMonitor on the /map page. Only CPU/RAM — non-sensitive.
+    const authError = await requireAuth(req);
     if (authError) return authError;
 
     const mem = process.memoryUsage();

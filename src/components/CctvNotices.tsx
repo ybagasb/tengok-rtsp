@@ -1,0 +1,267 @@
+"use client";
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Info, Lightbulb, AlertTriangle, X as CloseIcon, Bell } from 'lucide-react';
+
+interface Notice {
+    id: string;
+    type: 'info' | 'tip' | 'warning';
+    title: string;
+    message: string;
+    enabled: boolean;
+}
+
+interface NoticeConfig {
+    enabled: boolean;
+    autoDismissSec: number;
+    notices: Notice[];
+}
+
+interface CctvNoticesProps {
+    sharedMode?: boolean;
+    // When a location panel is open, we hide notices on small screens (matches
+    // the previous behavior of the inline map toasts).
+    hidden?: boolean;
+}
+
+// Per-type visual treatment.
+const TYPE_STYLES: Record<Notice['type'], { icon: typeof Info; accent: string; iconBg: string; iconColor: string; ring: string }> = {
+    info: {
+        icon: Info,
+        accent: 'from-yellow-500 to-orange-500',
+        iconBg: 'bg-yellow-500/10',
+        iconColor: 'text-yellow-500',
+        ring: 'border-yellow-500/30',
+    },
+    tip: {
+        icon: Lightbulb,
+        accent: 'from-sky-500 to-cyan-400',
+        iconBg: 'bg-sky-500/10',
+        iconColor: 'text-sky-400',
+        ring: 'border-sky-500/25',
+    },
+    warning: {
+        icon: AlertTriangle,
+        accent: 'from-rose-500 to-orange-500',
+        iconBg: 'bg-rose-500/10',
+        iconColor: 'text-rose-400',
+        ring: 'border-rose-500/25',
+    },
+};
+
+// Delay between one notice appearing and the next entering the queue (ms).
+const STAGGER_MS = 900;
+
+// Key sessionStorage untuk menyimpan id notice yang sudah ditutup user (per sesi).
+const DISMISSED_KEY = 'cctv-notices-dismissed';
+
+export default function CctvNotices({ sharedMode = false, hidden = false }: CctvNoticesProps) {
+    const [config, setConfig] = useState<NoticeConfig | null>(null);
+    // Ids currently visible on screen, in display order.
+    const [visibleIds, setVisibleIds] = useState<string[]>([]);
+    // Notice yang sudah ditutup user — persisten per sesi browser (sessionStorage)
+    // supaya tidak muncul lagi tiap kembali ke /map, tapi tetap tampil lagi di
+    // sesi baru (mis. setelah tutup tab/browser).
+    const [dismissed, setDismissed] = useState<Set<string>>(() => {
+        if (typeof window === 'undefined') return new Set();
+        try {
+            const raw = sessionStorage.getItem(DISMISSED_KEY);
+            return new Set<string>(raw ? JSON.parse(raw) : []);
+        } catch { return new Set(); }
+    });
+    const timersRef = useRef<NodeJS.Timeout[]>([]);
+
+    const persistDismissed = useCallback((set: Set<string>) => {
+        try { sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...set])); } catch { /* ignore */ }
+    }, []);
+
+    // Fetch config once on mount.
+    useEffect(() => {
+        let active = true;
+        fetch('/api/settings/notifications')
+            .then(res => res.json())
+            .then(json => {
+                if (!active || !json?.success) return;
+                setConfig(json.data);
+            })
+            .catch(() => { /* silent — notices are non-critical */ });
+        return () => { active = false; };
+    }, []);
+
+    const activeNotices = (config?.enabled ? config.notices : []).filter(n => n.enabled);
+
+    // Reveal notices one-by-one with a stagger once config is loaded.
+    useEffect(() => {
+        // clear any pending timers on re-run
+        timersRef.current.forEach(clearTimeout);
+        timersRef.current = [];
+        setVisibleIds([]);
+
+        if (activeNotices.length === 0) return;
+
+        // Hanya reveal notice yang BELUM pernah ditutup di sesi ini.
+        activeNotices
+            .filter(notice => !dismissed.has(notice.id))
+            .forEach((notice, i) => {
+                const t = setTimeout(() => {
+                    setVisibleIds(prev => (prev.includes(notice.id) ? prev : [...prev, notice.id]));
+                }, i * STAGGER_MS);
+                timersRef.current.push(t);
+            });
+
+        return () => {
+            timersRef.current.forEach(clearTimeout);
+            timersRef.current = [];
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [config]);
+
+    const dismiss = useCallback((id: string) => {
+        setDismissed(prev => {
+            const next = new Set(prev).add(id);
+            persistDismissed(next);
+            return next;
+        });
+    }, [persistDismissed]);
+
+    const reopenAll = useCallback(() => {
+        setDismissed(new Set());
+        persistDismissed(new Set());
+        // Re-run the staggered reveal.
+        setVisibleIds([]);
+        timersRef.current.forEach(clearTimeout);
+        timersRef.current = [];
+        activeNotices.forEach((notice, i) => {
+            const t = setTimeout(() => {
+                setVisibleIds(prev => (prev.includes(notice.id) ? prev : [...prev, notice.id]));
+            }, i * STAGGER_MS);
+            timersRef.current.push(t);
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeNotices, persistDismissed]);
+
+    if (activeNotices.length === 0) return null;
+    // Saat panel kamera (sidebar) terbuka, sembunyikan total — kartu & bell —
+    // agar tidak menimpa panel di semua ukuran layar.
+    if (hidden) return null;
+
+    const shown = activeNotices.filter(n => visibleIds.includes(n.id) && !dismissed.has(n.id));
+    const allClosed = activeNotices.every(n => dismissed.has(n.id));
+    const autoDismissSec = config?.autoDismissSec ?? 0;
+
+    return (
+        <>
+            <div
+                className={`fixed z-[2000] gap-2.5 pointer-events-none flex ${
+                    sharedMode ? 'bottom-6 left-4 flex-col-reverse' : 'top-[184px] sm:top-[204px] left-2 sm:left-6 flex-col'
+                }`}
+            >
+                <AnimatePresence>
+                    {shown.map((notice) => (
+                        <NoticeCard
+                            key={notice.id}
+                            notice={notice}
+                            autoDismissSec={autoDismissSec}
+                            onDismiss={() => dismiss(notice.id)}
+                        />
+                    ))}
+                </AnimatePresence>
+            </div>
+
+            {/* Re-open button when everything is closed */}
+            <AnimatePresence>
+                {allClosed && (
+                    <motion.button
+                        initial={{ opacity: 0, scale: 0.5, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.5, y: 10 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                        onClick={reopenAll}
+                        className={`fixed z-[1900] flex items-center justify-center p-3 sm:p-3.5 rounded-2xl bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl text-yellow-500 hover:bg-white dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group ${
+                            sharedMode ? 'bottom-6 left-4' : 'top-[184px] sm:top-[204px] left-2 sm:left-6'
+                        }`}
+                        title="Tampilkan informasi"
+                    >
+                        <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    </motion.button>
+                )}
+            </AnimatePresence>
+        </>
+    );
+}
+
+function NoticeCard({
+    notice,
+    autoDismissSec,
+    onDismiss,
+}: {
+    notice: Notice;
+    autoDismissSec: number;
+    onDismiss: () => void;
+}) {
+    const style = TYPE_STYLES[notice.type] || TYPE_STYLES.info;
+    const Icon = style.icon;
+    const [paused, setPaused] = useState(false);
+
+    // Keep the latest onDismiss in a ref so the auto-dismiss timer does NOT
+    // reset every time the parent re-renders (which passes a new inline
+    // onDismiss). On the busy map page re-renders were resetting the timer
+    // before it could fire, so notices never auto-closed.
+    const onDismissRef = useRef(onDismiss);
+    useEffect(() => { onDismissRef.current = onDismiss; }, [onDismiss]);
+
+    // Auto-dismiss timer (pauses on hover so users can finish reading).
+    useEffect(() => {
+        if (!autoDismissSec || autoDismissSec <= 0 || paused) return;
+        const t = setTimeout(() => onDismissRef.current(), autoDismissSec * 1000);
+        return () => clearTimeout(t);
+    }, [autoDismissSec, paused]);
+
+    return (
+        <motion.div
+            layout
+            initial={{ opacity: 0, y: 20, scale: 0.95, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, x: -24, scale: 0.95, filter: 'blur(4px)', transition: { duration: 0.2 } }}
+            transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            className={`relative w-[min(380px,calc(100vw-2rem))] overflow-hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border ${style.ring} shadow-2xl rounded-2xl pointer-events-auto ring-1 ring-black/5 dark:ring-white/5`}
+        >
+            {/* Accent bar */}
+            <div className={`absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b ${style.accent}`} />
+
+            <div className="flex gap-3.5 items-start p-4 pl-5">
+                <div className={`p-2 ${style.iconBg} rounded-xl shrink-0`}>
+                    <Icon className={`w-5 h-5 ${style.iconColor}`} />
+                </div>
+                <div className="flex-1 mt-0.5 pr-6">
+                    {notice.title && (
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide">{notice.title}</h4>
+                    )}
+                    <p className={`text-xs text-slate-600 dark:text-slate-400 leading-relaxed ${notice.title ? 'mt-1' : ''}`}>
+                        {notice.message}
+                    </p>
+                </div>
+                <button
+                    onClick={onDismiss}
+                    className="absolute top-3 right-3 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-white p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto"
+                    title="Tutup"
+                >
+                    <CloseIcon className="w-4 h-4" />
+                </button>
+            </div>
+
+            {/* Auto-dismiss progress bar */}
+            {autoDismissSec > 0 && (
+                <motion.div
+                    className={`h-0.5 bg-gradient-to-r ${style.accent} origin-left`}
+                    initial={{ scaleX: 1 }}
+                    animate={{ scaleX: paused ? 1 : 0 }}
+                    transition={{ duration: paused ? 0 : autoDismissSec, ease: 'linear' }}
+                />
+            )}
+        </motion.div>
+    );
+}

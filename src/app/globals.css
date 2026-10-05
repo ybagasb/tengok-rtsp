@@ -1,7 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* Tailwind v4: aktifkan dark mode berbasis class <html class="dark">.
+   Default (tanpa .dark) = tema terang. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Variabel permukaan tema — dipakai body & elemen dasar. Nilai di-flip oleh
+   kelas .dark / .light pada <html>. */
 :root {
+  --background: #0f172a;
+  --foreground: #f8fafc;
+}
+:root.light {
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+}
+:root.dark {
   --background: #0f172a;
   --foreground: #f8fafc;
 }

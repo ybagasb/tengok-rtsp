@@ -24,6 +24,7 @@ export function middleware(request: NextRequest) {
         pathname.startsWith('/api/auth') ||         // NextAuth & PIN auth endpoints
         pathname.startsWith('/api/share-links/verify') || // Public share link verification
         pathname.startsWith('/api/stats/track') ||  // Public analytics tracking
+        (pathname === '/api/settings/notifications' && request.method === 'GET') || // Public read of notice config (shared view)
         pathname.startsWith('/static') ||
         pathname.startsWith('/shared') ||       // Shared CCTV links (public, token-verified in page)
         pathname === '/login' ||

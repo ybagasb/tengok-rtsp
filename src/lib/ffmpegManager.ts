@@ -5,10 +5,15 @@ import path from 'path';
 interface StreamSession {
     process: ChildProcess;
     lastHeartbeat: number;
+    lastError?: string;
+    exitCode?: number | null;
 }
 
 class FfmpegManager {
     private streams: Map<string, StreamSession> = new Map();
+    // Tracks in-flight startStream() calls so concurrent requests for the same
+    // camera share a single ffmpeg spawn instead of racing to spawn duplicates.
+    private starting: Map<string, Promise<string>> = new Map();
     private streamsDir: string;
     private maxIdleTimeMs = 300000; // 5 minutes (menghindari browser throttling)
 
@@ -17,17 +22,36 @@ class FfmpegManager {
         if (!fs.existsSync(this.streamsDir)) {
             fs.mkdirSync(this.streamsDir, { recursive: true });
         }
+        // Sweep leftover stream directories from a previous process/crash.
+        // At construction there are no active sessions, so every subdir is stale.
+        this.sweepStaleDirs();
         setInterval(() => this.cleanupIdleStreams(), 15000);
     }
 
-    private async waitForFile(filePath: string, timeoutMs: number = 15000, processObject?: ChildProcess): Promise<void> {
+    /** Remove per-camera output dirs that have no active session (startup cleanup). */
+    private sweepStaleDirs() {
+        try {
+            const entries = fs.readdirSync(this.streamsDir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (!entry.isDirectory()) continue;
+                if (this.streams.has(entry.name)) continue; // active — keep
+                const dir = path.join(this.streamsDir, entry.name);
+                try {
+                    fs.rmSync(dir, { recursive: true, force: true });
+                } catch { /* best-effort */ }
+            }
+        } catch { /* streamsDir may be empty or unreadable — ignore */ }
+    }
+
+    private async waitForFile(filePath: string, timeoutMs: number = 15000, cameraId?: string, processObject?: ChildProcess): Promise<void> {
         return new Promise((resolve, reject) => {
             if (fs.existsSync(filePath)) return resolve();
-            
+
             let isExited = false;
+            let exitCode: number | null = null;
             if (processObject) {
-                processObject.once('close', () => { isExited = true; });
-                processObject.once('exit', () => { isExited = true; });
+                processObject.once('exit', (code) => { isExited = true; exitCode = code; });
+                processObject.once('close', (code) => { isExited = true; if (exitCode === null) exitCode = code; });
             }
 
             const startTime = Date.now();
@@ -37,7 +61,9 @@ class FfmpegManager {
                     resolve();
                 } else if (isExited) {
                     clearInterval(interval);
-                    reject(new Error(`FFmpeg process exited before stream started`));
+                    const detail = cameraId ? this.streams.get(cameraId)?.lastError : undefined;
+                    const reason = detail ? ` (ffmpeg: ${detail})` : '';
+                    reject(new Error(`FFmpeg process exited (code ${exitCode}) before stream started${reason}`));
                 } else if (Date.now() - startTime > timeoutMs) {
                     clearInterval(interval);
                     reject(new Error(`Timeout waiting for stream file`));
@@ -53,15 +79,35 @@ class FfmpegManager {
 
     public async startStream(cameraId: string, rtspUrl: string): Promise<string> {
         const streamPath = `/api/stream-file/${cameraId}/index.m3u8`;
-        const outDir = path.join(this.streamsDir, cameraId);
-        const m3u8Path = path.join(outDir, 'index.m3u8');
+        const m3u8Path = path.join(this.streamsDir, cameraId, 'index.m3u8');
 
+        // Fast path: stream already running → just refresh heartbeat and wait.
         if (this.streams.has(cameraId)) {
             this.heartbeat(cameraId);
             console.log(`[FFmpegManager] Stream ${cameraId} already running.`);
-            await this.waitForFile(m3u8Path, 15000, this.streams.get(cameraId)?.process);
+            await this.waitForFile(m3u8Path, 15000, cameraId, this.streams.get(cameraId)?.process);
             return streamPath;
         }
+
+        // Dedupe concurrent first-time starts: if a spawn is already in flight
+        // for this camera, reuse its promise instead of spawning a second ffmpeg.
+        const inFlight = this.starting.get(cameraId);
+        if (inFlight) {
+            console.log(`[FFmpegManager] Start already in flight for ${cameraId}, reusing.`);
+            return inFlight;
+        }
+
+        const promise = this._startStream(cameraId, rtspUrl).finally(() => {
+            this.starting.delete(cameraId);
+        });
+        this.starting.set(cameraId, promise);
+        return promise;
+    }
+
+    private async _startStream(cameraId: string, rtspUrl: string): Promise<string> {
+        const streamPath = `/api/stream-file/${cameraId}/index.m3u8`;
+        const outDir = path.join(this.streamsDir, cameraId);
+        const m3u8Path = path.join(outDir, 'index.m3u8');
 
         // Wipe stale data
         if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
@@ -103,9 +149,14 @@ class FfmpegManager {
         ]);
 
         // Log ALL FFmpeg output (stderr = progress/info, stdout = usually empty)
+        // Keep the most recent stderr line so we can surface WHY ffmpeg died.
         ffmpeg.stderr?.on('data', (data: Buffer) => {
             const line = data.toString().trim();
-            if (line) console.log(`[FFmpeg] ${line}`);
+            if (line) {
+                console.log(`[FFmpeg] ${line}`);
+                const session = this.streams.get(cameraId);
+                if (session) session.lastError = line;
+            }
         });
 
         ffmpeg.on('close', (code: number | null) => {
@@ -121,7 +172,7 @@ class FfmpegManager {
         this.streams.set(cameraId, { process: ffmpeg, lastHeartbeat: Date.now() });
 
         try {
-            await this.waitForFile(m3u8Path, 15000, ffmpeg);
+            await this.waitForFile(m3u8Path, 15000, cameraId, ffmpeg);
             console.log(`[FFmpegManager] Stream ${cameraId} READY → ${streamPath}`);
             return streamPath;
         } catch (e: any) {
@@ -174,6 +225,11 @@ class FfmpegManager {
     }
 }
 
+// Durable singleton across module reloads and route bundles — in BOTH dev and
+// production. Storing on `global` unconditionally is essential: otherwise each
+// bundle that imports this module gets its own `streams` map, so stop/heartbeat/
+// isStreaming can't see processes started elsewhere, spawning orphan ffmpeg
+// processes that can never be reaped. (Matches cameraStatusChecker/Emitter.)
 const globalForFfmpeg = global as unknown as { ffmpegManager: FfmpegManager | undefined };
 export const ffmpegManager = globalForFfmpeg.ffmpegManager || new FfmpegManager();
-if (process.env.NODE_ENV !== 'production') globalForFfmpeg.ffmpegManager = ffmpegManager;
+globalForFfmpeg.ffmpegManager = ffmpegManager;

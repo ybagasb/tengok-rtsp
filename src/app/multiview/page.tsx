@@ -1,84 +1,154 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
     ArrowLeft,
     LayoutGrid,
     Search,
     CheckSquare,
     Square,
-    Loader2,
     PanelLeftOpen,
     PanelLeftClose,
-    Signal,
+    Filter,
+    Globe,
+    FolderTree,
+    Layers,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import OptimizedVideoPlayer from '@/components/OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
 import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
+import BrandLoader from '@/components/BrandLoader';
 
 interface Location {
     _id: string;
     name: string;
     category: string;
+    division?: string;
     cameras: any[];
 }
 
-export default function MultiViewPage() {
+// Scope of locations shown in the sidebar:
+// - 'context':  only the division + category of the project the user came from (DEFAULT)
+// - 'division': every category within the opened division (lintas kategori)
+// - 'all':      every Brantas Abipraya project, lintas divisi
+type FilterMode = 'context' | 'division' | 'all';
+
+function MultiViewContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const streamManager = useStreamManager();
+
+    // Context passed from the map ("the project the user has open").
+    const contextDivision = searchParams.get('division') || '';
+    const contextCategory = searchParams.get('category') || '';
+    const hasCategory = Boolean(contextCategory);
+    const hasDivision = Boolean(contextDivision);
+    const hasContext = hasCategory || hasDivision;
+
     const [locations, setLocations] = useState<Location[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    // Default follows the opened project's context: category if present,
+    // else the division, else everything (page opened without any context).
+    const [filterMode, setFilterMode] = useState<FilterMode>(
+        hasCategory ? 'context' : hasDivision ? 'division' : 'all'
+    );
     const { realtimeStatuses: realtimeStatus, setRealtimeStatuses: setRealtimeStatus } = useCameraStatusSSE();
 
+    // Guards so we only auto-select the context locations ONCE (on first load),
+    // and don't clobber the user's manual selection on the 30s refetch.
+    const didAutoSelect = useRef(false);
+
+    // Build the locations query from the active filter mode. In 'context' mode
+    // we scope the fetch to the opened division/category; in 'all' mode we fetch
+    // everything. The query string is also used as an effect dependency so the
+    // refetch interval and mode switches re-run cleanly.
+    const query = useMemo(() => {
+        const p = new URLSearchParams();
+        if (filterMode === 'context') {
+            if (contextDivision) p.set('division', contextDivision);
+            if (contextCategory) p.set('category', contextCategory);
+        } else if (filterMode === 'division') {
+            // Semua kategori dalam divisi yang dibuka (lintas kategori).
+            if (contextDivision) p.set('division', contextDivision);
+        }
+        // 'all' → no filter (lintas divisi).
+        return p.toString();
+    }, [filterMode, contextDivision, contextCategory]);
+
     useEffect(() => {
+        let cancelled = false;
         const fetchLocations = async () => {
             try {
-                const res = await axios.get('/api/locations');
-                if (res.data.success) {
+                const res = await axios.get(`/api/locations${query ? `?${query}` : ''}`);
+                if (!cancelled && res.data.success) {
                     setLocations(res.data.data);
                 }
             } catch (error) {
                 console.error("Failed to fetch locations", error);
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
         fetchLocations();
 
         const intervalId = setInterval(fetchLocations, 30000);
-        return () => clearInterval(intervalId);
-    }, []);
-
-    const filteredLocations = useMemo(() => {
-        return locations.filter(loc =>
-            loc.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            loc.category?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-    }, [locations, searchQuery]);
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+    }, [query]);
 
     const MAX_CAMERAS = 9; // Server load safety limit for multi-view
+
+    // Auto-select locations once they load, so opening multiview from a project
+    // immediately shows cameras (capped at the limit). Runs on first load in the
+    // context-derived scopes ('context'/'division'); 'all' never auto-selects.
+    useEffect(() => {
+        if (didAutoSelect.current) return;
+        if (loading || locations.length === 0) return;
+        if (filterMode !== 'all') {
+            const ids: string[] = [];
+            let camCount = 0;
+            for (const loc of locations) {
+                const n = loc.cameras?.length || 0;
+                if (n === 0) continue;
+                if (camCount + n > MAX_CAMERAS) break;
+                ids.push(loc._id);
+                camCount += n;
+            }
+            setSelectedLocationIds(ids);
+        }
+        didAutoSelect.current = true;
+    }, [loading, locations, filterMode]);
+
+    const switchFilterMode = (mode: FilterMode) => {
+        if (mode === filterMode) return;
+        setFilterMode(mode);
+        // Switching scope resets the selection; allow the auto-select to run
+        // again for the context-derived scopes.
+        setSelectedLocationIds([]);
+        setSearchQuery('');
+        didAutoSelect.current = mode === 'all'; // 'all' never auto-selects
+    };
+
+    const filteredLocations = useMemo(() => {
+        const q = searchQuery.toLowerCase();
+        return locations.filter(loc =>
+            loc.name?.toLowerCase().includes(q) ||
+            loc.category?.toLowerCase().includes(q)
+        );
+    }, [locations, searchQuery]);
 
     const toggleLocation = (id: string) => {
         setSelectedLocationIds(prev => {
             if (prev.includes(id)) {
                 return prev.filter(item => item !== id);
-            }
-            // Check if adding this location would exceed the camera limit
-            const loc = locations.find(l => l._id === id);
-            const wouldAdd = loc?.cameras?.length || 0;
-            const currentCount = prev.reduce((acc, locId) => {
-                const l = locations.find(ll => ll._id === locId);
-                return acc + (l?.cameras?.length || 0);
-            }, 0);
-            if (currentCount + wouldAdd > MAX_CAMERAS) {
-                // Allow adding but show a warning — cameras will be capped in the grid
-                return [...prev, id];
             }
             return [...prev, id];
         });
@@ -103,7 +173,18 @@ export default function MultiViewPage() {
         });
         // Cap at MAX_CAMERAS to prevent server overload
         return cameras.slice(0, MAX_CAMERAS);
-    }, [locations, selectedLocationIds, MAX_CAMERAS]);
+    }, [locations, selectedLocationIds]);
+
+    // Display order: online cameras first, offline pushed to the bottom.
+    // Combined with a STABLE key ({cam._id}), React moves the existing DOM node
+    // instead of remounting — so re-sorting does NOT restart any live stream.
+    const orderedCameras = useMemo(() => {
+        return [...selectedCameras].sort((a, b) => {
+            const aOnline = (realtimeStatus[a._id] || a.status) === 'online' ? 0 : 1;
+            const bOnline = (realtimeStatus[b._id] || b.status) === 'online' ? 0 : 1;
+            return aOnline - bOnline;
+        });
+    }, [selectedCameras, realtimeStatus]);
 
     const totalSelectedCameras = useMemo(() => {
         return locations.reduce((acc, loc) => {
@@ -113,6 +194,26 @@ export default function MultiViewPage() {
             return acc;
         }, 0);
     }, [locations, selectedLocationIds]);
+
+    // Stable key of the selected camera id set — used so the prewarm effect
+    // fires when the selection changes, not on every SSE status tick.
+    const selectedCameraKey = useMemo(
+        () => selectedCameras.map(c => c._id).join(','),
+        [selectedCameras]
+    );
+
+    // Pre-warm the online cameras that are about to be rendered so their HLS
+    // segments are ready as the grid mounts. The players start streams on
+    // render anyway; prewarm just gives ffmpeg a small head-start. Dedup-safe
+    // (ffmpegManager reuses in-flight starts), so overlap is harmless.
+    useEffect(() => {
+        const onlineIds = selectedCameras
+            .filter(cam => (realtimeStatus[cam._id] || cam.status) === 'online')
+            .map(cam => cam._id);
+        if (onlineIds.length === 0) return;
+        axios.post('/api/streams/prewarm', { cameraIds: onlineIds }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedCameraKey]);
 
     // Calculate grid columns
     const gridCols = useMemo(() => {
@@ -129,15 +230,18 @@ export default function MultiViewPage() {
         return selectedCameras.filter(cam => (realtimeStatus[cam._id] || cam.status) === 'online').length;
     }, [selectedCameras, realtimeStatus]);
 
+    // Human-readable label for the current scope.
+    const scopeLabel = useMemo(() => {
+        if (filterMode === 'all') return 'Semua Proyek';
+        if (filterMode === 'division') return contextDivision || 'Satu Divisi';
+        const parts: string[] = [];
+        if (contextDivision) parts.push(contextDivision);
+        if (contextCategory) parts.push(contextCategory);
+        return parts.length ? parts.join(' • ') : 'Semua Proyek';
+    }, [filterMode, contextDivision, contextCategory]);
+
     if (loading) {
-        return (
-            <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="w-12 h-12 text-yellow-500 animate-spin" />
-                    <p className="text-slate-400 font-bold uppercase tracking-wider text-sm">Initializing Multi-View...</p>
-                </div>
-            </div>
-        );
+        return <BrandLoader label="Memuat Multi-View" />;
     }
 
     return (
@@ -182,6 +286,62 @@ export default function MultiViewPage() {
                                         </button>
                                     </div>
 
+                                    {/* Scope filter: ikuti proyek yang dibuka vs semua proyek */}
+                                    <div className="mb-4">
+                                        <div className="flex items-center gap-2 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                            <Filter className="w-3.5 h-3.5" />
+                                            Tampilkan
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            {/* 1. Kategori ini (divisi + kategori yang dibuka) */}
+                                            <button
+                                                onClick={() => switchFilterMode('context')}
+                                                disabled={!hasCategory}
+                                                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                    filterMode === 'context'
+                                                        ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-400'
+                                                        : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                                                } ${!hasCategory ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                                title={hasCategory ? 'Hanya kategori yang dibuka' : 'Tidak ada kategori konteks'}
+                                            >
+                                                <FolderTree className="w-3.5 h-3.5 shrink-0" />
+                                                <span className="truncate">Kategori Ini</span>
+                                            </button>
+                                            {/* 2. Satu divisi (semua kategori dalam divisi) */}
+                                            <button
+                                                onClick={() => switchFilterMode('division')}
+                                                disabled={!hasDivision}
+                                                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                    filterMode === 'division'
+                                                        ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-400'
+                                                        : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                                                } ${!hasDivision ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                                title={hasDivision ? `Semua kategori di ${contextDivision}` : 'Tidak ada divisi konteks'}
+                                            >
+                                                <Layers className="w-3.5 h-3.5 shrink-0" />
+                                                <span className="truncate">Satu Divisi</span>
+                                            </button>
+                                            {/* 3. Semua proyek (lintas divisi) */}
+                                            <button
+                                                onClick={() => switchFilterMode('all')}
+                                                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                    filterMode === 'all'
+                                                        ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-400'
+                                                        : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                                                }`}
+                                                title="Semua proyek Brantas Abipraya (lintas divisi)"
+                                            >
+                                                <Globe className="w-3.5 h-3.5 shrink-0" />
+                                                <span className="truncate">Semua Proyek</span>
+                                            </button>
+                                        </div>
+                                        {filterMode !== 'all' && hasContext && (
+                                            <p className="mt-2 text-[10px] text-slate-500 font-medium truncate">
+                                                {scopeLabel}
+                                            </p>
+                                        )}
+                                    </div>
+
                                     <div className="relative group">
                                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-yellow-500 transition-colors" />
                                         <input
@@ -196,7 +356,11 @@ export default function MultiViewPage() {
 
                                 {/* Location List */}
                                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
-                                    {filteredLocations.map(loc => {
+                                    {filteredLocations.length === 0 ? (
+                                        <div className="py-12 text-center text-slate-600 text-xs font-bold uppercase tracking-wider">
+                                            Tidak ada lokasi
+                                        </div>
+                                    ) : filteredLocations.map(loc => {
                                         const isSelected = selectedLocationIds.includes(loc._id);
                                         return (
                                             <button
@@ -261,6 +425,8 @@ export default function MultiViewPage() {
                                 <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
                                     <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                     <span className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider">{activeStreamCount} Active</span>
+                                    <span className="text-[8px] sm:text-[10px] text-slate-600">•</span>
+                                    <span className="text-[8px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-wider truncate max-w-[120px] sm:max-w-[200px]">{scopeLabel}</span>
                                 </div>
                             </div>
                         </div>
@@ -292,38 +458,43 @@ export default function MultiViewPage() {
                                 )}
                                 <motion.div
                                 layout
-                                className={`grid ${gridCols} ${selectedCameras.length > 9 ? 'gap-3' : 'gap-6'} auto-rows-fr`}
+                                className={`grid ${gridCols} ${selectedCameras.length > 9 ? 'gap-3' : 'gap-5'} auto-rows-fr`}
                             >
-                                {selectedCameras.map((cam, idx) => (
+                                {orderedCameras.map((cam) => {
+                                    const isOnline = (realtimeStatus[cam._id] || cam.status) === 'online';
+                                    return (
                                     <motion.div
-                                        key={`${cam._id}-${idx}`}
-                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        // STABLE key (no index) so re-sorting/adding locations moves the
+                                        // node instead of remounting the player (which would restart the stream).
+                                        key={cam._id}
+                                        layout
+                                        initial={{ opacity: 0, scale: 0.96 }}
                                         animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.9 }}
-                                        transition={{ duration: 0.3 }}
-                                        className="relative aspect-video bg-black rounded-3xl overflow-hidden border border-white/10 shadow-2xl group ring-1 ring-white/5 hover:border-white/20 hover:shadow-white/10 hover:-translate-y-1 transition-all duration-500"
+                                        exit={{ opacity: 0, scale: 0.96 }}
+                                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                                        className={`relative aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group ring-1 transition-all duration-500 hover:-translate-y-1 ${
+                                            isOnline
+                                                ? 'ring-emerald-500/20 border border-emerald-500/20 hover:ring-emerald-500/40'
+                                                : 'ring-rose-500/20 border border-rose-500/20'
+                                        }`}
                                     >
-                                        {/* Camera Info Overlay */}
-                                        <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 via-black/20 to-transparent flex justify-between items-start opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-[10px] font-bold text-white uppercase tracking-wider drop-shadow-md">
-                                                    {cam.locationName}
-                                                </span>
-                                                <span className="text-[12px] font-bold text-slate-300 uppercase tracking-tight leading-none">
+                                        {/* Persistent bottom label bar (always readable) */}
+                                        <div className="absolute bottom-0 left-0 right-0 z-10 px-3 py-2 bg-gradient-to-t from-black/85 via-black/40 to-transparent flex items-end justify-between gap-2 pointer-events-none">
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="text-[11px] font-bold text-white uppercase tracking-tight truncate leading-tight drop-shadow-md">
                                                     {cam.name}
                                                 </span>
+                                                <span className="text-[9px] font-semibold text-slate-300/80 uppercase tracking-wider truncate">
+                                                    {cam.locationName}
+                                                </span>
                                             </div>
-                                            <div className="flex flex-col items-end gap-1.5">
-                                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl backdrop-blur-md border ${(realtimeStatus[cam._id] || cam.status) === 'online'
-                                                    ? 'bg-emerald-900/40 border-emerald-500/30'
-                                                    : 'bg-rose-900/40 border-rose-500/30'
-                                                    }`}>
-                                                    <div className={`w-1.5 h-1.5 rounded-full ${(realtimeStatus[cam._id] || cam.status) === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
-                                                        }`} />
-                                                    <span className="text-[9px] font-bold text-white uppercase tracking-wider">
-                                                        {(realtimeStatus[cam._id] || cam.status) === 'online' ? 'Live' : 'Offline'}
-                                                    </span>
-                                                </div>
+                                            <div className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg backdrop-blur-md border ${
+                                                isOnline ? 'bg-emerald-900/50 border-emerald-500/40' : 'bg-rose-900/50 border-rose-500/40'
+                                            }`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+                                                <span className="text-[8px] font-bold text-white uppercase tracking-wider">
+                                                    {isOnline ? 'Live' : 'Offline'}
+                                                </span>
                                             </div>
                                         </div>
 
@@ -334,7 +505,8 @@ export default function MultiViewPage() {
                                             onStatusChange={(status) => setRealtimeStatus(prev => ({ ...prev, [cam._id]: status }))}
                                         />
                                     </motion.div>
-                                ))}
+                                    );
+                                })}
                             </motion.div>
                             </>
                         ) : (
@@ -365,5 +537,13 @@ export default function MultiViewPage() {
                 </div>
             </main>
         </div>
+    );
+}
+
+export default function MultiViewPage() {
+    return (
+        <Suspense fallback={<BrandLoader label="Memuat Multi-View" />}>
+            <MultiViewContent />
+        </Suspense>
     );
 }

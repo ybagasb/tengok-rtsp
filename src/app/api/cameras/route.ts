@@ -11,9 +11,15 @@ export async function GET(req: NextRequest) {
 
     await dbConnect();
     try {
-        const cameras = await Camera.find({})
-            .sort({ createdAt: -1 })
-            .lean();
+        // streamUrl embeds RTSP credentials, so it is stripped by default and
+        // only returned when explicitly requested (admin management screens).
+        // TODO: gate `includeStreamUrl` behind a real admin role once one exists.
+        const includeStreamUrl = req.nextUrl.searchParams.get('includeStreamUrl') === '1';
+
+        const query = Camera.find({}).sort({ createdAt: -1 });
+        if (!includeStreamUrl) query.select('-streamUrl');
+
+        const cameras = await query.lean();
         return NextResponse.json({ success: true, data: cameras });
     } catch (error) {
         return NextResponse.json({ success: false, error: 'Failed to fetch cameras' }, { status: 500 });

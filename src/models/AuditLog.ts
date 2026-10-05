@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE';
-export type AuditEntity = 'Camera' | 'Location' | 'Category' | 'ShareLink';
+export type AuditEntity = 'Camera' | 'Location' | 'Category' | 'ShareLink' | 'Settings' | 'Project';
 
 export interface IAuditLogData {
     _id?: string;
@@ -18,7 +18,7 @@ export interface IAuditLog extends Document, Omit<IAuditLogData, '_id'> {}
 
 const AuditLogSchema: Schema = new Schema({
     action:     { type: String, enum: ['CREATE', 'UPDATE', 'DELETE'], required: true },
-    entity:     { type: String, enum: ['Camera', 'Location', 'Category', 'ShareLink'], required: true },
+    entity:     { type: String, enum: ['Camera', 'Location', 'Category', 'ShareLink', 'Settings', 'Project'], required: true },
     entityId:   { type: String, required: true },
     entityName: { type: String, required: true },
     by:         { type: String, required: true },

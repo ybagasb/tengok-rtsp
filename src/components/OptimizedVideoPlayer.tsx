@@ -27,6 +27,10 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
     const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
     const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
     const retryCountRef = useRef(0);
+    const playingListenerRef = useRef<(() => void) | null>(null);
+    const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const lastTimeRef = useRef(0);
+    const stallCountRef = useRef(0);
 
     const [isLoading, setIsLoading] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -164,15 +168,71 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
         }
     }, []);
 
+    const stopStallWatch = useCallback(() => {
+        if (stallTimerRef.current) {
+            clearInterval(stallTimerRef.current);
+            stallTimerRef.current = null;
+        }
+    }, []);
+
+    // Watchdog for frozen live streams: if the video's currentTime stops
+    // advancing for ~6s while it should be playing, nudge HLS.js to reload the
+    // live edge. Fixes cameras that freeze then silently stay stuck.
+    const startStallWatch = useCallback(() => {
+        stopStallWatch();
+        lastTimeRef.current = videoRef.current?.currentTime ?? 0;
+        stallCountRef.current = 0;
+        stallTimerRef.current = setInterval(() => {
+            const video = videoRef.current;
+            const hls = hlsRef.current;
+            if (!video || !hls) return;
+            // Only care when we intend to be playing and aren't buffering by design.
+            if (video.paused || video.ended) return;
+
+            const t = video.currentTime;
+            if (t > lastTimeRef.current + 0.1) {
+                // Progressing normally.
+                lastTimeRef.current = t;
+                stallCountRef.current = 0;
+                return;
+            }
+
+            // No progress this tick.
+            stallCountRef.current += 1;
+            if (stallCountRef.current >= 2) {
+                // ~6s frozen → try to recover the live edge.
+                console.warn(`[Player] Stall detected for ${cameraId}, recovering...`);
+                stallCountRef.current = 0;
+                try {
+                    hls.startLoad();          // resume/refetch playlist
+                    video.play().catch(() => {});
+                    // If the buffer is stuck, jump to the live edge.
+                    if (hls.liveSyncPosition != null && Number.isFinite(hls.liveSyncPosition)) {
+                        video.currentTime = hls.liveSyncPosition;
+                    }
+                } catch {
+                    try { hls.recoverMediaError(); } catch { /* ignore */ }
+                }
+            }
+        }, 3000);
+    }, [cameraId, stopStallWatch]);
+
     const destroyPlayer = useCallback(async (stopServer = true) => {
         stopHeartbeat();
         stopRetry();
+        stopStallWatch();
 
         if (hlsRef.current) {
             hlsRef.current.destroy();
             hlsRef.current = null;
         }
         if (videoRef.current) {
+            // Detach the native playback listeners added in initPlayer.
+            if (playingListenerRef.current) {
+                videoRef.current.removeEventListener('playing', playingListenerRef.current);
+                videoRef.current.removeEventListener('loadeddata', playingListenerRef.current);
+                playingListenerRef.current = null;
+            }
             videoRef.current.pause();
             videoRef.current.removeAttribute('src');
             videoRef.current.load();
@@ -190,7 +250,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                 });
             } catch { /* ignore stop errors */ }
         }
-    }, [cameraId, stopHeartbeat, stopRetry]);
+    }, [cameraId, stopHeartbeat, stopRetry, stopStallWatch]);
 
     const scheduleRetry = useCallback((attempt: number) => {
         const delay = getBackoffDelay(attempt);
@@ -235,6 +295,32 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                     body: JSON.stringify({ cameraId }),
                 }).catch(() => {});
             }, 10000);
+
+            // Safety net: the loading overlay must clear the moment the <video>
+            // element actually starts rendering frames, regardless of which HLS
+            // event fired. MANIFEST_PARSED can be missed (attach race) even
+            // though playback succeeds — that left the "Menghubungkan..." overlay
+            // stuck on top of a playing video. Native `playing`/`loadeddata` are
+            // the ground truth for "it's actually playing now".
+            const markPlaying = () => {
+                retryCountRef.current = 0;
+                setRetryAttempt(0);
+                setIsPlaying(true);
+                setIsLoading(false);
+                setError(null);
+                onStatusChange?.('online');
+                startStallWatch();
+            };
+            const video = videoRef.current;
+            // Detach any listener from a previous init to avoid stacking on retry.
+            if (playingListenerRef.current) {
+                video.removeEventListener('playing', playingListenerRef.current);
+                video.removeEventListener('loadeddata', playingListenerRef.current);
+            }
+            video.addEventListener('playing', markPlaying);
+            video.addEventListener('loadeddata', markPlaying);
+            // Remember to detach these when we tear down (see destroyPlayer).
+            playingListenerRef.current = markPlaying;
 
             // Setup HLS.js player
             if (Hls.isSupported()) {
@@ -308,7 +394,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                 onStatusChange?.('offline');
             }
         }
-    }, [cameraId, destroyPlayer, onStatusChange, stopHeartbeat, scheduleRetry]);
+    }, [cameraId, destroyPlayer, onStatusChange, stopHeartbeat, scheduleRetry, startStallWatch]);
 
     // Stream lifecycle: start on mount, destroy on unmount.
     // StreamManager still enforces MAX_STREAMS limit if needed.

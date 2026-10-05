@@ -22,7 +22,13 @@ export function useCameraStatusSSE() {
                         return { ...prev, [data.cameraId]: data.status };
                     });
                     if (data.lastCheckedAt) {
-                        setLastCheckedTimes(prev => ({ ...prev, [data.cameraId]: data.lastCheckedAt }));
+                        setLastCheckedTimes(prev => {
+                            // Skip state update (and the re-render it triggers) when
+                            // the timestamp is unchanged — prevents a render storm
+                            // when many SSE events arrive in quick succession.
+                            if (prev[data.cameraId] === data.lastCheckedAt) return prev;
+                            return { ...prev, [data.cameraId]: data.lastCheckedAt };
+                        });
                     }
                 }
             } catch (err) {

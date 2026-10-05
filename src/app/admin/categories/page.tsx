@@ -13,6 +13,7 @@ import * as LucideIcons from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { containerVariants, cardVariants, inputCls } from '@/components/admin/shared';
 import { PageHeader, SectionHeader, FormField, EmptyState, FullPageLoading, SearchBar, useConfirm, CountBadge } from '@/components/admin/AdminUI';
+import CoordinateInput from '@/components/admin/CoordinateInput';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
@@ -204,7 +205,7 @@ export default function AdminCategories() {
     if (loading) return <FullPageLoading />;
 
     return (
-        <div className="min-h-full bg-slate-950 p-6 md:p-10 font-sans">
+        <div className="min-h-full bg-slate-100 dark:bg-slate-950 p-6 md:p-10 font-sans">
             {ConfirmDialog}
             <div className="max-w-5xl mx-auto">
                 <PageHeader
@@ -216,7 +217,7 @@ export default function AdminCategories() {
                             whileHover={{ y: showForm ? 0 : -2 }}
                             whileTap={{ scale: 0.97 }}
                             onClick={() => { if (showForm) handleReset(); else setShowForm(true); }}
-                            className={`px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-sm uppercase tracking-wider ${showForm ? 'bg-slate-800 text-slate-400 border border-white/5 hover:bg-slate-700 hover:text-white' : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-950 shadow-[0_4px_20px_rgba(234,179,8,0.4)]'}`}
+                            className={`px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-sm uppercase tracking-wider ${showForm ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-black/5 dark:border-white/5 hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white' : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-950 shadow-[0_4px_20px_rgba(234,179,8,0.4)]'}`}
                         >
                             {showForm ? 'Batal' : <><Plus className="w-5 h-5" /><span className="hidden sm:inline">Buat Kategori</span><span className="sm:hidden">Tambah</span></>}
                         </motion.button>
@@ -230,7 +231,7 @@ export default function AdminCategories() {
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: -20, scale: 0.98 }}
                             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                            className="bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-white/10 mb-12 shadow-[0_30px_60px_rgba(0,0,0,0.4)] overflow-hidden relative group"
+                            className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-black/10 dark:border-white/10 mb-12 shadow-[0_30px_60px_rgba(0,0,0,0.4)] overflow-hidden relative group"
                         >
                             <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/5 blur-[100px] pointer-events-none" />
                             <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/5 blur-[80px] pointer-events-none" />
@@ -271,7 +272,7 @@ export default function AdminCategories() {
                                                             whileHover={{ scale: 1.08 }}
                                                             whileTap={{ scale: 0.95 }}
                                                             onClick={() => setFormData({ ...formData, icon: iconName })}
-                                                            className={`p-4 rounded-xl flex items-center justify-center transition-all ${isSelected ? 'bg-yellow-500 text-slate-900 shadow-[0_0_20px_rgba(234,179,8,0.4)] ring-2 ring-yellow-500 ring-offset-2 ring-offset-slate-950 z-10' : 'bg-black/50 text-slate-400 hover:bg-slate-800 hover:text-white border border-white/10'}`}
+                                                            className={`p-4 rounded-xl flex items-center justify-center transition-all ${isSelected ? 'bg-yellow-500 text-slate-900 shadow-[0_0_20px_rgba(234,179,8,0.4)] ring-2 ring-yellow-500 ring-offset-2 ring-offset-slate-950 z-10' : 'bg-black/50 text-slate-500 dark:text-slate-400 hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white border border-black/10 dark:border-white/10'}`}
                                                             title={iconName}
                                                         >
                                                             {IconComp && <IconComp className="w-6 h-6" />}
@@ -293,10 +294,10 @@ export default function AdminCategories() {
                                                             whileHover={{ scale: 1.03 }}
                                                             whileTap={{ scale: 0.97 }}
                                                             onClick={() => setFormData({ ...formData, color: color.value })}
-                                                            className={`p-4 rounded-xl flex items-center gap-3 transition-all text-left ${isSelected ? 'ring-2 ring-yellow-500 ring-offset-2 ring-offset-slate-950 bg-slate-800 shadow-[0_0_15px_rgba(234,179,8,0.15)]' : 'bg-black/50 hover:bg-slate-800 border border-white/10'}`}
+                                                            className={`p-4 rounded-xl flex items-center gap-3 transition-all text-left ${isSelected ? 'ring-2 ring-yellow-500 ring-offset-2 ring-offset-slate-950 bg-slate-200 dark:bg-slate-800 shadow-[0_0_15px_rgba(234,179,8,0.15)]' : 'bg-black/50 hover:bg-slate-800 border border-black/10 dark:border-white/10'}`}
                                                         >
                                                             <div className={`w-8 h-8 rounded-lg shadow-inner ${color.class}`} />
-                                                            <span className={`text-sm font-bold ${isSelected ? 'text-white' : 'text-slate-400'}`}>{color.label}</span>
+                                                            <span className={`text-sm font-bold ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>{color.label}</span>
                                                         </motion.button>
                                                     )
                                                 })}
@@ -304,27 +305,27 @@ export default function AdminCategories() {
                                         </FormField>
 
                                         {/* Live Preview */}
-                                        <div className="md:col-span-2 mt-4 p-8 bg-black/30 rounded-2xl border border-white/5 flex flex-col items-center justify-center">
+                                        <div className="md:col-span-2 mt-4 p-8 bg-black/[0.03] dark:bg-black/30 rounded-2xl border border-black/5 dark:border-white/5 flex flex-col items-center justify-center">
                                             <label className="text-[10px] font-bold text-slate-600 uppercase mb-6 tracking-wider">— Live Preview Card —</label>
                                             <motion.button
                                                 layout
                                                 type="button"
-                                                className="group/preview relative w-full max-w-[360px] h-52 rounded-[2.5rem] overflow-hidden bg-slate-900/40 backdrop-blur-xl border border-white/5 hover:border-yellow-500/30 transition-all duration-500 text-left p-6 sm:p-8 shadow-2xl flex flex-col justify-between"
+                                                className="group/preview relative w-full max-w-[360px] h-52 rounded-[2.5rem] overflow-hidden bg-white/60 dark:bg-slate-900/40 backdrop-blur-xl border border-black/5 dark:border-white/5 hover:border-yellow-500/30 transition-all duration-500 text-left p-6 sm:p-8 shadow-2xl flex flex-col justify-between"
                                             >
                                                 <div className={`absolute -top-10 -right-10 w-32 h-32 sm:w-40 sm:h-40 bg-gradient-to-br ${formData.color} opacity-10 blur-3xl group-hover/preview:opacity-20 transition-opacity duration-500`} />
                                                 <div className="relative z-10 flex justify-between items-start">
                                                     <div className={`p-4 rounded-3xl bg-gradient-to-br ${formData.color} shadow-lg`}>
                                                         {formData.icon && (LucideIcons as any)[formData.icon] &&
-                                                            (() => { const PreviewIcon = (LucideIcons as any)[formData.icon]; return <PreviewIcon className="w-6 h-6 text-white stroke-[2.5]" />; })()
+                                                            (() => { const PreviewIcon = (LucideIcons as any)[formData.icon]; return <PreviewIcon className="w-6 h-6 text-slate-900 dark:text-white stroke-[2.5]" />; })()
                                                         }
                                                     </div>
                                                     <ArrowRight className="w-6 h-6 text-slate-700" />
                                                 </div>
                                                 <div className="relative z-10 mt-auto">
-                                                    <h2 className="text-2xl font-bold text-white tracking-tight uppercase mb-2">
+                                                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight uppercase mb-2">
                                                         {formData.name || 'Nama Kategori'}
                                                     </h2>
-                                                    <p className="text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed line-clamp-2">
+                                                    <p className="text-slate-500 dark:text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed line-clamp-2">
                                                         {formData.description || 'Deskripsi kategori akan tampil di sini'}
                                                     </p>
                                                 </div>
@@ -342,7 +343,7 @@ export default function AdminCategories() {
                                     </p>
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                         {/* Map picker */}
-                                        <div className="lg:col-span-2 rounded-2xl overflow-hidden border border-white/10 h-72 bg-slate-950 flex items-center justify-center shadow-inner">
+                                        <div className="lg:col-span-2 rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 h-72 bg-slate-100 dark:bg-slate-950 flex items-center justify-center shadow-inner">
                                             {typeof window !== 'undefined' && RL && L ? (
                                                 <MapContainer
                                                     center={[formData.defaultLat || DEFAULT_CENTER.lat, formData.defaultLng || DEFAULT_CENTER.lng]}
@@ -364,54 +365,45 @@ export default function AdminCategories() {
                                             )}
                                         </div>
                                         {/* Manual inputs */}
-                                        <div className="bg-black/40 rounded-2xl p-6 border border-white/10 flex flex-col justify-center space-y-5">
-                                            <FormField label="Latitude">
-                                                <input
-                                                    type="number"
-                                                    step="any"
-                                                    value={formData.defaultLat ?? ''}
-                                                    onChange={e => setFormData({ ...formData, defaultLat: e.target.value ? parseFloat(e.target.value) : undefined })}
-                                                    className={inputCls()}
-                                                    placeholder="-6.2088 (opsional)"
-                                                />
-                                            </FormField>
-                                            <FormField label="Longitude">
-                                                <input
-                                                    type="number"
-                                                    step="any"
-                                                    value={formData.defaultLng ?? ''}
-                                                    onChange={e => setFormData({ ...formData, defaultLng: e.target.value ? parseFloat(e.target.value) : undefined })}
-                                                    className={inputCls()}
-                                                    placeholder="106.8456 (opsional)"
-                                                />
-                                            </FormField>
-                                            <FormField label="Zoom Level (1-18)">
-                                                <input
-                                                    type="number"
-                                                    min={1}
-                                                    max={18}
-                                                    step={0.5}
-                                                    value={formData.defaultZoom ?? ''}
-                                                    onChange={e => setFormData({ ...formData, defaultZoom: e.target.value ? parseFloat(e.target.value) : undefined })}
-                                                    className={inputCls()}
-                                                    placeholder="12 (opsional)"
-                                                />
-                                            </FormField>
-                                            {formData.defaultLat && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setFormData(prev => ({ ...prev, defaultLat: undefined, defaultLng: undefined, defaultZoom: undefined }))}
-                                                    className="text-[11px] text-slate-500 hover:text-red-400 transition-colors uppercase tracking-wider font-bold mt-2"
-                                                >
-                                                    Reset ke Default Indonesia
-                                                </button>
-                                            )}
+                                        <div className="space-y-4">
+                                            <CoordinateInput
+                                                lat={formData.defaultLat ?? null}
+                                                lng={formData.defaultLng ?? null}
+                                                onChange={(lat, lng) => setFormData(prev => ({
+                                                    ...prev,
+                                                    defaultLat: lat ?? undefined,
+                                                    defaultLng: lng ?? undefined,
+                                                }))}
+                                            />
+                                            <div className="bg-black/[0.04] dark:bg-black/40 rounded-2xl p-6 border border-black/10 dark:border-white/10 space-y-5">
+                                                <FormField label="Zoom Level (1-18)">
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        max={18}
+                                                        step={0.5}
+                                                        value={formData.defaultZoom ?? ''}
+                                                        onChange={e => setFormData({ ...formData, defaultZoom: e.target.value ? parseFloat(e.target.value) : undefined })}
+                                                        className={inputCls()}
+                                                        placeholder="12 (opsional)"
+                                                    />
+                                                </FormField>
+                                                {formData.defaultLat && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData(prev => ({ ...prev, defaultLat: undefined, defaultLng: undefined, defaultZoom: undefined }))}
+                                                        className="text-[11px] text-slate-500 hover:text-red-400 transition-colors uppercase tracking-wider font-bold"
+                                                    >
+                                                        Reset ke Default Indonesia
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex gap-4 pt-6 border-t border-white/5">
+                                <div className="flex gap-4 pt-6 border-t border-black/5 dark:border-white/5">
                                     <motion.button
                                         whileHover={{ y: -2 }}
                                         whileTap={{ scale: 0.97 }}
@@ -427,7 +419,7 @@ export default function AdminCategories() {
                                         whileTap={{ scale: 0.95 }}
                                         type="button"
                                         onClick={handleReset}
-                                        className="px-6 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-all flex items-center justify-center border border-white/10"
+                                        className="px-6 bg-slate-200 dark:bg-slate-800 hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl transition-all flex items-center justify-center border border-black/10 dark:border-white/10"
                                     >
                                         <RotateCcw className="w-5 h-5 transition-transform duration-500" />
                                     </motion.button>
@@ -461,31 +453,31 @@ export default function AdminCategories() {
                                 <motion.div
                                     variants={cardVariants}
                                     key={cat._id}
-                                    className="group relative bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.06)] transition-all overflow-hidden flex flex-col h-[300px]"
+                                    className="group relative bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.06)] transition-all overflow-hidden flex flex-col h-[300px]"
                                 >
                                     <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${cat.color} opacity-20 blur-3xl pointer-events-none group-hover:opacity-40 transition-opacity duration-500`} />
 
                                     <div className="flex justify-between items-start mb-4 relative z-10">
-                                        <div className={`p-4 rounded-2xl bg-gradient-to-br ${cat.color} text-white shadow-lg`}>
+                                        <div className={`p-4 rounded-2xl bg-gradient-to-br ${cat.color} text-slate-900 dark:text-white shadow-lg`}>
                                             <IconComp className="w-6 h-6" />
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => handleEdit(cat)} className="p-2.5 bg-black/40 hover:bg-yellow-500/20 text-slate-400 hover:text-yellow-400 rounded-xl transition-all border border-white/5 hover:border-yellow-500/30">
+                                            <button onClick={() => handleEdit(cat)} className="p-2.5 bg-black/[0.04] dark:bg-black/40 hover:bg-yellow-500/20 text-slate-500 dark:text-slate-400 hover:text-yellow-400 rounded-xl transition-all border border-black/5 dark:border-white/5 hover:border-yellow-500/30">
                                                 <Edit2 className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => handleDelete(cat._id, cat.name)} className="p-2.5 bg-black/40 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-xl transition-all border border-white/5 hover:border-red-500/30">
+                                            <button onClick={() => handleDelete(cat._id, cat.name)} className="p-2.5 bg-black/[0.04] dark:bg-black/40 hover:bg-red-500/20 text-slate-500 dark:text-slate-400 hover:text-red-400 rounded-xl transition-all border border-black/5 dark:border-white/5 hover:border-red-500/30">
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
 
                                     <div className="mt-auto relative z-10">
-                                        <h3 className="text-xl font-bold text-white mb-1 uppercase tracking-wider group-hover:text-yellow-400 transition-colors">{cat.name}</h3>
-                                        <p className="text-xs font-mono text-slate-500 mb-3 bg-black/30 w-fit px-2 py-1 rounded-md border border-white/5">/{cat.identifier}</p>
-                                        <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-4">{cat.description}</p>
+                                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1 uppercase tracking-wider group-hover:text-yellow-400 transition-colors">{cat.name}</h3>
+                                        <p className="text-xs font-mono text-slate-500 mb-3 bg-black/[0.03] dark:bg-black/30 w-fit px-2 py-1 rounded-md border border-black/5 dark:border-white/5">/{cat.identifier}</p>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mb-4">{cat.description}</p>
 
                                         {/* Location count + Map defaults badge */}
-                                        <div className="flex items-center gap-3 pt-3 border-t border-white/5">
+                                        <div className="flex items-center gap-3 pt-3 border-t border-black/5 dark:border-white/5">
                                             <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                                                 <MapPin className="w-3 h-3" />
                                                 {locCount} Proyek

@@ -23,9 +23,9 @@ const CategorySchema: Schema = new Schema({
     description: { type: String, required: true },
     icon: { type: String, required: true },
     color: { type: String, required: true },
-    defaultLat: { type: Number },
-    defaultLng: { type: Number },
-    defaultZoom: { type: Number },
+    defaultLat: { type: Number, min: -90, max: 90 },
+    defaultLng: { type: Number, min: -180, max: 180 },
+    defaultZoom: { type: Number, min: 1, max: 22 },
     createdAt: { type: Date, default: Date.now },
 });
 

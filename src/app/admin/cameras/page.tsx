@@ -62,17 +62,17 @@ function LivePreviewModal({
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                    className="bg-slate-900 border border-white/15 rounded-3xl w-full max-w-2xl shadow-[0_30px_70px_rgba(0,0,0,0.8)] overflow-hidden relative"
+                    className="bg-white dark:bg-slate-900 border border-white/15 rounded-3xl w-full max-w-2xl shadow-[0_30px_70px_rgba(0,0,0,0.8)] overflow-hidden relative"
                     onClick={(e) => e.stopPropagation()}
                 >
                     {/* Modal Header */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-950/60">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-black/10 dark:border-white/10 bg-white/70 dark:bg-slate-950/60">
                         <div className="flex items-center gap-3">
                             <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-500">
                                 <Radio className="w-5 h-5 animate-pulse" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-white text-base">{camera.name}</h3>
+                                <h3 className="font-bold text-slate-900 dark:text-white text-base">{camera.name}</h3>
                                 <div className="flex items-center gap-2 mt-0.5">
                                     <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
                                         camera.status === 'online' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
@@ -80,13 +80,13 @@ function LivePreviewModal({
                                         <span className={`w-1.5 h-1.5 rounded-full ${camera.status === 'online' ? 'bg-emerald-400 animate-ping' : 'bg-rose-400'}`} />
                                         {camera.status === 'online' ? 'LIVE' : 'OFFLINE'}
                                     </span>
-                                    <span className="text-[10px] text-slate-400 font-mono">ID: {camera._id}</span>
+                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">ID: {camera._id}</span>
                                 </div>
                             </div>
                         </div>
                         <button 
                             onClick={onClose} 
-                            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                            className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -105,9 +105,9 @@ function LivePreviewModal({
                     </div>
 
                     {/* Stream Diagnostics Footer */}
-                    <div className="p-5 bg-slate-950/80 border-t border-white/10 space-y-3">
+                    <div className="p-5 bg-white/80 dark:bg-slate-950/80 border-t border-black/10 dark:border-white/10 space-y-3">
                         <div>
-                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 mb-1">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
                                 <span>RTSP / HLS Stream URL:</span>
                                 <button
                                     onClick={handleCopyUrl}
@@ -117,7 +117,7 @@ function LivePreviewModal({
                                     {copied ? 'Tersalin' : 'Salin URL'}
                                 </button>
                             </div>
-                            <div className="p-2.5 rounded-xl bg-black/60 border border-white/5 font-mono text-[11px] text-slate-300 break-all select-all">
+                            <div className="p-2.5 rounded-xl bg-black/60 border border-black/5 dark:border-white/5 font-mono text-[11px] text-slate-600 dark:text-slate-300 break-all select-all">
                                 {camera.streamUrl || 'URL tidak tersedia'}
                             </div>
                         </div>
@@ -196,7 +196,7 @@ function CameraFormModal({
                 await axios.post('/api/cameras', data);
                 toast.success('Kamera baru berhasil didaftarkan');
             }
-            mutate('/api/cameras');
+            mutate('/api/cameras?includeStreamUrl=1');
             mutate('/api/locations');
             onClose();
         } catch (err: any) {
@@ -220,19 +220,19 @@ function CameraFormModal({
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
                     transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                    className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-3xl w-full max-w-lg shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden relative"
+                    className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-lg shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden relative"
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="absolute -top-32 -right-32 w-64 h-64 bg-yellow-500/20 rounded-full blur-[80px] pointer-events-none" />
                     
-                    <div className="flex items-center justify-between px-8 pt-6 pb-5 border-b border-white/5 relative z-10">
-                        <h2 className="text-xl font-bold flex items-center gap-3 text-white">
+                    <div className="flex items-center justify-between px-8 pt-6 pb-5 border-b border-black/5 dark:border-white/5 relative z-10">
+                        <h2 className="text-xl font-bold flex items-center gap-3 text-slate-900 dark:text-white">
                             <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-500">
                                 {isEdit ? <Pencil className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                             </div>
                             {isEdit ? 'Edit Kamera' : 'Daftarkan Kamera Baru'}
                         </h2>
-                        <button onClick={onClose} className="p-2 rounded-xl text-slate-500 hover:text-white hover:bg-white/5 transition-colors">
+                        <button onClick={onClose} className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
@@ -259,7 +259,7 @@ function CameraFormModal({
                                             type="button"
                                             onClick={handleTestStream}
                                             disabled={isTesting}
-                                            className="px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
+                                            className="px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-700 border border-black/10 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
                                             title="Uji jangkauan stream dengan FFprobe"
                                         >
                                             {isTesting ? <Loader2 className="w-4 h-4 animate-spin text-yellow-500" /> : <Activity className="w-4 h-4 text-yellow-500" />}
@@ -285,11 +285,11 @@ function CameraFormModal({
                             </FormField>
                         </div>
 
-                        <div className="flex gap-4 pt-4 border-t border-white/5 mt-6">
+                        <div className="flex gap-4 pt-4 border-t border-black/5 dark:border-white/5 mt-6">
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="flex-1 py-4 rounded-xl border border-white/10 text-slate-400 font-bold hover:text-white hover:bg-white/5 transition-all text-xs uppercase tracking-wider"
+                                className="flex-1 py-4 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all text-xs uppercase tracking-wider"
                             >
                                 Batal
                             </button>
@@ -384,7 +384,7 @@ function ImportCSVModal({
             const res = await axios.post('/api/cameras/bulk', { cameras: parsedData });
             if (res.data.success) {
                 toast.success(`Berhasil mengimpor ${res.data.count} kamera!`);
-                mutate('/api/cameras');
+                mutate('/api/cameras?includeStreamUrl=1');
                 onClose();
             }
         } catch (err: any) {
@@ -407,15 +407,15 @@ function ImportCSVModal({
                     initial={{ scale: 0.95, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden"
+                    className="bg-white dark:bg-slate-900 border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden"
                     onClick={e => e.stopPropagation()}
                 >
-                    <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
-                        <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                    <div className="flex items-center justify-between px-6 py-5 border-b border-black/10 dark:border-white/10">
+                        <h3 className="font-bold text-slate-900 dark:text-white text-lg flex items-center gap-2">
                             <Upload className="w-5 h-5 text-yellow-500" />
                             Import Kamera dari CSV
                         </h3>
-                        <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white">
+                        <button onClick={onClose} className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
@@ -425,7 +425,7 @@ function ImportCSVModal({
                         <div className="flex items-center justify-between p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/20">
                             <div>
                                 <h4 className="text-xs font-bold text-yellow-400 uppercase tracking-wider">Format CSV</h4>
-                                <p className="text-[11px] text-slate-400 mt-0.5">Kolom wajib: <code className="text-white font-mono">name,streamUrl</code></p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Kolom wajib: <code className="text-slate-900 dark:text-white font-mono">name,streamUrl</code></p>
                             </div>
                             <button
                                 type="button"
@@ -439,7 +439,7 @@ function ImportCSVModal({
                         {/* File Upload Box */}
                         <div 
                             onClick={() => fileInputRef.current?.click()}
-                            className="border-2 border-dashed border-white/15 hover:border-yellow-500/50 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-slate-950/40 group"
+                            className="border-2 border-dashed border-white/15 hover:border-yellow-500/50 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-white/60 dark:bg-slate-950/40 group"
                         >
                             <input 
                                 ref={fileInputRef} 
@@ -449,22 +449,22 @@ function ImportCSVModal({
                                 className="hidden" 
                             />
                             <Upload className="w-8 h-8 text-slate-500 group-hover:text-yellow-500 mx-auto mb-3 transition-colors" />
-                            <p className="text-sm font-bold text-white">{fileName || 'Klik atau tarik file CSV ke sini'}</p>
+                            <p className="text-sm font-bold text-slate-900 dark:text-white">{fileName || 'Klik atau tarik file CSV ke sini'}</p>
                             <p className="text-xs text-slate-500 mt-1">Mendukung format file .csv UTF-8</p>
                         </div>
 
                         {/* Preview Table */}
                         {parsedData.length > 0 && (
                             <div className="space-y-2">
-                                <div className="flex items-center justify-between text-xs font-bold text-slate-400">
+                                <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
                                     <span>Pratinjau Data ({parsedData.length} baris):</span>
                                     <span className="text-emerald-400">Valid</span>
                                 </div>
-                                <div className="max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/60 p-2 space-y-1.5 custom-scrollbar">
+                                <div className="max-h-48 overflow-y-auto rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-slate-950/60 p-2 space-y-1.5 custom-scrollbar">
                                     {parsedData.slice(0, 10).map((item, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-white/5 text-xs">
-                                            <span className="font-bold text-white truncate max-w-[150px]">{item.name}</span>
-                                            <span className="font-mono text-[10px] text-slate-400 truncate max-w-[280px]">{item.streamUrl}</span>
+                                        <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-black/[0.04] dark:bg-white/5 text-xs">
+                                            <span className="font-bold text-slate-900 dark:text-white truncate max-w-[150px]">{item.name}</span>
+                                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[280px]">{item.streamUrl}</span>
                                         </div>
                                     ))}
                                     {parsedData.length > 10 && (
@@ -475,11 +475,11 @@ function ImportCSVModal({
                         )}
                     </div>
 
-                    <div className="flex gap-3 p-6 border-t border-white/10 bg-slate-950/40">
+                    <div className="flex gap-3 p-6 border-t border-black/10 dark:border-white/10 bg-white/60 dark:bg-slate-950/40">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 py-3 rounded-xl border border-white/10 text-slate-400 font-bold hover:text-white text-xs uppercase tracking-wider"
+                            className="flex-1 py-3 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white text-xs uppercase tracking-wider"
                         >
                             Batal
                         </button>
@@ -527,7 +527,7 @@ function BulkAssignModal({
             if (res.data.success) {
                 toast.success(res.data.message || 'Kamera berhasil dipasangkan ke lokasi');
                 mutate('/api/locations');
-                mutate('/api/cameras');
+                mutate('/api/cameras?includeStreamUrl=1');
                 onClose();
             }
         } catch (err: any) {
@@ -550,21 +550,21 @@ function BulkAssignModal({
                     initial={{ scale: 0.95, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-md shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden"
+                    className="bg-white dark:bg-slate-900 border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-md shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden"
                     onClick={e => e.stopPropagation()}
                 >
-                    <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
-                        <h3 className="font-bold text-white text-base flex items-center gap-2">
+                    <div className="flex items-center justify-between px-6 py-5 border-b border-black/10 dark:border-white/10">
+                        <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
                             <FolderPlus className="w-5 h-5 text-yellow-500" />
                             Tautkan ke Lokasi ({cameraIds.length} Kamera)
                         </h3>
-                        <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white">
+                        <button onClick={onClose} className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
 
                     <div className="p-6 space-y-4">
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
                             Pilih lokasi proyek di mana {cameraIds.length} kamera yang dipilih akan dipasangkan:
                         </p>
 
@@ -584,11 +584,11 @@ function BulkAssignModal({
                         </FormField>
                     </div>
 
-                    <div className="flex gap-3 p-6 border-t border-white/10 bg-slate-950/40">
+                    <div className="flex gap-3 p-6 border-t border-black/10 dark:border-white/10 bg-white/60 dark:bg-slate-950/40">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 py-3 rounded-xl border border-white/10 text-slate-400 font-bold hover:text-white text-xs uppercase tracking-wider"
+                            className="flex-1 py-3 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white text-xs uppercase tracking-wider"
                         >
                             Batal
                         </button>
@@ -610,7 +610,9 @@ function BulkAssignModal({
 
 // ── Main Cameras Management Page ─────────────────────────────────────────────
 export default function CamerasPage() {
-    const { data: cameraData, isLoading: camerasLoading } = useSWR('/api/cameras', fetcher);
+    // Admin management needs streamUrl (cards, search, CSV export, edit form),
+    // so it explicitly opts in — the API strips streamUrl by default.
+    const { data: cameraData, isLoading: camerasLoading } = useSWR('/api/cameras?includeStreamUrl=1', fetcher);
     const { data: locationData } = useSWR('/api/locations', fetcher);
 
     const [editingCamera, setEditingCamera] = useState<ICameraData | null>(null);
@@ -740,7 +742,7 @@ export default function CamerasPage() {
             if (res.data.success) {
                 toast.success(`${res.data.deletedCount} kamera berhasil dihapus`);
                 setSelectedIds([]);
-                mutate('/api/cameras');
+                mutate('/api/cameras?includeStreamUrl=1');
                 mutate('/api/locations');
             }
         } catch {
@@ -756,7 +758,7 @@ export default function CamerasPage() {
             await axios.post('/api/cameras/probe-now', { cameraIds: selectedIds });
             toast.success(`Memulai pengecekan status untuk ${selectedIds.length} kamera...`);
             setTimeout(() => {
-                mutate('/api/cameras');
+                mutate('/api/cameras?includeStreamUrl=1');
                 setIsProbingBulk(false);
             }, 3000);
         } catch {
@@ -813,7 +815,7 @@ export default function CamerasPage() {
         try {
             await axios.delete(`/api/cameras/${id}`);
             toast.success('Kamera berhasil dihapus');
-            mutate('/api/cameras');
+            mutate('/api/cameras?includeStreamUrl=1');
             mutate('/api/locations');
         } catch {
             toast.error('Gagal menghapus kamera');
@@ -821,7 +823,7 @@ export default function CamerasPage() {
     };
 
     return (
-        <div className="min-h-full bg-slate-950 p-6 md:p-10 pb-36 font-sans">
+        <div className="min-h-full bg-slate-100 dark:bg-slate-950 p-6 md:p-10 pb-36 font-sans">
             {ConfirmDialog}
 
             {/* Modals */}
@@ -870,7 +872,7 @@ export default function CamerasPage() {
                                 whileHover={{ y: -2 }}
                                 whileTap={{ scale: 0.97 }}
                                 onClick={() => handleExportCSV(false)}
-                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/10 hover:border-yellow-500/30 text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
+                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
                             >
                                 <Download className="w-4 h-4" /> Export CSV
                             </motion.button>
@@ -878,7 +880,7 @@ export default function CamerasPage() {
                                 whileHover={{ y: -2 }}
                                 whileTap={{ scale: 0.97 }}
                                 onClick={() => setShowImportModal(true)}
-                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/10 hover:border-yellow-500/30 text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
+                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
                             >
                                 <Upload className="w-4 h-4" /> Import CSV
                             </motion.button>
@@ -920,7 +922,7 @@ export default function CamerasPage() {
                                     className={`flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                                         sortBy === val
                                             ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30'
-                                            : 'bg-slate-900/60 text-slate-400 hover:text-white border border-white/5'
+                                            : 'bg-white/70 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-black/5 dark:border-white/5'
                                     }`}
                                 >
                                     <Icon className="w-3.5 h-3.5" />
@@ -948,7 +950,7 @@ export default function CamerasPage() {
                                         : val === 'offline' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm'
                                         : val === 'unassigned' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                                         : 'bg-yellow-500 text-slate-950 border-yellow-500 shadow-sm'
-                                        : 'bg-slate-900/60 text-slate-400 border-white/5 hover:border-white/20 hover:text-white'
+                                        : 'bg-white/70 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >
                                 {val === 'online' && <Wifi className="w-3.5 h-3.5 text-emerald-400" />}
@@ -957,8 +959,8 @@ export default function CamerasPage() {
                                 {label}
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                                     filterCategory === val
-                                        ? val === 'all' ? 'bg-black/20 text-slate-950 font-bold' : 'bg-white/10'
-                                        : 'bg-white/5 text-slate-500'
+                                        ? val === 'all' ? 'bg-black/[0.03] dark:bg-black/20 text-slate-950 font-bold' : 'bg-black/[0.06] dark:bg-white/10'
+                                        : 'bg-black/[0.04] dark:bg-white/5 text-slate-500'
                                 }`}>
                                     {count}
                                 </span>
@@ -979,10 +981,10 @@ export default function CamerasPage() {
                 ) : (
                     <div className="space-y-3">
                         {/* Select All Bar */}
-                        <div className="flex items-center justify-between px-4 py-2 bg-slate-900/40 border border-white/5 rounded-2xl text-xs">
+                        <div className="flex items-center justify-between px-4 py-2 bg-white/60 dark:bg-slate-900/40 border border-black/5 dark:border-white/5 rounded-2xl text-xs">
                             <button
                                 onClick={handleSelectAll}
-                                className="flex items-center gap-2 text-slate-400 hover:text-white font-bold transition-colors"
+                                className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold transition-colors"
                             >
                                 {isAllSelected ? <CheckSquare className="w-4 h-4 text-yellow-500" /> : <Square className="w-4 h-4 text-slate-500" />}
                                 <span>Pilih Semua di Halaman Ini ({paginatedCameras.length})</span>
@@ -1009,10 +1011,10 @@ export default function CamerasPage() {
                                         <motion.div
                                             key={cam._id as string}
                                             variants={itemVariants}
-                                            className={`bg-slate-900/70 backdrop-blur-xl border p-5 rounded-2xl transition-all relative overflow-hidden group ${
+                                            className={`bg-white/75 dark:bg-slate-900/70 backdrop-blur-xl border p-5 rounded-2xl transition-all relative overflow-hidden group ${
                                                 isSelected 
                                                     ? 'border-yellow-500/50 bg-yellow-500/[0.04] shadow-[0_10px_30px_rgba(234,179,8,0.1)]' 
-                                                    : 'border-white/10 hover:border-white/20 hover:bg-slate-900/90'
+                                                    : 'border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20 hover:bg-slate-900/90'
                                             }`}
                                         >
                                             <div className="flex items-start gap-3.5">
@@ -1034,7 +1036,7 @@ export default function CamerasPage() {
                                                     <div className="flex items-start justify-between gap-2">
                                                         <div>
                                                             <div className="flex items-center gap-2">
-                                                                <h3 className="font-bold text-white text-base tracking-tight truncate group-hover:text-yellow-400 transition-colors">
+                                                                <h3 className="font-bold text-slate-900 dark:text-white text-base tracking-tight truncate group-hover:text-yellow-400 transition-colors">
                                                                     {cam.name}
                                                                 </h3>
                                                                 <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 ${
@@ -1048,14 +1050,14 @@ export default function CamerasPage() {
                                                             </div>
 
                                                             {/* Stream URL */}
-                                                            <p className="text-[11px] font-mono text-slate-400 truncate mt-1 select-all" title={cam.streamUrl}>
+                                                            <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mt-1 select-all" title={cam.streamUrl}>
                                                                 {cam.streamUrl || 'URL Kosong'}
                                                             </p>
                                                         </div>
                                                     </div>
 
                                                     {/* Location Badge */}
-                                                    <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                                                    <div className="flex items-center gap-2 pt-1 border-t border-black/5 dark:border-white/5">
                                                         {isAssigned ? (
                                                             <div className="flex items-center gap-1 text-[11px] text-blue-400 font-semibold truncate">
                                                                 <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -1082,14 +1084,14 @@ export default function CamerasPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => setEditingCamera(cam)}
-                                                            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-all text-xs"
+                                                            className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-xs"
                                                             title="Edit Konfigurasi"
                                                         >
                                                             <Pencil className="w-3.5 h-3.5" />
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteSingle(cam._id as string, cam.name)}
-                                                            className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-all text-xs"
+                                                            className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/20 text-slate-500 dark:text-slate-400 hover:text-rose-400 transition-all text-xs"
                                                             title="Hapus Kamera"
                                                         >
                                                             <Trash2 className="w-3.5 h-3.5" />
@@ -1105,22 +1107,22 @@ export default function CamerasPage() {
 
                         {/* Pagination Controls */}
                         {totalPages > 1 && (
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-white/5 mt-6">
-                                <span className="text-xs text-slate-400 font-medium">
-                                    Halaman <span className="text-white font-bold">{currentPage}</span> dari <span className="text-white font-bold">{totalPages}</span> (Total {filteredCameras.length} kamera)
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-black/5 dark:border-white/5 mt-6">
+                                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                    Halaman <span className="text-slate-900 dark:text-white font-bold">{currentPage}</span> dari <span className="text-slate-900 dark:text-white font-bold">{totalPages}</span> (Total {filteredCameras.length} kamera)
                                 </span>
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                         disabled={currentPage <= 1}
-                                        className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-900/80 border border-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                        className="px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                     >
                                         ← Sebelumnya
                                     </button>
                                     <button
                                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                         disabled={currentPage >= totalPages}
-                                        className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-900/80 border border-white/10 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                        className="px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                     >
                                         Selanjutnya →
                                     </button>
@@ -1138,18 +1140,18 @@ export default function CamerasPage() {
                         initial={{ opacity: 0, y: 50 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 50 }}
-                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/40 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] px-5 py-3.5 flex items-center gap-4 flex-wrap max-w-2xl"
+                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/40 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] px-5 py-3.5 flex items-center gap-4 flex-wrap max-w-2xl"
                     >
-                        <div className="flex items-center gap-2 pr-2 border-r border-white/10">
+                        <div className="flex items-center gap-2 pr-2 border-r border-black/10 dark:border-white/10">
                             <span className="w-2 h-2 rounded-full bg-yellow-500 animate-ping" />
-                            <span className="text-xs font-bold text-white">{selectedIds.length} Dipilih</span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white">{selectedIds.length} Dipilih</span>
                         </div>
 
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={handleBulkProbe}
                                 disabled={isProbingBulk}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all disabled:opacity-50"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-900 dark:text-white text-xs font-bold transition-all disabled:opacity-50"
                             >
                                 {isProbingBulk ? <Loader2 className="w-3.5 h-3.5 animate-spin text-yellow-400" /> : <Activity className="w-3.5 h-3.5 text-yellow-400" />}
                                 Cek Status
@@ -1165,7 +1167,7 @@ export default function CamerasPage() {
 
                             <button
                                 onClick={() => handleExportCSV(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-bold transition-all"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all"
                             >
                                 <Download className="w-3.5 h-3.5" /> CSV
                             </button>
@@ -1180,7 +1182,7 @@ export default function CamerasPage() {
 
                         <button
                             onClick={() => setSelectedIds([])}
-                            className="p-1 rounded-lg text-slate-400 hover:text-white ml-auto"
+                            className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white ml-auto"
                             title="Batal Pilih"
                         >
                             <X className="w-4 h-4" />

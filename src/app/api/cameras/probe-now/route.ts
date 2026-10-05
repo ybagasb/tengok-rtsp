@@ -5,7 +5,7 @@ import { ffmpegManager } from '@/lib/ffmpegManager';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
 import StatusLog from '@/models/StatusLog';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireAuth } from '@/lib/apiAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,8 +20,10 @@ let isProbing = false;
  * Admin-only. Triggers HLS pipeline test for selected cameras.
  */
 export async function POST(req: NextRequest) {
-    // Only admin can trigger probes
-    const authError = await requireAdmin(req);
+    // Probe is a status-refresh operation (no config change, no credential in
+    // the response), so any authenticated user may trigger it — including PIN
+    // viewers, since the /map page auto-probes on load.
+    const authError = await requireAuth(req);
     if (authError) return authError;
 
     const body = await req.json().catch(() => ({}));

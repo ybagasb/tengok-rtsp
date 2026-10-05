@@ -4,6 +4,7 @@ import { SessionProvider, useSession } from 'next-auth/react';
 import { Toaster } from 'react-hot-toast';
 import { useEffect, useRef, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
+import RouteTransition from './RouteTransition';
 
 // Protected routes that require authentication
 const PROTECTED_ROUTES = ['/categories', '/map', '/multiview', '/admin'];
@@ -150,6 +151,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             refetchOnWindowFocus={true}
         >
             <AuthStateSync />
+            <RouteTransition />
             {children}
             <Toaster
                 position="top-right"
