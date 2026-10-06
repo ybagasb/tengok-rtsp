@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft, Loader2, MapPin, FileText, Image as ImageIcon, ClipboardList,
     TrendingUp, Info, LayoutDashboard, Upload, Trash2, Pencil, Check, X,
-    Phone, User, Building2, Calendar, CircleDollarSign, Download, ExternalLink,
+    Phone, User, Building2, Calendar, Clock, CircleDollarSign, Download, ExternalLink,
     Wrench, AlertTriangle, ChevronDown, ChevronUp, Plus, Minus,
     PieChart, ArrowUpRight, ArrowDownRight, Layers, Target, Wallet,
     Menu, GitBranch, ChevronLeft, ChevronRight
@@ -104,6 +104,9 @@ interface Project {
     gallery?: GalleryItem[];
     documents?: DocItem[];
     cameras?: { _id: string; name: string; status: string }[];
+    // Timestamp (dikirim sebagai JSON string dari API)
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
@@ -283,6 +286,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             {project.division && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">{project.division}</span>}
                             {project.projectType && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-cyan-300">{project.projectType === 'JO' ? 'JO' : 'NON-JO'}</span>}
                             <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">{project.category}</span>
+                            {project.updatedAt && (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                                    <Clock className="w-3 h-3 shrink-0" />
+                                    Terakhir diperbarui: {new Date(project.updatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                                </span>
+                            )}
                         </div>
                     </div>
                     <ThemeToggle />

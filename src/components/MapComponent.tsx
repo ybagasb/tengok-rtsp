@@ -118,6 +118,7 @@ export default function MapComponent({
     const category = propCategory || searchParams.get('category');
     const division = propDivision || searchParams.get('division');
     const mapRef = useRef<MapRef | null>(null);
+    const rootRef = useRef<HTMLDivElement | null>(null); // kontainer terluar peta (untuk cegah zoom halaman)
 
     // Project scope on the map:
     // - 'context' (DEFAULT): only the opened division + category (from the URL).
@@ -206,6 +207,43 @@ export default function MapComponent({
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Cegah ZOOM HALAMAN BROWSER (Ctrl+roda mouse / pinch trackpad) saat kursor
+    // berada di komponen SEKITAR peta (panel samping & kontrol), bukan di kanvas
+    // peta. Gestur zoom halaman tiba sebagai `wheel` dengan ctrlKey=true (termasuk
+    // pinch trackpad) plus `gesturestart`/`gesturechange` di Safari. Zoom MapLibre
+    // memakai roda polos (tanpa Ctrl), jadi memblok hanya ctrlKey tidak mengganggu
+    // scroll-zoom peta; kanvas peta juga sengaja dikecualikan agar perilakunya
+    // eksplisit. Listener WAJIB non-pasif ({ passive: false }) agar preventDefault
+    // tidak diabaikan. Scroll biasa tidak diblok (hanya saat ctrlKey).
+    useEffect(() => {
+        const root = rootRef.current;
+        if (!root) return;
+
+        const isOverMapCanvas = (target: EventTarget | null) =>
+            target instanceof HTMLElement &&
+            target.closest('.maplibregl-canvas, .maplibregl-canvas-container, .maplibregl-map') !== null;
+
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey && !isOverMapCanvas(e.target)) {
+                e.preventDefault();
+            }
+        };
+        const handleGesture = (e: Event) => {
+            if (!isOverMapCanvas(e.target)) {
+                e.preventDefault();
+            }
+        };
+
+        root.addEventListener('wheel', handleWheel, { passive: false });
+        root.addEventListener('gesturestart', handleGesture as EventListener, { passive: false });
+        root.addEventListener('gesturechange', handleGesture as EventListener, { passive: false });
+        return () => {
+            root.removeEventListener('wheel', handleWheel);
+            root.removeEventListener('gesturestart', handleGesture as EventListener);
+            root.removeEventListener('gesturechange', handleGesture as EventListener);
+        };
     }, []);
 
     // Fetch category defaults for initial map center/zoom.
@@ -424,7 +462,7 @@ export default function MapComponent({
     if (!category && !sharedMode) return null;
 
     return (
-        <div className="flex h-screen w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
+        <div ref={rootRef} className="flex h-screen w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
             <style>{customStyles}</style>
 
             {/* Loader bermerek selama data lokasi belum selesai dimuat. */}

@@ -104,6 +104,27 @@ function MultiViewContent() {
         };
     }, [query]);
 
+    // Cegah ZOOM HALAMAN BROWSER (Ctrl+roda mouse / pinch trackpad) di halaman
+    // multiview. Halaman ini tidak punya kanvas peta, jadi blok Ctrl+wheel
+    // menyeluruh aman; scroll biasa tidak diblok (hanya saat ctrlKey). Listener
+    // WAJIB non-pasif ({ passive: false }) agar preventDefault tidak diabaikan.
+    useEffect(() => {
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey) e.preventDefault();
+        };
+        const handleGesture = (e: Event) => {
+            e.preventDefault();
+        };
+        window.addEventListener('wheel', handleWheel, { passive: false });
+        window.addEventListener('gesturestart', handleGesture as EventListener, { passive: false });
+        window.addEventListener('gesturechange', handleGesture as EventListener, { passive: false });
+        return () => {
+            window.removeEventListener('wheel', handleWheel);
+            window.removeEventListener('gesturestart', handleGesture as EventListener);
+            window.removeEventListener('gesturechange', handleGesture as EventListener);
+        };
+    }, []);
+
     const MAX_CAMERAS = 9; // Server load safety limit for multi-view
 
     // Auto-select locations once they load, so opening multiview from a project

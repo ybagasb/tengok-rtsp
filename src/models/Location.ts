@@ -169,7 +169,9 @@ export interface ILocationData {
     gallery?: IGalleryItem[];
     documents?: IDocumentItem[];
 
-    createdAt: Date | string;
+    // Timestamp dikelola otomatis oleh Mongoose ({ timestamps: true }).
+    createdAt?: Date | string;
+    updatedAt?: Date | string;   // Waktu terakhir dokumen diperbarui
 }
 
 export interface ILocation extends Document, Omit<ILocationData, '_id' | 'cameras'> {
@@ -335,8 +337,11 @@ const LocationSchema: Schema = new Schema({
     milestones: { type: [MilestoneSchema], default: [] },
     gallery: { type: [GalleryItemSchema], default: [] },
     documents: { type: [DocumentItemSchema], default: [] },
-
-    createdAt: { type: Date, default: Date.now },
+}, {
+    // Mongoose mengelola createdAt & updatedAt otomatis. Nama field createdAt
+    // cocok dengan field manual sebelumnya, jadi dokumen lama tetap mempertahankan
+    // nilainya; updatedAt dibump otomatis pada save/findByIdAndUpdate/updateOne.
+    timestamps: true,
 });
 
 const Location: Model<ILocation> = mongoose.models.Location || mongoose.model<ILocation>('Location', LocationSchema);
