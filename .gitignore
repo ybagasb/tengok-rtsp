@@ -49,6 +49,9 @@ docker-compose.yml
 # editor / IDE
 .kiro/
 
+# workflow run artifacts (plan/review output)
+.agents/
+
 # file data sumber (kerja, bukan bagian aplikasi)
 *.xlsx
 *.pptx
