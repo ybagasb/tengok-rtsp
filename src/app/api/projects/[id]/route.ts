@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
-import { requireAuth, requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import { requireAuth, requireProjectAccess, getAuditActor, getSessionSub, isSuperAdmin } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
 import { getPresignedUrl, deleteObject, isStorageConfigured } from '@/lib/storage';
 
@@ -74,9 +74,26 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
             }))),
         ]);
 
+        // Hitung kemampuan akses untuk klien (gating kosmetik; server tetap penegak).
+        // PIN → sub null → lewati query super-admin (Finding 5).
+        const sub = await getSessionSub();
+        const superAdmin = sub ? await isSuperAdmin(sub) : false;
+        const isPic = !!sub && Array.isArray(loc.picSubs) && loc.picSubs.includes(sub);
+        const canEdit = superAdmin || isPic;
+
+        // Jangan kirim picSubs mentah ke klien — buang dari payload data.
+        const { picSubs: _picSubs, ...safeLoc } = loc;
+        void _picSubs;
+
         return NextResponse.json({
             success: true,
-            data: { ...loc, contractUrl, gallery, documents },
+            data: {
+                ...safeLoc,
+                contractUrl,
+                gallery,
+                documents,
+                access: { canEdit, isSuperAdmin: superAdmin, isPic },
+            },
         });
     } catch (error: any) {
         console.error('[Project GET] Error:', error?.message);
@@ -89,10 +106,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
  * Update project detail fields (whitelisted).
  */
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-    const authError = await requireAdmin(req);
+    const { id } = await props.params;
+    const authError = await requireProjectAccess(req, id);
     if (authError) return authError;
 
-    const { id } = await props.params;
     await dbConnect();
 
     try {
@@ -207,10 +224,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
  * Removes a file reference from the project and deletes the object from MinIO.
  */
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-    const authError = await requireAdmin(req);
+    const { id } = await props.params;
+    const authError = await requireProjectAccess(req, id);
     if (authError) return authError;
 
-    const { id } = await props.params;
     const kind = req.nextUrl.searchParams.get('kind');
     const key = req.nextUrl.searchParams.get('key');
     await dbConnect();

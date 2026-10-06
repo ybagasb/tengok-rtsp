@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
-import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import { requireProjectAccess, getAuditActor } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
 import { buildKey, putObject, isStorageConfigured } from '@/lib/storage';
 
@@ -41,7 +41,8 @@ type Kind = 'gallery' | 'documents' | 'contract';
  * multipart/form-data: file=<binary>, kind=gallery|documents|contract, caption?=string
  */
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-    const authError = await requireAdmin(req);
+    const { id } = await props.params;
+    const authError = await requireProjectAccess(req, id);
     if (authError) return authError;
 
     if (!isStorageConfigured()) {
@@ -51,7 +52,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         );
     }
 
-    const { id } = await props.params;
     await dbConnect();
 
     try {

@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -104,6 +103,8 @@ interface Project {
     gallery?: GalleryItem[];
     documents?: DocItem[];
     cameras?: { _id: string; name: string; status: string }[];
+    // Kontrol akses (dihitung server) — gating kosmetik; server tetap penegak.
+    access?: { canEdit: boolean; isSuperAdmin: boolean; isPic: boolean };
     // Timestamp (dikirim sebagai JSON string dari API)
     createdAt?: string;
     updatedAt?: string;
@@ -196,8 +197,6 @@ function pct(n?: number) { return `${(n ?? 0).toFixed(2)}%`; }
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const router = useRouter();
-    const { data: session } = useSession();
-    const isAdmin = !!session?.user;
 
     const [project, setProject] = useState<Project | null>(null);
     const [loading, setLoading] = useState(true);
@@ -232,6 +231,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const status = STATUS_META[project.status || 'ongoing'] || STATUS_META.ongoing;
     const onlineCams = (project.cameras || []).filter(c => c.status === 'online').length;
     const activeLabel = ALL_TABS.find(t => t.id === tab)?.label ?? '';
+
+    // Kemampuan edit berbasis akses nyata (super-admin atau PIC) — dari server.
+    const canEdit = project.access?.canEdit ?? false;
+    const isSuperAdmin = project.access?.isSuperAdmin ?? false;
 
     const selectTab = (t: Tab) => { setTab(t); setSidebarOpen(false); };
 
@@ -344,18 +347,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     <AnimatePresence mode="wait">
                         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
                             {tab === 'summary'    && <SummaryTab project={project} status={status} onlineCams={onlineCams} onGoTab={selectTab} />}
-                            {tab === 'ikhtiar'    && <IkhtiarTab project={project} isAdmin={isAdmin} onSaved={fetchProject} />}
-                            {tab === 'finansial'  && <FinansialTab project={project} isAdmin={isAdmin} onSaved={fetchProject} />}
-                            {tab === 'milestones' && <MilestonesTab project={project} isAdmin={isAdmin} onSaved={fetchProject} />}
-                            {tab === 'resources'  && <ResourcesTab project={project} isAdmin={isAdmin} onSaved={fetchProject} />}
-                            {tab === 'changemgmt' && <ChangeManagementTab project={project} isAdmin={isAdmin} onSaved={fetchProject} />}
-                            {tab === 'issues'     && <IssuesTab project={project} isAdmin={isAdmin} onSaved={fetchProject} onToChangeMgmt={() => setTab('changemgmt')} />}
-                            {tab === 'info'       && <InfoTab project={project} isAdmin={isAdmin} onSaved={fetchProject} />}
+                            {tab === 'ikhtiar'    && <IkhtiarTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'finansial'  && <FinansialTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'milestones' && <MilestonesTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'resources'  && <ResourcesTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'changemgmt' && <ChangeManagementTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'issues'     && <IssuesTab project={project} isAdmin={canEdit} onSaved={fetchProject} onToChangeMgmt={() => setTab('changemgmt')} />}
+                            {tab === 'info'       && <InfoTab project={project} isAdmin={canEdit} isSuperAdmin={isSuperAdmin} onSaved={fetchProject} />}
                             {tab === 'location'   && <LocationTab project={project} />}
-                            {tab === 'contract'   && <ContractTab project={project} isAdmin={isAdmin} onSaved={fetchProject} />}
-                            {tab === 'progress'   && <ProgressTab project={project} isAdmin={isAdmin} onSaved={fetchProject} />}
-                            {tab === 'gallery'    && <GalleryTab project={project} isAdmin={isAdmin} onChanged={fetchProject} />}
-                            {tab === 'documents'  && <DocumentsTab project={project} isAdmin={isAdmin} onChanged={fetchProject} />}
+                            {tab === 'contract'   && <ContractTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'progress'   && <ProgressTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'gallery'    && <GalleryTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
+                            {tab === 'documents'  && <DocumentsTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
                         </motion.div>
                     </AnimatePresence>
                 </main>
@@ -1275,7 +1278,7 @@ function ProgressBar({ label, percent, color, hidePct }: { label: string; percen
 }
 
 // ── Info (editable) ──────────────────────────────────────────────────────────
-function InfoTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project; isAdmin: boolean; isSuperAdmin?: boolean; onSaved: () => void }) {
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({
         description: project.description || '',
@@ -1334,6 +1337,185 @@ function InfoTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boo
                     </>
                 )}
             </div>
+
+            {/* Panel PIC — hanya super-admin. Server tetap penegak via requireSuperAdmin. */}
+            {isSuperAdmin && <PicPanel projectId={project._id} />}
+        </div>
+    );
+}
+
+// ── Panel PIC Proyek (hanya super-admin) ──────────────────────────────────────
+// Menetapkan daftar PIC (cognito_sub) yang boleh mengedit proyek ini. Server
+// menegakkan via requireSuperAdmin pada PATCH /api/projects/[id]/pic.
+interface PicUser { cognitoSub: string; username: string; fullName: string | null; jobTitle: string | null; email: string | null; }
+interface PicSearchResult { cognitoSub: string; username: string; fullName: string | null; jobTitle: string | null; email: string | null; }
+
+function PicPanel({ projectId }: { projectId: string }) {
+    const [loading, setLoading] = useState(true);
+    const [picSubs, setPicSubs] = useState<string[]>([]);
+    const [pics, setPics] = useState<PicUser[]>([]);
+    const [saving, setSaving] = useState(false);
+
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState<PicSearchResult[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const load = useCallback(async () => {
+        try {
+            const res = await axios.get(`/api/projects/${projectId}/pic`);
+            if (res.data?.success) {
+                setPicSubs(Array.isArray(res.data.data?.picSubs) ? res.data.data.picSubs : []);
+                setPics(Array.isArray(res.data.data?.pics) ? res.data.data.pics : []);
+            }
+        } catch {
+            toast.error('Gagal memuat PIC proyek');
+        } finally {
+            setLoading(false);
+        }
+    }, [projectId]);
+
+    useEffect(() => { load(); }, [load]);
+
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (query.trim().length === 0) {
+            setResults([]);
+            setSearchError(null);
+            setSearching(false);
+            return;
+        }
+        setSearching(true);
+        debounceRef.current = setTimeout(async () => {
+            try {
+                const res = await axios.get('/api/sso-users/search', { params: { q: query.trim(), limit: 20 } });
+                if (res.data?.success) {
+                    setResults(Array.isArray(res.data.data) ? res.data.data : []);
+                    setSearchError(null);
+                }
+            } catch (err) {
+                setResults([]);
+                if (axios.isAxiosError(err) && err.response?.status === 503) {
+                    setSearchError('Direktori user SSO sedang tidak tersedia; coba lagi nanti.');
+                } else {
+                    setSearchError('Gagal mencari user.');
+                }
+            } finally {
+                setSearching(false);
+            }
+        }, 350);
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, [query]);
+
+    const nameFor = (sub: string) => {
+        const p = pics.find(x => x.cognitoSub === sub);
+        return p ? (p.fullName || p.username || sub) : sub;
+    };
+
+    const addPic = async (u: PicSearchResult) => {
+        if (picSubs.includes(u.cognitoSub)) { setQuery(''); setResults([]); return; }
+        const next = [...picSubs, u.cognitoSub];
+        setPicSubs(next);
+        setPics(prev => prev.some(p => p.cognitoSub === u.cognitoSub) ? prev : [...prev, u]);
+        setQuery('');
+        setResults([]);
+        await persist(next);
+    };
+
+    const removePic = async (sub: string) => {
+        const next = picSubs.filter(s => s !== sub);
+        setPicSubs(next);
+        await persist(next);
+    };
+
+    const persist = async (next: string[]) => {
+        setSaving(true);
+        try {
+            await axios.patch(`/api/projects/${projectId}/pic`, { picSubs: next });
+            toast.success('PIC proyek diperbarui');
+            await load();
+        } catch (err) {
+            const msg = axios.isAxiosError(err) ? err.response?.data?.error : null;
+            toast.error(msg || 'Gagal menyimpan PIC');
+            await load();   // sinkron ulang dari server bila gagal
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="mt-6 p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+            <div className="flex items-center gap-2 mb-1">
+                <User className="w-4 h-4 text-yellow-500" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">PIC Proyek</h3>
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin text-yellow-500 ml-1" />}
+            </div>
+            <p className="text-[11px] text-slate-500 mb-4">PIC dapat mengedit data proyek ini. Hanya super-admin yang dapat menetapkan PIC.</p>
+
+            {loading ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> Memuat PIC...</div>
+            ) : (
+                <>
+                    {/* Chips PIC saat ini */}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        {picSubs.length === 0 && <span className="text-xs text-slate-500">Belum ada PIC. Proyek ini hanya dapat diedit super-admin.</span>}
+                        {picSubs.map(sub => (
+                            <span key={sub} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-xs font-bold text-yellow-600 dark:text-yellow-400">
+                                {nameFor(sub)}
+                                <button
+                                    onClick={() => removePic(sub)}
+                                    disabled={saving}
+                                    className="w-4 h-4 rounded-full bg-black/5 dark:bg-white/10 hover:bg-rose-500/30 flex items-center justify-center transition-colors disabled:opacity-50"
+                                    aria-label="Hapus PIC"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+
+                    {/* Typeahead tambah PIC */}
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Cari user SSO untuk ditambahkan sebagai PIC..."
+                            className="w-full px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-yellow-500/50 outline-none"
+                        />
+                    </div>
+
+                    {searchError && (
+                        <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {searchError}
+                        </div>
+                    )}
+                    {searching && (
+                        <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Mencari...</div>
+                    )}
+                    {!searching && !searchError && results.length > 0 && (
+                        <div className="mt-2 space-y-1.5 max-h-60 overflow-y-auto">
+                            {results.map(u => (
+                                <button
+                                    key={u.cognitoSub}
+                                    onClick={() => addPic(u)}
+                                    disabled={saving || picSubs.includes(u.cognitoSub)}
+                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-yellow-500/10 border border-transparent hover:border-yellow-500/20 transition-colors text-left disabled:opacity-50"
+                                >
+                                    <div className="min-w-0">
+                                        <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{u.fullName || u.username}</div>
+                                        <div className="text-[11px] text-slate-500 truncate">@{u.username}{u.jobTitle ? ` · ${u.jobTitle}` : ''}</div>
+                                    </div>
+                                    {picSubs.includes(u.cognitoSub)
+                                        ? <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                                        : <Plus className="w-4 h-4 text-slate-400 shrink-0" />}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
         </div>
     );
 }

@@ -100,6 +100,9 @@ export interface ILocationData {
     pmPhone?: string;
     cameras: string[] | mongoose.Types.ObjectId[];
 
+    // ── Kepemilikan (RBAC) ─────────────────────────────────────────────────────
+    picSubs?: string[];          // cognito_sub PIC proyek — KONTROL AKSES, bukan teks deskriptif. Bukan EDITABLE_FIELDS.
+
     // ── Hierarki organisasi ──────────────────────────────────────────────────
     division?: Divisi;           // Divisi pemegang proyek (DIVISI 1/2/3)
     projectType?: ProjectType;   // Tipe proyek: JO (Joint Operation) / NON_JO
@@ -268,6 +271,10 @@ const LocationSchema: Schema = new Schema({
     pmName: { type: String },
     pmPhone: { type: String },
     cameras: [{ type: Schema.Types.ObjectId, ref: 'Camera' }],
+
+    // Kepemilikan (RBAC): daftar cognito_sub PIC. Dokumen lama tanpa field ini
+    // dibaca sebagai [] (tanpa migrasi). Tidak ada di EDITABLE_FIELDS.
+    picSubs: { type: [String], default: [], index: true },
 
     // Hierarki organisasi
     division: { type: String, enum: ['DIVISI 1', 'DIVISI 2', 'DIVISI 3'] },

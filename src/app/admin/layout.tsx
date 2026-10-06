@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { 
-    LayoutDashboard, Monitor, MapPin, Tags, ArrowLeft, Shield, 
+    LayoutDashboard, Monitor, MapPin, Tags, ArrowLeft, Shield, ShieldCheck,
     Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList, Bell 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,6 +25,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'Statistik', href: '/admin/statistics', icon: BarChart3 },
         { name: 'Uptime & SLA', href: '/admin/uptime', icon: Activity },
         { name: 'Notifikasi', href: '/admin/notifications', icon: Bell },
+        { name: 'Hak Akses', href: '/admin/roles', icon: ShieldCheck },
         { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
     ];
 

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import AppRole from '@/models/AppRole';
+import Location from '@/models/Location';
+import dbConnect from '@/lib/db';
 
 /**
  * Verify that the incoming API request is authenticated.
@@ -65,4 +68,122 @@ export async function getAuditActor(req: NextRequest): Promise<string> {
     }
 
     return 'admin';
+}
+
+// ── RBAC berbasis kepemilikan (PIC & super-admin) ─────────────────────────────
+//
+// Jalur otorisasi di bawah ini TIDAK PERNAH menyentuh Postgres (ssoUsers.ts).
+// Keputusan izin 100% dari data milik TENGOK: env bootstrap, AppRole (Mongo),
+// dan Location.picSubs (Mongo). Ini membuat sistem fail-safe terhadap outage
+// Postgres dan — untuk bootstrap admin — bahkan terhadap outage MongoDB.
+
+/** Set cognito_sub bootstrap dari env (split koma, trim, buang kosong). */
+function bootstrapSubs(): Set<string> {
+    return new Set(
+        (process.env.TENGOK_BOOTSTRAP_ADMIN_SUBS || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+    );
+}
+
+/** True bila sub termasuk daftar bootstrap env (dicek SEBELUM akses DB apa pun). */
+export function isBootstrapAdmin(cognitoSub: string): boolean {
+    return !!cognitoSub && bootstrapSubs().has(cognitoSub);
+}
+
+/** True bila sub ada di env bootstrap ATAU punya entri AppRole superadmin. */
+export async function isSuperAdmin(cognitoSub?: string | null): Promise<boolean> {
+    if (!cognitoSub) return false;
+    if (isBootstrapAdmin(cognitoSub)) return true;      // tanpa menyentuh DB (anti-lockout)
+    await dbConnect();
+    const row = await AppRole.exists({ cognitoSub, role: 'superadmin' });
+    return !!row;
+}
+
+/** cognito_sub dari sesi SSO, atau null bila tak ada sesi SSO (PIN → null). */
+export async function getSessionSub(): Promise<string | null> {
+    const session = await auth();
+    return (session?.user?.id as string) || null;
+}
+
+/**
+ * Guard super-admin. PIN tidak pernah lolos (getSessionSub hanya baca sesi SSO).
+ * Return null bila lolos, atau NextResponse 403.
+ */
+export async function requireSuperAdmin(req: NextRequest): Promise<NextResponse | null> {
+    void req; // guard tidak butuh req, tapi jaga tanda tangan konsisten dengan guard lain
+    const sub = await getSessionSub();
+    if (!sub) {
+        return NextResponse.json(
+            { success: false, error: 'Akses ini memerlukan login SSO.' },
+            { status: 403 },
+        );
+    }
+    if (!(await isSuperAdmin(sub))) {
+        return NextResponse.json(
+            { success: false, error: 'Hanya super-admin yang dapat melakukan tindakan ini.' },
+            { status: 403 },
+        );
+    }
+    return null;
+}
+
+/**
+ * Guard akses tulis proyek. Lolos (null) bila super-admin ATAU sub ∈ picSubs proyek.
+ *
+ * Pemilik SATU-SATUNYA try/catch di sekitar findById/isSuperAdmin:
+ *  - projectId tak valid (CastError) → 404 (id tak dikenal = tidak ditemukan).
+ *  - Mongo unreachable / error lain → 503 DENIAL (tidak pernah pass).
+ */
+export async function requireProjectAccess(
+    req: NextRequest,
+    projectId: string,
+): Promise<NextResponse | null> {
+    void req;
+    const sub = await getSessionSub();
+    if (!sub) {
+        return NextResponse.json(
+            { success: false, error: 'Akses edit proyek memerlukan login SSO.' },
+            { status: 403 },
+        );
+    }
+
+    try {
+        const superAdmin = await isSuperAdmin(sub);
+        await dbConnect();
+        const loc = await Location.findById(projectId).select('_id picSubs').lean() as
+            | { _id: unknown; picSubs?: string[] }
+            | null;
+
+        if (!loc) {
+            return NextResponse.json(
+                { success: false, error: 'Proyek tidak ditemukan' },
+                { status: 404 },
+            );
+        }
+
+        if (superAdmin) return null;
+
+        const picSubs = Array.isArray(loc.picSubs) ? loc.picSubs : [];
+        if (picSubs.includes(sub)) return null;
+
+        return NextResponse.json(
+            { success: false, error: 'Anda tidak memiliki akses untuk mengubah proyek ini.' },
+            { status: 403 },
+        );
+    } catch (err) {
+        if ((err as { name?: string })?.name === 'CastError') {
+            return NextResponse.json(
+                { success: false, error: 'Proyek tidak ditemukan' },
+                { status: 404 },
+            );
+        }
+        console.error('[requireProjectAccess] Error:', (err as { message?: string })?.message);
+        // Mongo outage / error tak terduga → DENIAL, bukan pass.
+        return NextResponse.json(
+            { success: false, error: 'Layanan tidak tersedia, coba lagi nanti.' },
+            { status: 503 },
+        );
+    }
 }
