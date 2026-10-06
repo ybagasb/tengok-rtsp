@@ -146,22 +146,22 @@ type TabType = 'overview' | 'financial' | 'operational' | 'changemgmt' | 'issues
 const STATUS_META: Record<string, { label: string; color: string; badge: string; glow: string; border: string }> = {
     planning:  {
         label: 'Perencanaan',
-        color: 'text-sky-400',
-        badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
+        color: 'text-sky-700 dark:text-sky-300',
+        badge: 'bg-sky-500/15 text-sky-700 border-sky-600/30 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/30',
         glow: 'shadow-sky-500/20',
         border: 'border-sky-500/30'
     },
     ongoing:   {
         label: 'Berjalan',
-        color: 'text-amber-400',
-        badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+        color: 'text-amber-700 dark:text-amber-300',
+        badge: 'bg-amber-500/15 text-amber-800 border-amber-600/30 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30',
         glow: 'shadow-amber-500/20',
         border: 'border-amber-500/30'
     },
     completed: {
         label: 'Selesai',
-        color: 'text-emerald-400',
-        badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+        color: 'text-emerald-700 dark:text-emerald-300',
+        badge: 'bg-emerald-500/15 text-emerald-700 border-emerald-600/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30',
         glow: 'shadow-emerald-500/20',
         border: 'border-emerald-500/30'
     },
@@ -306,45 +306,34 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
 
             {/* ── HEADER ─────────────────────────────────────────────────────── */}
             <div className="relative shrink-0 px-5 pt-4 pb-3 border-b border-black/[0.06] dark:border-white/[0.06] bg-white/60 dark:bg-slate-950/40 backdrop-blur-xl z-20">
+                {/* ── ZONA 1: Badges (kiri) + Action cluster (kanan) ───────────── */}
                 <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                        {/* Status & Category Tag Row */}
-                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                            <span className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-sm ${sm.badge}`}>
-                                <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                                {sm.label}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 min-w-0 flex-1">
+                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-sm ${sm.badge}`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                            {sm.label}
+                        </span>
+                        <span className="text-[10px] text-slate-700 dark:text-slate-300 font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.05] dark:border-white/[0.05]">
+                            {location.category}
+                        </span>
+                        {location.division && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 border border-indigo-600/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/30">
+                                {location.division}
                             </span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.05] dark:border-white/[0.05]">
-                                {location.category}
+                        )}
+                        {location.projectType && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-700 border border-cyan-600/30 dark:bg-cyan-500/10 dark:text-cyan-300 dark:border-cyan-500/30">
+                                {location.projectType === 'JO' ? 'JO' : 'NON-JO'}
                             </span>
-                            {location.division && (
-                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/30 text-indigo-300">
-                                    {location.division}
-                                </span>
-                            )}
-                            {location.projectType && (
-                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-cyan-300">
-                                    {location.projectType === 'JO' ? 'JO' : 'NON-JO'}
-                                </span>
-                            )}
-                            <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono ml-auto sm:ml-0">
-                                <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
-                                <span>{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</span>
-                            </div>
-                        </div>
-
-                        {/* Title */}
-                        <h2 className="text-lg md:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-tight line-clamp-2">
-                            {location.name}
-                        </h2>
+                        )}
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                    {/* Action cluster (Detail + Tutup) */}
+                    <div className="flex items-center gap-1.5 shrink-0">
                         <button
                             onClick={() => router.push(`/project/${location._id}`)}
                             title="Halaman Detail Proyek Lengkap"
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-amber-500/10"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-600/30 text-amber-700 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 dark:border-amber-500/30 dark:text-amber-300 text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-amber-500/10"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
                             <span className="hidden sm:inline">Detail</span>
@@ -352,14 +341,25 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                         <button
                             onClick={onClose}
                             title="Tutup Panel"
-                            className="p-1.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-rose-500/20 border border-black/[0.06] dark:border-white/[0.06] hover:border-rose-500/30 text-slate-500 dark:text-slate-400 hover:text-rose-400 transition-all duration-200 hover:scale-105 active:scale-95"
+                            className="p-1.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-rose-500/15 dark:hover:bg-rose-500/20 border border-black/[0.06] dark:border-white/[0.06] hover:border-rose-500/40 dark:hover:border-rose-500/30 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-all duration-200 hover:scale-105 active:scale-95"
                         >
                             <X className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
 
-                {/* ── SEGMENTED NAVIGATION TABS ─────────────────────────────────── */}
+                {/* ── ZONA 2: Nama proyek (hierarki #1) + koordinat (hierarki #3) ── */}
+                <div className="mt-2.5">
+                    <h2 className="text-lg md:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-tight line-clamp-2">
+                        {location.name}
+                    </h2>
+                    <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                        <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</span>
+                    </div>
+                </div>
+
+                {/* ── ZONA 3: SEGMENTED NAVIGATION TABS ─────────────────────────── */}
                 <div className="grid grid-cols-5 gap-1 p-1 mt-3 bg-black/[0.04] dark:bg-black/40 rounded-xl border border-black/[0.06] dark:border-white/[0.06] backdrop-blur-md">
                     <TabButton
                         active={activeTab === 'overview'}
@@ -1176,14 +1176,14 @@ function TabButton({
     return (
         <button
             onClick={onClick}
-            className={`relative py-1.5 px-1 rounded-lg text-xs font-bold transition-all duration-200 flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+            className={`relative min-w-0 py-2 px-1 rounded-lg text-xs font-bold transition-all duration-200 flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
                 active
                     ? 'bg-black/[0.06] dark:bg-white/10 text-slate-900 dark:text-white shadow-md shadow-black/10 dark:shadow-black/40 border border-black/10 dark:border-white/15'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/[0.03]'
             }`}
         >
-            <Icon className={`w-3.5 h-3.5 ${active ? 'text-amber-400' : 'text-slate-500 dark:text-slate-400'}`} />
-            <span className="text-[10px] sm:text-xs tracking-tight">{label}</span>
+            <Icon className={`w-3.5 h-3.5 shrink-0 ${active ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`} />
+            <span className="text-[10px] sm:text-xs tracking-tight truncate">{label}</span>
             {badge != null && (
                 <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-rose-500 text-white ml-0.5">
                     {badge}
