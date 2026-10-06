@@ -130,6 +130,7 @@ export interface IPopulatedLocation {
     monitoringPengadaan?: IMonitoringPengadaan[];
     changeManagement?: IChangeManagement[];
     status?: string;
+    updatedAt?: string;
 }
 
 interface CameraPanelProps {
@@ -357,6 +358,12 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                         <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
                         <span>{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</span>
                     </div>
+                    {location.updatedAt && (
+                        <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                            <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Terakhir diperbarui: {new Date(location.updatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* ── ZONA 3: SEGMENTED NAVIGATION TABS ─────────────────────────── */}

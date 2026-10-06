@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Map, { Marker, Popup, type MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import axios from 'axios';
-import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Layers, Mountain, Compass, Plus, Minus, Filter, Globe, FolderTree,
+import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Layers, Mountain, Compass, Plus, Minus, Filter, Globe, FolderTree, Sun, Moon,
     School, Construction, TrafficCone, Waves, Droplets, Droplet, Zap, Flame, AlertTriangle, BusFront, Building2, type LucideIcon } from 'lucide-react';
 
 // Ikon marker peta per kategori proyek. Kunci = Category.identifier.
@@ -36,6 +36,7 @@ import CctvNotices from './CctvNotices';
 import BrandLoader from './BrandLoader';
 import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 import { MAP_STYLES, MAP_STYLE_META, type MapStyleId } from '@/lib/mapStyles';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface LocationData {
     _id: string;
@@ -93,6 +94,7 @@ interface LocationData {
     kendala?: { masalah: string; status: string }[];
     monitoringPengadaan?: { nama: string; persentase: number }[];
     changeManagement?: { judul: string; jenis?: 'PERUBAHAN_HARGA' | 'PERUBAHAN_LINGKUP' | 'KLAIM' | 'LEGAL_ISSUE' | 'LAINNYA'; deskripsi?: string; dampak?: string; mitigasi?: string; nilai?: number; tanggal?: string; target?: string; pic?: string; status: 'USULAN' | 'DISETUJUI' | 'DITOLAK'; dariKendala?: boolean }[];
+    updatedAt?: string;
 }
 
 // Indonesia overview default (lng, lat) — note MapLibre uses [lng, lat].
@@ -138,6 +140,9 @@ export default function MapComponent({
     // - 'context'  → keep both.
     const effectiveCategory = scopeMode === 'context' ? category : null;
     const effectiveDivision = scopeMode === 'all' ? null : division;
+
+    // Tema UI (panel/kontrol/sidebar) — dipakai tombol toggle di blok kontrol peta.
+    const { theme, toggle } = useTheme();
 
     const [locations, setLocations] = useState<LocationData[]>([]);
     const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
@@ -815,6 +820,17 @@ export default function MapComponent({
                             title="Tampilan 3D"
                         >
                             <Mountain className="w-5 h-5" />
+                        </button>
+                        <div className="h-px bg-white/10" />
+                        {/* Toggle tema UI (panel/kontrol/sidebar) — BUKAN gaya peta.
+                            Gaya peta (satelit/streets) diatur layer toggle terpisah. */}
+                        <button
+                            onClick={toggle}
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all"
+                            title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
+                            aria-label={theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}
+                        >
+                            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                         </button>
                     </div>
                 </div>

@@ -10,6 +10,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { usePageTracking } from '@/hooks/usePageTracking';
 import ThemeToggle from '@/components/ThemeToggle';
+import useSWR from 'swr';
 
 interface Category {
     _id: string;
@@ -38,6 +39,13 @@ const DIVISION_META: Record<string, { logo: string; color: string; desc: string 
 export default function CategoriesPage() {
     const router = useRouter();
     const { data: session } = useSession();
+    const accessFetcher = (url: string) => fetch(url).then(r => r.json());
+    // Gating UI tombol Management: hanya super-admin. Fetch hanya saat ada sesi SSO.
+    const { data: accessData } = useSWR(
+        session?.user ? '/api/me/access' : null,
+        accessFetcher,
+    );
+    const isSuperAdmin = accessData?.isSuperAdmin === true;
     const [divisions, setDivisions] = useState<Division[]>([]);
     const [isLoadingCategories, setIsLoadingCategories] = useState(true);
     const [showPinModal, setShowPinModal] = useState(false);
@@ -246,7 +254,7 @@ export default function CategoriesPage() {
                     )}
 
                     {/* Settings / Management button */}
-                    {session?.user && (
+                    {session?.user && isSuperAdmin && (
                         <button
                             onClick={() => setShowPinModal(true)}
                             className="flex items-center justify-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-yellow-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/60 dark:bg-slate-900/50 backdrop-blur border border-black/5 dark:border-white/5 hover:border-yellow-500/30 group"
