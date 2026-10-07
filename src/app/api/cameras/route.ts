@@ -9,12 +9,18 @@ export async function GET(req: NextRequest) {
     const authError = await requireAuth(req);
     if (authError) return authError;
 
-    await dbConnect();
     try {
         // streamUrl embeds RTSP credentials, so it is stripped by default and
-        // only returned when explicitly requested (admin management screens).
-        // TODO: gate `includeStreamUrl` behind a real admin role once one exists.
+        // only returned when explicitly requested. Flag ini KHUSUS admin: hanya
+        // sesi SSO yang boleh menerima streamUrl. Viewer PIN (requireAuth) tetap
+        // lolos untuk daftar kamera, tapi tanpa kredensial RTSP.
         const includeStreamUrl = req.nextUrl.searchParams.get('includeStreamUrl') === '1';
+        if (includeStreamUrl) {
+            const adminError = await requireAdmin(req);
+            if (adminError) return adminError;
+        }
+
+        await dbConnect();
 
         const query = Camera.find({}).sort({ createdAt: -1 });
         if (!includeStreamUrl) query.select('-streamUrl');

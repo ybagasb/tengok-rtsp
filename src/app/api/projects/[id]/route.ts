@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
-import { requireAuth, requireProjectAccess, getAuditActor, getSessionSub, isSuperAdmin } from '@/lib/apiAuth';
+import { requireAdmin, requireProjectAccess, getAuditActor, getSessionSub, isSuperAdmin } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
 import { getPresignedUrl, deleteObject, isStorageConfigured } from '@/lib/storage';
 
@@ -43,11 +43,13 @@ async function sign(key?: string): Promise<string | null> {
 }
 
 /**
- * GET /api/projects/[id]  (auth required)
- * Returns full project detail with presigned URLs resolved for files.
+ * GET /api/projects/[id]  (SSO only)
+ * Hanya sesi SSO yang boleh membaca detail proyek — viewer PIN ditolak 403.
+ * Presigned URL file + raw key HANYA dikirim bila pemanggil adalah editor
+ * (super-admin atau PIC proyek). Non-editor SSO mendapat metadata tanpa URL/key.
  */
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-    const authError = await requireAuth(req);
+    const authError = await requireAdmin(req);
     if (authError) return authError;
 
     const { id } = await props.params;
@@ -61,29 +63,41 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
             return NextResponse.json({ success: false, error: 'Proyek tidak ditemukan' }, { status: 404 });
         }
 
-        // Resolve presigned URLs for files.
-        const [contractUrl, gallery, documents] = await Promise.all([
-            sign(loc.contractFileKey),
-            Promise.all((loc.gallery || []).map(async (g: any) => ({
-                ...g,
-                url: await sign(g.key),
-            }))),
-            Promise.all((loc.documents || []).map(async (d: any) => ({
-                ...d,
-                url: await sign(d.key),
-            }))),
-        ]);
-
-        // Hitung kemampuan akses untuk klien (gating kosmetik; server tetap penegak).
-        // PIN → sub null → lewati query super-admin (Finding 5).
+        // Hitung kemampuan akses SEBELUM menandatangani file. Server tetap
+        // penegak: hanya editor yang menerima presigned URL / raw key.
         const sub = await getSessionSub();
         const superAdmin = sub ? await isSuperAdmin(sub) : false;
         const isPic = !!sub && Array.isArray(loc.picSubs) && loc.picSubs.includes(sub);
         const canEdit = superAdmin || isPic;
 
+        // Resolve presigned URL hanya untuk editor. Non-editor: URL null dan
+        // raw key dibuang (hanya metadata non-sensitif yang dikirim).
+        let contractUrl: string | null = null;
+        let gallery: any[];
+        let documents: any[];
+        if (canEdit) {
+            [contractUrl, gallery, documents] = await Promise.all([
+                sign(loc.contractFileKey),
+                Promise.all((loc.gallery || []).map(async (g: any) => ({
+                    ...g,
+                    url: await sign(g.key),
+                }))),
+                Promise.all((loc.documents || []).map(async (d: any) => ({
+                    ...d,
+                    url: await sign(d.key),
+                }))),
+            ]);
+        } else {
+            // Buang key (lokasi objek privat) — hanya metadata yang aman dibagikan.
+            gallery = (loc.gallery || []).map(({ key: _k, ...rest }: any) => rest);
+            documents = (loc.documents || []).map(({ key: _k, ...rest }: any) => rest);
+        }
+
         // Jangan kirim picSubs mentah ke klien — buang dari payload data.
-        const { picSubs: _picSubs, ...safeLoc } = loc;
+        // contractFileKey juga dibuang agar key kontrak tidak bocor ke non-editor.
+        const { picSubs: _picSubs, contractFileKey: _contractFileKey, ...safeLoc } = loc;
         void _picSubs;
+        void _contractFileKey;
 
         return NextResponse.json({
             success: true,
