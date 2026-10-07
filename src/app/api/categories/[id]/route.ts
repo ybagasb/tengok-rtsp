@@ -4,7 +4,7 @@ import dbConnect from '@/lib/db';
 import Category from '@/models/Category';
 import { logAudit } from '@/lib/adminAuditLog';
 import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
-import { pickCategoryFields } from '../route';
+import { pickCategoryFields } from '@/lib/categoryFields';
 
 export const dynamic = 'force-dynamic';
 

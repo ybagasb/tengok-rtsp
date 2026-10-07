@@ -39,8 +39,8 @@ const LOCATION_EDITABLE_FIELDS = [
  * Salin HANYA key yang masuk allowlist dari body. picSubs tidak pernah ada di
  * allowlist; untuk aman ganda, hapus eksplisit bila entah bagaimana tersisip.
  */
-function pickEditableFields(body: Record<string, any>): Record<string, any> {
-    const out: Record<string, any> = {};
+function pickEditableFields(body: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
     for (const field of LOCATION_EDITABLE_FIELDS) {
         if (field in body) out[field] = body[field];
     }

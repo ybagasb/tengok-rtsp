@@ -4,7 +4,7 @@ import Camera from '@/models/Camera';
 import Location from '@/models/Location';
 import { logAudit } from '@/lib/adminAuditLog';
 import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
-import { pickCameraFields } from '../route';
+import { pickCameraFields } from '@/lib/cameraFields';
 
 export async function DELETE(
     req: NextRequest,

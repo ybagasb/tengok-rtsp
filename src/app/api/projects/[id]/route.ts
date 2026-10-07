@@ -73,24 +73,32 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         // Resolve presigned URL hanya untuk editor. Non-editor: URL null dan
         // raw key dibuang (hanya metadata non-sensitif yang dikirim).
         let contractUrl: string | null = null;
-        let gallery: any[];
-        let documents: any[];
+        let gallery: Record<string, unknown>[];
+        let documents: Record<string, unknown>[];
         if (canEdit) {
             [contractUrl, gallery, documents] = await Promise.all([
                 sign(loc.contractFileKey),
-                Promise.all((loc.gallery || []).map(async (g: any) => ({
+                Promise.all((loc.gallery || []).map(async (g: Record<string, unknown>) => ({
                     ...g,
-                    url: await sign(g.key),
+                    url: await sign(g.key as string | undefined),
                 }))),
-                Promise.all((loc.documents || []).map(async (d: any) => ({
+                Promise.all((loc.documents || []).map(async (d: Record<string, unknown>) => ({
                     ...d,
-                    url: await sign(d.key),
+                    url: await sign(d.key as string | undefined),
                 }))),
             ]);
         } else {
             // Buang key (lokasi objek privat) — hanya metadata yang aman dibagikan.
-            gallery = (loc.gallery || []).map(({ key: _k, ...rest }: any) => rest);
-            documents = (loc.documents || []).map(({ key: _k, ...rest }: any) => rest);
+            gallery = (loc.gallery || []).map((g: Record<string, unknown>) => {
+                const rest = { ...g };
+                delete rest.key;
+                return rest;
+            });
+            documents = (loc.documents || []).map((d: Record<string, unknown>) => {
+                const rest = { ...d };
+                delete rest.key;
+                return rest;
+            });
         }
 
         // Jangan kirim picSubs mentah ke klien — buang dari payload data.
