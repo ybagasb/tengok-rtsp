@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
         const newCategory = new Category(pickCategoryFields(body));
         const savedCategory = await newCategory.save();
 
-        logAudit({
+        await logAudit({
             action: 'CREATE',
             entity: 'Category',
             entityId: savedCategory._id.toString(),

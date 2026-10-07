@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import { requireAdmin } from '@/lib/apiAuth';
+import { isRtspUrl } from '@/lib/urlGuard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -71,6 +72,15 @@ export async function POST(req: NextRequest) {
 
         if (!streamUrl || typeof streamUrl !== 'string') {
             return NextResponse.json({ success: false, error: 'Stream URL harus diisi' }, { status: 400 });
+        }
+
+        // Anti-SSRF: endpoint ini khusus menguji URL RTSP yang belum tersimpan.
+        // Tolak selain skema rtsp: dan host internal/loopback/link-local/metadata.
+        if (!isRtspUrl(streamUrl.trim())) {
+            return NextResponse.json(
+                { success: false, error: 'URL harus berupa rtsp:// dan bukan host internal.' },
+                { status: 400 },
+            );
         }
 
         const result = await probeStream(streamUrl.trim());

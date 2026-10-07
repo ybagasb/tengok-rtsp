@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AuditLog from '@/models/AuditLog';
 import { requireAdmin } from '@/lib/apiAuth';
+import { escapeRegExp } from '@/lib/escapeRegExp';
 
 export const dynamic = 'force-dynamic';
+
+const MAX_SEARCH_LEN = 100;
 
 export async function GET(req: NextRequest) {
     const authError = await requireAdmin(req);
@@ -23,10 +26,12 @@ export async function GET(req: NextRequest) {
         if (entity) query.entity = entity;
         if (action) query.action = action;
         if (search) {
+            // Escape + cap panjang → cegah ReDoS / regex-injection dari input klien.
+            const safe = escapeRegExp(search.slice(0, MAX_SEARCH_LEN));
             query.$or = [
-                { entityName: { $regex: search, $options: 'i' } },
-                { detail: { $regex: search, $options: 'i' } },
-                { by: { $regex: search, $options: 'i' } },
+                { entityName: { $regex: safe, $options: 'i' } },
+                { detail: { $regex: safe, $options: 'i' } },
+                { by: { $regex: safe, $options: 'i' } },
             ];
         }
 

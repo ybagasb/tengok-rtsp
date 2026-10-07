@@ -44,7 +44,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
             return NextResponse.json({ error: 'Category not found' }, { status: 404 });
         }
 
-        logAudit({
+        await logAudit({
             action: 'UPDATE',
             entity: 'Category',
             entityId: id,
@@ -82,7 +82,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
             return NextResponse.json({ error: 'Category not found' }, { status: 404 });
         }
 
-        logAudit({
+        await logAudit({
             action: 'DELETE',
             entity: 'Category',
             entityId: id,

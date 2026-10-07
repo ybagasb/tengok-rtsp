@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
             { upsert: true },
         );
 
-        logAudit({
+        await logAudit({
             action: 'CREATE',
             entity: 'Settings',
             entityId: cognitoSub,
@@ -168,7 +168,7 @@ export async function DELETE(req: NextRequest) {
 
         await AppRole.deleteOne({ cognitoSub: sub });
 
-        logAudit({
+        await logAudit({
             action: 'DELETE',
             entity: 'Settings',
             entityId: sub,

@@ -217,7 +217,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         }
 
         const actor = await getAuditActor(req);
-        logAudit({
+        await logAudit({
             action: 'UPDATE',
             entity: 'Project',
             entityId: id,
@@ -263,7 +263,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
         }
 
         const actor = await getAuditActor(req);
-        logAudit({
+        await logAudit({
             action: 'UPDATE',
             entity: 'Project',
             entityId: id,

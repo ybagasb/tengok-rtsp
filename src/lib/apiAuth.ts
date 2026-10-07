@@ -65,20 +65,42 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
     );
 }
 
+/** IP klien dari header proxy (ambil hop pertama di x-forwarded-for). */
+function clientIp(req: NextRequest): string {
+    const fwd = req.headers.get('x-forwarded-for');
+    if (fwd) return fwd.split(',')[0].trim();
+    return req.headers.get('x-real-ip') || 'unknown';
+}
+
 /**
  * Extract actor identifier for audit logging.
+ *
+ * AuditLog.by adalah string, jadi identitas kaya (nama/email + cognito_sub + IP)
+ * dikemas ke satu string agar jejak audit bisa menautkan tindakan ke user SSO
+ * tertentu dan asal permintaannya. Contoh:
+ *   "Budi <budi@contoh.id> (sub:abc-123, ip:10.0.0.5)"
  */
 export async function getAuditActor(req: NextRequest): Promise<string> {
+    const ip = clientIp(req);
     const session = await auth();
-    if (session?.user?.name) return session.user.name;
-    if (session?.user?.email) return session.user.email;
 
-    const pinToken = req.cookies.get('auth_token');
-    if (pinToken?.value) {
-        return 'Admin (PIN)';
+    if (session?.user) {
+        const name = session.user.name || session.user.email || 'SSO';
+        const email = session.user.email;
+        const sub = (session.user.id as string | undefined) || undefined;
+        const label = email && email !== name ? `${name} <${email}>` : name;
+        const meta = [sub ? `sub:${sub}` : null, `ip:${ip}`].filter(Boolean).join(', ');
+        return `${label} (${meta})`;
     }
 
-    return 'admin';
+    // Cabang PIN efektif mati untuk route admin (requireAdmin menolak PIN), tapi
+    // dipertahankan untuk route level requireAuth yang mungkin mencatat audit.
+    const pinToken = req.cookies.get('auth_token');
+    if (pinToken?.value) {
+        return `Admin (PIN) (ip:${ip})`;
+    }
+
+    return `admin (ip:${ip})`;
 }
 
 // ── RBAC berbasis kepemilikan (PIC & super-admin) ─────────────────────────────

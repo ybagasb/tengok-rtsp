@@ -109,7 +109,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             return NextResponse.json({ success: false, error: 'Proyek tidak ditemukan' }, { status: 404 });
         }
 
-        logAudit({
+        await logAudit({
             action: 'UPDATE',
             entity: 'Project',
             entityId: id,

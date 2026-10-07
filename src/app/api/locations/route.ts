@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
         // Hanya field allowlist yang boleh dibuat — picSubs tidak dapat disisipkan.
         const location = await Location.create(pickEditableFields(body));
 
-        logAudit({
+        await logAudit({
             action: 'CREATE',
             entity: 'Location',
             entityId: location._id.toString(),
@@ -169,7 +169,7 @@ export async function DELETE(req: NextRequest) {
             return NextResponse.json({ success: false, error: 'Location not found' }, { status: 404 });
         }
 
-        logAudit({
+        await logAudit({
             action: 'DELETE',
             entity: 'Location',
             entityId: id,
@@ -210,7 +210,7 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ success: false, error: 'Location not found' }, { status: 404 });
         }
 
-        logAudit({
+        await logAudit({
             action: 'UPDATE',
             entity: 'Location',
             entityId: _id,

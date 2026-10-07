@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
         const actor = await getAuditActor(req);
         const camera = await Camera.create(pickCameraFields(body));
 
-        // Audit log — fire and forget
-        logAudit({
+        // Audit log — tunggu commit sebelum merespons (jejak privilese).
+        await logAudit({
             action: 'CREATE',
             entity: 'Camera',
             entityId: camera._id.toString(),

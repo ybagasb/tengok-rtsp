@@ -32,8 +32,8 @@ export async function DELETE(
             { $pull: { cameras: id } }
         );
 
-        // Audit log — fire and forget
-        logAudit({
+        // Audit log — tunggu commit sebelum merespons (jejak privilese).
+        await logAudit({
             action: 'DELETE',
             entity: 'Camera',
             entityId: id,
@@ -71,8 +71,8 @@ export async function PUT(
             return NextResponse.json({ success: false, error: 'Camera not found' }, { status: 404 });
         }
 
-        // Audit log — fire and forget
-        logAudit({
+        // Audit log — tunggu commit sebelum merespons (jejak privilese).
+        await logAudit({
             action: 'UPDATE',
             entity: 'Camera',
             entityId: id,
