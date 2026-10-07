@@ -17,12 +17,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 
-
-# Pass reCAPTCHA site key to the builder stage so it gets bundled into the frontend
-ARG NEXT_PUBLIC_RECAPTCHA_SITE_KEY
-ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=$NEXT_PUBLIC_RECAPTCHA_SITE_KEY
-
-
 RUN npm run build
 
 FROM base AS runner
