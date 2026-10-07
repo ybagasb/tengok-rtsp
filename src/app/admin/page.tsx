@@ -16,8 +16,7 @@ import { PageHeader } from '@/components/admin/AdminUI';
 import { containerVariants, cardVariants } from '@/components/admin/shared';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-
-const fetcher = (url: string) => fetch(url).then(res => res.json());
+import { swrFetcher } from '@/lib/swrFetcher';
 
 function formatDate(iso: string) {
     const d = new Date(iso);
@@ -30,12 +29,12 @@ export default function AdminOverviewDashboard() {
 
     // Data Fetching
     // includeStreamUrl=1: dashboard PDF export includes the stream URL column.
-    const { data: cameraData, isLoading: loadingCameras, mutate: refreshCameras } = useSWR('/api/cameras?includeStreamUrl=1', fetcher);
-    const { data: locationData, isLoading: loadingLocations, mutate: refreshLocations } = useSWR('/api/locations', fetcher);
-    const { data: categoryData } = useSWR('/api/categories', fetcher);
-    const { data: shareLinkData } = useSWR('/api/share-links', fetcher);
-    const { data: statsData } = useSWR('/api/stats?days=7', fetcher);
-    const { data: auditData, mutate: refreshAudit } = useSWR('/api/admin/audit-log?limit=5', fetcher);
+    const { data: cameraData, isLoading: loadingCameras, mutate: refreshCameras } = useSWR('/api/cameras?includeStreamUrl=1', swrFetcher);
+    const { data: locationData, isLoading: loadingLocations, mutate: refreshLocations } = useSWR('/api/locations', swrFetcher);
+    const { data: categoryData } = useSWR('/api/categories', swrFetcher);
+    const { data: shareLinkData } = useSWR('/api/share-links', swrFetcher);
+    const { data: statsData } = useSWR('/api/stats/summary?days=7', swrFetcher);
+    const { data: auditData, mutate: refreshAudit } = useSWR('/api/admin/audit-log?limit=5', swrFetcher);
 
     const [currentTime, setCurrentTime] = useState<string>('');
     const [isExportingPDF, setIsExportingPDF] = useState(false);

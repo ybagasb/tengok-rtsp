@@ -214,6 +214,20 @@ class FfmpegManager {
         }
     }
 
+    /**
+     * Hentikan SEMUA stream yang sedang berjalan. Dipakai saat server shutdown
+     * (SIGTERM/SIGINT) agar tidak ada proses ffmpeg yang menjadi orphan tiap
+     * deploy. Memakai jalur graceful stopStream() yang sama (SIGTERM → SIGKILL).
+     */
+    public stopAll() {
+        // Snapshot keys dulu: stopStream() memodifikasi map saat iterasi.
+        const ids = Array.from(this.streams.keys());
+        console.log(`[FFmpegManager] stopAll(): menghentikan ${ids.length} stream aktif...`);
+        for (const cameraId of ids) {
+            this.stopStream(cameraId);
+        }
+    }
+
     private cleanupIdleStreams() {
         const now = Date.now();
         for (const [cameraId, session] of this.streams.entries()) {

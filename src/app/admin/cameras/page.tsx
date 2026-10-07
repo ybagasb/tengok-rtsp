@@ -19,6 +19,7 @@ import { containerVariants, itemVariants, inputCls } from '@/components/admin/sh
 import { PageHeader, FormField, EmptyState, LoadingState, SearchBar, CountBadge, useConfirm } from '@/components/admin/AdminUI';
 import OptimizedVideoPlayer from '@/components/OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
+import { swrFetcher } from '@/lib/swrFetcher';
 
 const schema = z.object({
     name: z.string().min(1, "Nama tidak boleh kosong"),
@@ -26,8 +27,6 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 // ── Live Stream Preview Modal ────────────────────────────────────────────────
 function LivePreviewModal({
@@ -612,8 +611,8 @@ function BulkAssignModal({
 export default function CamerasPage() {
     // Admin management needs streamUrl (cards, search, CSV export, edit form),
     // so it explicitly opts in — the API strips streamUrl by default.
-    const { data: cameraData, isLoading: camerasLoading } = useSWR('/api/cameras?includeStreamUrl=1', fetcher);
-    const { data: locationData } = useSWR('/api/locations', fetcher);
+    const { data: cameraData, isLoading: camerasLoading } = useSWR('/api/cameras?includeStreamUrl=1', swrFetcher);
+    const { data: locationData } = useSWR('/api/locations', swrFetcher);
 
     const [editingCamera, setEditingCamera] = useState<ICameraData | null>(null);
     const [previewCamera, setPreviewCamera] = useState<ICameraData | null>(null);

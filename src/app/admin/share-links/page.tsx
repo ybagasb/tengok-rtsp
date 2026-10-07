@@ -12,8 +12,7 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageHeader, useConfirm } from '@/components/admin/AdminUI';
 import { inputCls } from '@/components/admin/shared';
-
-const fetcher = (url: string) => fetch(url).then(r => r.json());
+import { swrFetcher } from '@/lib/swrFetcher';
 
 interface LocationOption {
     _id: string;
@@ -190,7 +189,7 @@ function LocationSelector({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ShareLinksPage() {
-    const { data, isLoading } = useSWR('/api/share-links', fetcher, { refreshInterval: 10000 });
+    const { data, isLoading } = useSWR('/api/share-links', swrFetcher, { refreshInterval: 10000 });
     const [locations, setLocations] = useState<LocationOption[]>([]);
     const [isLoadingLocations, setIsLoadingLocations] = useState(true);
 

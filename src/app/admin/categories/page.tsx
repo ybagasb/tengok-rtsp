@@ -55,9 +55,11 @@ const AVAILABLE_COLORS = [
 const DEFAULT_CENTER = { lat: -4.4943173, lng: 113.2007588 };
 const DEFAULT_ZOOM = 5;
 
-// Map click handler component
+// Map click handler component.
+// PENTING: komponen ini hanya di-render di dalam cabang `RL && L`, jadi RL
+// dijamin sudah termuat. useMapEvents dipanggil tanpa syarat (tidak ada early
+// return sebelum hook) agar urutan hook stabil antar render.
 function MapClickHandler({ onPick, RL }: { onPick: (lat: number, lng: number) => void; RL: any }) {
-    if (!RL?.useMapEvents) return null;
     RL.useMapEvents({ click(e: any) { onPick(e.latlng.lat, e.latlng.lng); } });
     return null;
 }
