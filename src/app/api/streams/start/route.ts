@@ -3,37 +3,11 @@ import { ffmpegManager } from '@/lib/ffmpegManager';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
 import { requireAuth } from '@/lib/apiAuth';
+import { createRateLimiter } from '@/lib/rateLimit';
 
-// ── Simple in-memory rate limiter ───────────────────────────────────────────
-// Max 5 stream-start requests per IP within a 30-second window.
-// Suitable for single-server deployments. Use Redis for horizontal scale.
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_MAX = 5;
-const RATE_LIMIT_WINDOW_MS = 30_000;
-
-function isRateLimited(ip: string): boolean {
-    const now = Date.now();
-    const entry = rateLimitMap.get(ip);
-
-    if (!entry || now > entry.resetAt) {
-        rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-        return false;
-    }
-
-    entry.count++;
-    if (entry.count > RATE_LIMIT_MAX) return true;
-    return false;
-}
-
-// Periodically clean up expired entries to avoid memory leak
-setInterval(() => {
-    const now = Date.now();
-    for (const [ip, entry] of rateLimitMap.entries()) {
-        if (now > entry.resetAt) rateLimitMap.delete(ip);
-    }
-}, 60_000);
-
-// ────────────────────────────────────────────────────────────────────────────
+// Rate limiter bersama: maksimum 5 start-stream per IP dalam window 30 detik.
+// Catatan batasan (per-instance, dsb.) ada di src/lib/rateLimit.ts.
+const streamStartLimiter = createRateLimiter({ max: 5, windowMs: 30_000 });
 
 export async function POST(req: NextRequest) {
     // Require authentication
@@ -45,7 +19,7 @@ export async function POST(req: NextRequest) {
         ?? req.headers.get('x-real-ip')
         ?? 'unknown';
 
-    if (isRateLimited(ip)) {
+    if (streamStartLimiter.check(ip).limited) {
         return NextResponse.json(
             { error: 'Too many stream requests. Please wait a moment.' },
             { status: 429 }

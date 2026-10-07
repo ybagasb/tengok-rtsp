@@ -51,6 +51,7 @@ export default function CategoriesPage() {
     const [showPinModal, setShowPinModal] = useState(false);
     const [showProfile, setShowProfile] = useState(false);
     const [pin, setPin] = useState(['', '', '', '', '', '']);
+    const [isVerifyingPin, setIsVerifyingPin] = useState(false);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
     // Track this page visit for analytics
@@ -109,20 +110,26 @@ export default function CategoriesPage() {
     };
 
     useEffect(() => {
-        if (pin.every(digit => digit !== '')) {
-            const enteredPin = pin.join('');
-            const expectedPin = process.env.NEXT_PUBLIC_ADMIN_PIN || '654321';
-            
-            if (enteredPin === expectedPin) {
+        // Verifikasi PIN sepenuhnya di server — tidak ada PIN yang dibandingkan
+        // di klien. Begitu 6 digit terisi, kirim ke /api/auth/verify.
+        if (!pin.every(digit => digit !== '')) return;
+        if (isVerifyingPin) return; // cegah submit ganda saat request masih berjalan
+
+        const enteredPin = pin.join('');
+        setIsVerifyingPin(true);
+
+        axios.post('/api/auth/verify', { pin: enteredPin })
+            .then(() => {
                 toast.success('Akses Diterima');
                 router.push('/admin');
-            } else {
+            })
+            .catch(() => {
                 toast.error('PIN Salah');
                 setPin(['', '', '', '', '', '']);
                 inputRefs.current[0]?.focus();
-            }
-        }
-    }, [pin, router]);
+                setIsVerifyingPin(false);
+            });
+    }, [pin, router, isVerifyingPin]);
 
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white px-4 py-4 sm:p-6 md:p-12 relative overflow-hidden flex flex-col transition-colors">

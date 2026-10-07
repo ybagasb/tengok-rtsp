@@ -1,16 +1,32 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import dbConnect from '@/lib/db';
+import PinSession from '@/models/PinSession';
+
+export const runtime = 'nodejs';
 
 export async function POST() {
     const cookieStore = await cookies();
-    
+
+    // Cabut sesi PIN server-side DULU (sebelum cookie dihapus), agar token
+    // yang bocor/di-copy benar-benar tidak lagi berlaku. Best-effort.
+    const pinToken = cookieStore.get('auth_token')?.value;
+    if (pinToken) {
+        try {
+            await dbConnect();
+            await PinSession.deleteOne({ token: pinToken });
+        } catch (err) {
+            console.error('Gagal mencabut sesi PIN saat logout:', err);
+        }
+    }
+
     // Clear PIN auth cookies
     cookieStore.delete('auth_token');
     cookieStore.delete('auth_flag');
-    
+
     // Clear SSO flag cookie
     cookieStore.delete('sso_flag');
-    
+
     // Clear NextAuth session cookies
     cookieStore.delete('authjs.session-token');
     cookieStore.delete('authjs.callback-url');

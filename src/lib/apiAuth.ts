@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import AppRole from '@/models/AppRole';
 import Location from '@/models/Location';
+import PinSession from '@/models/PinSession';
 import dbConnect from '@/lib/db';
 
 /**
@@ -13,10 +14,20 @@ import dbConnect from '@/lib/db';
  * Returns null if authenticated, or a 401 NextResponse if not.
  */
 export async function requireAuth(req: NextRequest): Promise<NextResponse | null> {
-    // Check PIN-based authentication (cookie set by /api/auth/verify)
+    // Check PIN-based authentication (cookie set by /api/auth/verify).
+    // Token sekarang opaque + server-backed: hanya lolos bila ada PinSession
+    // yang masih hidup. Nilai konstanta lama ('authenticated') TIDAK diterima.
     const pinToken = req.cookies.get('auth_token');
-    if (pinToken?.value === 'authenticated') {
-        return null; // Authenticated via PIN
+    if (pinToken?.value) {
+        await dbConnect();
+        const live = await PinSession.exists({
+            token: pinToken.value,
+            expiresAt: { $gt: new Date() },
+        });
+        if (live) {
+            return null; // Authenticated via PIN
+        }
+        // Token tidak dikenal / sudah kedaluwarsa → fall through ke SSO.
     }
 
     // Check NextAuth (Cognito SSO) session
@@ -63,7 +74,7 @@ export async function getAuditActor(req: NextRequest): Promise<string> {
     if (session?.user?.email) return session.user.email;
 
     const pinToken = req.cookies.get('auth_token');
-    if (pinToken?.value === 'authenticated') {
+    if (pinToken?.value) {
         return 'Admin (PIN)';
     }
 
