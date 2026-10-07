@@ -4,6 +4,7 @@ import dbConnect from '@/lib/db';
 import Category from '@/models/Category';
 import { logAudit } from '@/lib/adminAuditLog';
 import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import { pickCategoryFields } from '../route';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
         const updatedCategory = await Category.findByIdAndUpdate(
             id,
-            body,
+            pickCategoryFields(body),
             { new: true, runValidators: true }
         );
 

@@ -10,6 +10,45 @@ import '@/lib/cameraStatusChecker';
 // Prevent tree-shaking of the Camera model
 const _models = [Camera, Location];
 
+// Field yang boleh ditulis lewat create/update lokasi. Allowlist ini SENGAJA
+// tidak memuat picSubs (field kontrol akses, hanya diset oleh route PIC yang
+// dijaga super-admin) maupun _id/createdAt/updatedAt. Body di PUT/POST hanya
+// disalin untuk key di sini — mencegah eskalasi privilese lewat body mentah.
+const LOCATION_EDITABLE_FIELDS = [
+    // Peta / CCTV
+    'name', 'category', 'description', 'image', 'lat', 'lng', 'pmName', 'pmPhone', 'cameras',
+    // Hierarki organisasi
+    'division', 'projectType',
+    // Identitas proyek
+    'penggunaJasa', 'pengawas', 'penyediaJasa',
+    'contractor', 'startDate', 'endDate', 'contractNumber', 'contractValue',
+    // Progress fisik + keuangan
+    'progressPercent', 'progressRencana', 'progressDeviasi', 'progressKeuangan', 'tagihanBelumDiproses',
+    // Ikhtiar
+    'cpi', 'spi', 'ccc',
+    // Finansial (ringkas)
+    'cashIn', 'cashOut', 'saldoKas', 'saldoHutang', 'bad', 'piutang', 'bebanKonstruksi', 'hasilUsaha',
+    // Operasi (ringkas)
+    'pu', 'bk', 'lk',
+    // Daftar operasional & legal
+    'lingkupPekerjaan', 'sumberDaya', 'isuStrategis', 'kendala', 'monitoringPengadaan', 'changeManagement',
+    'milestones', 'status',
+] as const;
+
+/**
+ * Salin HANYA key yang masuk allowlist dari body. picSubs tidak pernah ada di
+ * allowlist; untuk aman ganda, hapus eksplisit bila entah bagaimana tersisip.
+ */
+function pickEditableFields(body: Record<string, any>): Record<string, any> {
+    const out: Record<string, any> = {};
+    for (const field of LOCATION_EDITABLE_FIELDS) {
+        if (field in body) out[field] = body[field];
+    }
+    // Pertahanan ganda: picSubs adalah kontrol akses, tidak boleh lewat sini.
+    delete out.picSubs;
+    return out;
+}
+
 /**
  * Strip streamUrl from populated camera objects to avoid credential leakage.
  */
@@ -91,7 +130,8 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const actor = await getAuditActor(req);
-        const location = await Location.create(body);
+        // Hanya field allowlist yang boleh dibuat — picSubs tidak dapat disisipkan.
+        const location = await Location.create(pickEditableFields(body));
 
         logAudit({
             action: 'CREATE',
@@ -153,11 +193,15 @@ export async function PUT(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { _id, ...updateData } = body;
+        const _id = body?._id;
 
         if (!_id) {
             return NextResponse.json({ success: false, error: 'ID is required' }, { status: 400 });
         }
+
+        // Hanya field allowlist yang ditulis. picSubs (kontrol akses), _id,
+        // createdAt, updatedAt sengaja tidak pernah masuk update.
+        const updateData = pickEditableFields(body);
 
         const actor = await getAuditActor(req);
         const location = await Location.findByIdAndUpdate(_id, updateData, { new: true, runValidators: true });

@@ -7,6 +7,21 @@ import { requireAuth, requireAdmin, getAuditActor } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
+// Field kategori yang boleh ditulis lewat create/update. Hanya field schema
+// Category; body mentah tidak boleh di-$set langsung.
+const CATEGORY_EDITABLE_FIELDS = [
+    'name', 'identifier', 'description', 'icon', 'color', 'defaultLat', 'defaultLng', 'defaultZoom',
+] as const;
+
+/** Salin HANYA key allowlist dari body kategori. */
+export function pickCategoryFields(body: Record<string, any>): Record<string, any> {
+    const out: Record<string, any> = {};
+    for (const field of CATEGORY_EDITABLE_FIELDS) {
+        if (field in body) out[field] = body[field];
+    }
+    return out;
+}
+
 export async function GET(req: NextRequest) {
     // Require authentication
     const authError = await requireAuth(req);
@@ -38,7 +53,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Category with this identifier already exists' }, { status: 400 });
         }
 
-        const newCategory = new Category(body);
+        const newCategory = new Category(pickCategoryFields(body));
         const savedCategory = await newCategory.save();
 
         logAudit({

@@ -4,6 +4,7 @@ import Camera from '@/models/Camera';
 import Location from '@/models/Location';
 import { logAudit } from '@/lib/adminAuditLog';
 import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import { pickCameraFields } from '../route';
 
 export async function DELETE(
     req: NextRequest,
@@ -61,7 +62,7 @@ export async function PUT(
         const { id } = params;
         const body = await req.json();
         const actor = await getAuditActor(req);
-        const camera = await Camera.findByIdAndUpdate(id, body, {
+        const camera = await Camera.findByIdAndUpdate(id, pickCameraFields(body), {
             new: true,
             runValidators: true,
         });
