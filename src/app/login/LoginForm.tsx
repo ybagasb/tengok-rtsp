@@ -30,7 +30,7 @@ export default function LoginForm() {
             if (res.data.success) {
                 toast.success('Access Granted');
                 // Use full page navigation so middleware sees the new auth_token cookie
-                window.location.href = '/intro';
+                window.location.href = '/categories';
             }
         } catch (error: any) {
             console.error(error);
@@ -47,7 +47,7 @@ export default function LoginForm() {
     const handleCognitoLogin = async () => {
         setSsoLoading(true);
         try {
-            await signIn('cognito', { callbackUrl: '/intro' }, { prompt: 'login' });
+            await signIn('cognito', { callbackUrl: '/categories' }, { prompt: 'login' });
         } catch (error) {
             toast.error('SSO Login Error');
             setSsoLoading(false);

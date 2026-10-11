@@ -1,128 +1,112 @@
 "use client";
 
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+/**
+ * Halaman Kategori (utama) — sekuens intro 3D menggantikan grid card lama:
+ *  Fase 'building' : gedung 3D kantor pusat Brantas Abipraya (klik untuk lanjut).
+ *  Fase 'split'    : gedung "terpecah" menjadi 3 panel Divisi (objek 3D khas).
+ *                    Pilih divisi untuk masuk ke halaman kategorinya.
+ *
+ * Semua kontrol header (Panduan, Tema, Profil/Logout, Management+PIN) hidup di
+ * halaman ini. Objek 3D via Three.js (lazy-load). Menghormati reduced-motion.
+ */
+
+import { useRef, useState, useMemo, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { signOut, useSession } from 'next-auth/react';
-import { LogOut, Settings, X, ShieldAlert, LayoutGrid, Loader2, User, BookOpen, Building2 } from 'lucide-react';
-import * as LucideIcons from 'lucide-react';
+import {
+    Loader2, ArrowRight, RotateCcw, LogOut, Settings, X, ShieldAlert,
+    User, BookOpen,
+} from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import useSWR from 'swr';
 import { usePageTracking } from '@/hooks/usePageTracking';
 import ThemeToggle from '@/components/ThemeToggle';
-import useSWR from 'swr';
+import { DIVISION_THEME, type DivisionKey } from '@/lib/divisionTheme';
 
-interface Category {
-    _id: string;
-    name: string;
-    identifier: string;
-    description: string;
-    icon: string;
-    color: string;
-    projectCount?: number;
-}
+const BrantasBuilding3D = dynamic(() => import('@/components/intro/BrantasBuilding3D'), {
+    ssr: false,
+    loading: () => <div className="w-full h-full flex items-center justify-center"><Loader2 className="w-8 h-8 text-yellow-500 animate-spin" /></div>,
+});
+const DivisionModel3D = dynamic(() => import('@/components/intro/DivisionModel3D'), { ssr: false });
 
-interface Division {
-    division: 'DIVISI 1' | 'DIVISI 2' | 'DIVISI 3';
-    projectCount: number;
-    categories: Category[];
-}
-
-// Metadata tampilan tiap divisi (logo + gradient aksen).
-const DIVISION_META: Record<string, { logo: string; color: string; desc: string }> = {
-    'DIVISI 1': { logo: '/div1.svg', color: 'from-indigo-500 to-blue-500',   desc: 'Gedung, bangunan & fasilitas' },
-    'DIVISI 2': { logo: '/div2.svg', color: 'from-cyan-500 to-teal-500',     desc: 'Bendungan, air & sumber daya air' },
-    'DIVISI 3': { logo: '/div3.svg', color: 'from-amber-500 to-orange-500',  desc: 'Jalan, tol & infrastruktur transportasi' },
-};
-
+const ORDER: DivisionKey[] = ['DIVISI 1', 'DIVISI 2', 'DIVISI 3'];
 
 export default function CategoriesPage() {
     const router = useRouter();
+    const reduce = useReducedMotion();
     const { data: session } = useSession();
-    const accessFetcher = (url: string) => fetch(url).then(r => r.json());
+    usePageTracking('categories');
+
     // Gating UI tombol Management: hanya super-admin. Fetch hanya saat ada sesi SSO.
-    const { data: accessData } = useSWR(
-        session?.user ? '/api/me/access' : null,
-        accessFetcher,
-    );
+    const accessFetcher = (url: string) => fetch(url).then(r => r.json());
+    const { data: accessData } = useSWR(session?.user ? '/api/me/access' : null, accessFetcher);
     const isSuperAdmin = accessData?.isSuperAdmin === true;
-    const [divisions, setDivisions] = useState<Division[]>([]);
-    const [isLoadingCategories, setIsLoadingCategories] = useState(true);
-    const [showPinModal, setShowPinModal] = useState(false);
+
+    // ── Sekuens 3D ──────────────────────────────────────────────────────────
+    const [phase, setPhase] = useState<'building' | 'split'>('building');
+    const [par, setPar] = useState({ x: 0, y: 0 });
+    const stageRef = useRef<HTMLDivElement>(null);
+
+    // Klik-vs-drag pada gedung: klik (nyaris tanpa gerak) = pecah ke 3 divisi.
+    const down = useRef<{ x: number; y: number } | null>(null);
+    const onPointerDown = (e: React.PointerEvent) => { down.current = { x: e.clientX, y: e.clientY }; };
+    const onPointerUp = (e: React.PointerEvent) => {
+        const d = down.current; down.current = null;
+        if (!d) return;
+        if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) setPhase('split');
+    };
+
+    const onMouseMove = (e: React.MouseEvent) => {
+        if (reduce || phase !== 'split') return;
+        const el = stageRef.current; if (!el) return;
+        const r = el.getBoundingClientRect();
+        setPar({ x: ((e.clientX - r.left) / r.width - 0.5) * 2, y: ((e.clientY - r.top) / r.height - 0.5) * 2 });
+    };
+
+    const enterDivision = (div: string) => router.push(`/categories/${encodeURIComponent(div)}`);
+    const bgParallax = useMemo(() => ({ transform: `translate3d(${par.x * -12}px, ${par.y * -12}px, 0)` }), [par]);
+
+    // ── Profil / Logout / PIN management ──────────────────────────────────────
     const [showProfile, setShowProfile] = useState(false);
+    const [showPinModal, setShowPinModal] = useState(false);
     const [pin, setPin] = useState(['', '', '', '', '', '']);
     const [isVerifyingPin, setIsVerifyingPin] = useState(false);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-    // Track this page visit for analytics
-    usePageTracking('categories');
-
     const handleLogout = async () => {
         setShowProfile(false);
         try {
-            // 1. Clear server-side cookies
             await fetch('/api/auth/logout', { method: 'POST' });
-            // 2. Clear NextAuth client session, then redirect to federated logout
             await signOut({ redirect: false });
-            // 3. Redirect to federated logout (clears Cognito SSO session too)
             window.location.href = '/api/auth/federated-logout';
         } catch {
             window.location.href = '/login';
         }
     };
 
-    useEffect(() => {
-        const fetchDivisions = async () => {
-            try {
-                const { data } = await axios.get('/api/divisions');
-                setDivisions(data.data || []);
-            } catch (error) {
-                console.error("Failed to fetch divisions:", error);
-                toast.error("Gagal memuat divisi proyek");
-            } finally {
-                setIsLoadingCategories(false);
-            }
-        };
-        fetchDivisions();
-    }, []);
-
-    const handleDivisionClick = (division: string) => {
-        router.push(`/categories/${encodeURIComponent(division)}`);
-    };
-
     const handlePinChange = (index: number, value: string) => {
         if (!/^\d*$/.test(value)) return;
-
         const newPin = [...pin];
         newPin[index] = value.slice(-1);
         setPin(newPin);
-
-        // Auto focus next
-        if (value && index < 5) {
-            inputRefs.current[index + 1]?.focus();
-        }
+        if (value && index < 5) inputRefs.current[index + 1]?.focus();
     };
 
     const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-        if (e.key === 'Backspace' && !pin[index] && index > 0) {
-            inputRefs.current[index - 1]?.focus();
-        }
+        if (e.key === 'Backspace' && !pin[index] && index > 0) inputRefs.current[index - 1]?.focus();
     };
 
     useEffect(() => {
-        // Verifikasi PIN sepenuhnya di server — tidak ada PIN yang dibandingkan
-        // di klien. Begitu 6 digit terisi, kirim ke /api/auth/verify.
+        // Verifikasi PIN sepenuhnya di server. Begitu 6 digit terisi, kirim.
         if (!pin.every(digit => digit !== '')) return;
-        if (isVerifyingPin) return; // cegah submit ganda saat request masih berjalan
-
+        if (isVerifyingPin) return;
         const enteredPin = pin.join('');
         setIsVerifyingPin(true);
-
         axios.post('/api/auth/verify', { pin: enteredPin })
-            .then(() => {
-                toast.success('Akses Diterima');
-                router.push('/admin');
-            })
+            .then(() => { toast.success('Akses Diterima'); router.push('/admin'); })
             .catch(() => {
                 toast.error('PIN Salah');
                 setPin(['', '', '', '', '', '']);
@@ -132,64 +116,56 @@ export default function CategoriesPage() {
     }, [pin, router, isVerifyingPin]);
 
     return (
-        <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white px-4 py-4 sm:p-6 md:p-12 relative overflow-hidden flex flex-col transition-colors">
-            {/* Background Decorations */}
-            <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+        <div
+            ref={stageRef}
+            onMouseMove={onMouseMove}
+            className="relative h-screen flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white transition-colors"
+            style={{ perspective: '1400px' }}
+        >
+            {/* Background: glow + watermark */}
+            <div className="absolute top-0 left-0 w-full h-full pointer-events-none" style={bgParallax}>
                 <div className="absolute -top-40 -left-40 w-96 h-96 bg-blue-600/10 blur-[120px]" />
                 <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-yellow-600/10 blur-[120px]" />
             </div>
-
-            {/* Brantas Logo Watermark - Brand Identity Background */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-                <motion.img
-                    src="/abipraya_original.svg"
-                    alt=""
-                    aria-hidden="true"
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 0.04, scale: 1 }}
-                    transition={{ duration: 1.5, ease: "easeOut" }}
-                    className="w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] min-w-[250px] min-h-[250px] object-contain select-none"
-                    draggable={false}
-                />
+                <img src="/abipraya_original.svg" alt="" aria-hidden className="w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] min-w-[250px] min-h-[250px] object-contain opacity-[0.04]" draggable={false} />
             </div>
 
             {/* Header */}
-            <header className="flex flex-row justify-between items-center gap-2 mb-6 sm:mb-16 relative z-30">
+            <header className="relative z-30 flex items-center justify-between gap-2 px-4 sm:px-10 py-4 sm:py-5 shrink-0">
                 {/* Logo + Title */}
                 <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
-                    <img src="/LOGO_ABIPRAYA.png" alt="Logo" className="w-8 h-8 sm:w-12 sm:h-12 shrink-0 block dark:hidden" />
-                    <img src="/abipraya_original.svg" alt="Logo" className="w-8 h-8 sm:w-12 sm:h-12 shrink-0 hidden dark:block" />
-                    <div className="min-w-0">
-                        <h1 className="text-base sm:text-2xl font-bold bg-gradient-to-r from-yellow-500 to-amber-500 dark:from-yellow-400 dark:to-yellow-200 bg-clip-text text-transparent tracking-tight uppercase leading-tight">
-                            Project Management Information System
-                        </h1>
-                        <p className="text-slate-500 dark:text-slate-400 text-[8px] sm:text-[11px] font-bold uppercase tracking-wider opacity-70 dark:opacity-60 truncate">Pilih divisi untuk melihat proyek</p>
+                    <img src="/LOGO_ABIPRAYA.png" alt="Brantas Abipraya" className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 block dark:hidden" />
+                    <img src="/abipraya_original.svg" alt="Brantas Abipraya" className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 hidden dark:block" />
+                    <div className="leading-tight min-w-0">
+                        <p className="text-[11px] sm:text-sm font-black uppercase tracking-[0.2em] bg-gradient-to-r from-yellow-500 to-amber-500 dark:from-yellow-300 dark:to-amber-200 bg-clip-text text-transparent truncate">Brantas Abipraya</p>
+                        <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 truncate">Project Management Information System</p>
                     </div>
                 </div>
 
                 {/* Actions */}
                 <div className="relative flex items-center gap-1.5 sm:gap-3 shrink-0">
-
-                    {/* Kembali ke halaman intro (gedung 3D) */}
-                    <button
-                        onClick={() => router.push('/intro')}
-                        className="flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-yellow-500 dark:hover:text-yellow-400 transition-all p-2 sm:px-3 sm:py-2.5 rounded-xl bg-black/[0.04] dark:bg-slate-900/50 backdrop-blur border border-black/10 dark:border-white/5 hover:border-yellow-500/30 group"
-                        title="Kembali ke halaman intro"
-                    >
-                        <Building2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">Intro</span>
-                    </button>
+                    {/* Kembali ke tampilan gedung (hanya saat fase split) */}
+                    {phase === 'split' && (
+                        <button
+                            onClick={() => setPhase('building')}
+                            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-300 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all"
+                            title="Kembali ke tampilan gedung"
+                        >
+                            <RotateCcw className="w-3.5 h-3.5" /> <span className="hidden sm:block">Gedung</span>
+                        </button>
+                    )}
 
                     {/* Toggle tema */}
                     <ThemeToggle />
 
-                    {/* Panduan pengguna (download PDF) — cara mengisi detail proyek */}
+                    {/* Panduan pengguna (PDF) */}
                     <a
                         href="/Panduan-Input-Detail-Proyek.pdf"
                         target="_blank"
                         rel="noopener noreferrer"
                         download
-                        className="flex items-center justify-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-yellow-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/60 dark:bg-slate-900/50 backdrop-blur border border-black/5 dark:border-white/5 hover:border-yellow-500/30 group"
+                        className="flex items-center justify-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-yellow-500 dark:hover:text-yellow-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/60 dark:bg-slate-900/50 backdrop-blur border border-black/5 dark:border-white/5 hover:border-yellow-500/30 group"
                         title="Unduh Panduan Pengisian Detail Proyek (PDF)"
                     >
                         <BookOpen className="w-4 h-4 group-hover:scale-110 transition-transform" />
@@ -201,7 +177,7 @@ export default function CategoriesPage() {
                         <div className="relative">
                             <button
                                 onClick={() => setShowProfile(p => !p)}
-                                className="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-xl bg-white/60 dark:bg-slate-900/50 backdrop-blur border border-black/5 dark:border-white/5 hover:border-yellow-500/30 transition-all group"
+                                className="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-xl bg-white/60 dark:bg-slate-900/50 backdrop-blur border border-black/5 dark:border-white/5 hover:border-yellow-500/30 transition-all"
                                 title={session.user.name || 'Profil'}
                             >
                                 {session.user.image ? (
@@ -222,15 +198,10 @@ export default function CategoriesPage() {
                                 </div>
                             </button>
 
-                            {/* Profile Dropdown - fixed to right edge on mobile */}
                             <AnimatePresence>
                                 {showProfile && (
                                     <>
-                                        {/* Backdrop to close on click outside */}
-                                        <div
-                                            className="fixed inset-0 z-40"
-                                            onClick={() => setShowProfile(false)}
-                                        />
+                                        <div className="fixed inset-0 z-40" onClick={() => setShowProfile(false)} />
                                         <motion.div
                                             initial={{ opacity: 0, y: -8, scale: 0.95 }}
                                             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -270,7 +241,7 @@ export default function CategoriesPage() {
                         </div>
                     )}
 
-                    {/* Settings / Management button */}
+                    {/* Management (super-admin) */}
                     {session?.user && isSuperAdmin && (
                         <button
                             onClick={() => setShowPinModal(true)}
@@ -282,7 +253,7 @@ export default function CategoriesPage() {
                         </button>
                     )}
 
-                    {/* Logout button for non-SSO users */}
+                    {/* Logout untuk non-SSO (PIN viewer) */}
                     {!session?.user && (
                         <button
                             onClick={handleLogout}
@@ -296,77 +267,100 @@ export default function CategoriesPage() {
                 </div>
             </header>
 
-            {/* Grid Kategori */}
-            {isLoadingCategories ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-6xl mx-auto relative z-10">
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="h-36 sm:h-48 lg:h-64 rounded-3xl sm:rounded-[2.5rem] bg-white/60 dark:bg-slate-900/40 border border-black/5 dark:border-white/5 p-5 sm:p-8 flex flex-col justify-between animate-pulse">
-                            <div className="flex justify-between items-start">
-                                <div className="w-11 h-11 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-2xl sm:rounded-3xl bg-slate-300/70 dark:bg-slate-800/80" />
-                                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-200/70 dark:bg-slate-800/60" />
-                            </div>
-                            <div className="mt-auto space-y-2 sm:space-y-3">
-                                <div className="h-5 sm:h-7 lg:h-8 bg-slate-300/70 dark:bg-slate-800/80 rounded-xl w-3/4" />
-                                <div className="h-2.5 sm:h-3 bg-slate-200/60 dark:bg-slate-800/50 rounded-lg w-full" />
-                                <div className="h-2.5 sm:h-3 bg-slate-200/50 dark:bg-slate-800/40 rounded-lg w-1/2" />
-                            </div>
+            {/* ── Sekuens 3D ── */}
+            <AnimatePresence mode="wait">
+                {phase === 'building' ? (
+                    <motion.div
+                        key="building"
+                        initial={reduce ? false : { opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0, scale: 1.15, filter: 'blur(6px)', transition: { duration: 0.6 } }}
+                        className="relative z-10 flex-1 min-h-0 flex flex-col"
+                    >
+                        <div className="text-center px-4 shrink-0">
+                            <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Kantor Pusat PT Brantas Abipraya</p>
+                            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium">Seret untuk memutar · scroll / cubit untuk zoom</p>
                         </div>
-                    ))}
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-6xl mx-auto relative z-10 pb-8">
-                    {divisions.map((div, index) => {
-                        const meta = DIVISION_META[div.division];
-                        const color = meta?.color || 'from-slate-500 to-slate-600';
-                        const empty = div.projectCount === 0;
-                        return (
-                            <motion.button
-                                key={div.division}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.1, ease: "easeOut" }}
-                                onClick={() => !empty && handleDivisionClick(div.division)}
-                                disabled={empty}
-                                className={`group relative h-36 sm:h-48 lg:h-64 rounded-3xl sm:rounded-[2.5rem] overflow-hidden bg-white/80 dark:bg-slate-900/40 backdrop-blur-xl border border-black/5 dark:border-white/5 transition-all duration-500 text-left p-5 sm:p-8 lg:p-10 shadow-xl flex flex-col justify-between ${empty ? 'opacity-50 cursor-not-allowed' : 'hover:border-yellow-500/30 hover:shadow-yellow-500/10 active:scale-95'}`}
+                        <div className="relative flex-1 min-h-0 cursor-pointer" onPointerDown={onPointerDown} onPointerUp={onPointerUp} role="button" aria-label="Masuk">
+                            <BrantasBuilding3D className="absolute inset-0" />
+                        </div>
+                        <div className="flex flex-col items-center gap-1.5 py-6 shrink-0 pointer-events-none">
+                            <motion.p
+                                animate={reduce ? undefined : { opacity: [0.4, 1, 0.4] }}
+                                transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                                className="text-xs sm:text-sm font-black uppercase tracking-[0.25em] text-yellow-600 dark:text-yellow-400"
                             >
-                                {/* Icon Background Glow */}
-                                <div className={`absolute -top-10 -right-10 w-28 h-28 sm:w-40 sm:h-40 bg-gradient-to-br ${color} opacity-10 blur-3xl group-hover:opacity-20 transition-opacity duration-500`} />
+                                Klik gedung untuk memilih divisi
+                            </motion.p>
+                        </div>
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="split"
+                        initial={reduce ? false : { opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.6 }}
+                        className="relative z-10 flex-1 min-h-0 flex flex-col"
+                        style={{ transformStyle: 'preserve-3d' }}
+                    >
+                        <motion.div
+                            initial={reduce ? false : { opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3, duration: 0.6 }}
+                            className="text-center px-4 shrink-0 mb-2"
+                        >
+                            <h1 className="text-xl sm:text-3xl font-black tracking-tight uppercase">
+                                Tiga <span className="bg-gradient-to-r from-yellow-500 to-amber-400 bg-clip-text text-transparent">Divisi Utama</span>
+                            </h1>
+                            <p className="mt-1 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">Pilih divisi untuk melihat proyeknya</p>
+                        </motion.div>
 
-                                <div className="relative z-10 flex justify-between items-start">
-                                    {meta?.logo ? (
-                                        <div className={`rounded-2xl sm:rounded-3xl bg-white shadow-lg overflow-hidden transition-all duration-500 ${empty ? '' : 'group-hover:scale-110'}`}>
-                                            <img src={meta.logo} alt={div.division} className="w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 object-contain p-1.5" />
+                        <div className="flex-1 min-h-0 flex flex-col lg:flex-row items-stretch justify-center gap-4 sm:gap-6 px-4 sm:px-8 pb-6 overflow-y-auto" style={{ transformStyle: 'preserve-3d' }}>
+                            {ORDER.map((div, i) => {
+                                const t = DIVISION_THEME[div];
+                                const depth = i - 1; // -1, 0, 1
+                                const tx = par.x * depth * 16;
+                                const ry = par.x * 7;
+                                const rx = -par.y * 5;
+                                return (
+                                    <motion.button
+                                        key={div}
+                                        onClick={() => enterDivision(div)}
+                                        initial={reduce ? false : { opacity: 0, y: 70, rotateY: depth * 35, scale: 0.85 }}
+                                        animate={{ opacity: 1, y: 0, rotateY: 0, scale: 1 }}
+                                        transition={{ delay: 0.35 + i * 0.18, duration: 1, ease: [0.16, 1, 0.3, 1] }}
+                                        whileHover={reduce ? undefined : { y: -10, scale: 1.03 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        style={{
+                                            transform: reduce ? undefined : `translate3d(${tx}px, 0, 0) rotateX(${rx}deg) rotateY(${ry}deg)`,
+                                            transformStyle: 'preserve-3d',
+                                        }}
+                                        className="group relative flex-1 min-h-[260px] lg:min-h-0 rounded-[2rem] overflow-hidden text-left"
+                                    >
+                                        {/* glow aksen */}
+                                        <div className="absolute -inset-1 rounded-[2.2rem] blur-2xl opacity-40 group-hover:opacity-80 transition-opacity" style={{ background: t.glow }} />
+                                        <div className="relative h-full rounded-[2rem] bg-white/70 dark:bg-slate-900/50 backdrop-blur-xl border border-black/10 dark:border-white/10 group-hover:border-yellow-500/40 shadow-2xl overflow-hidden flex flex-col transition-colors">
+                                            {/* Objek 3D divisi */}
+                                            <div className="relative flex-1 min-h-[150px]">
+                                                <DivisionModel3D model={t.model} interactive={false} className="absolute inset-0" />
+                                            </div>
+                                            {/* Teks */}
+                                            <div className="relative p-5">
+                                                <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${t.chipClass}`}>{t.short}</span>
+                                                <h2 className={`mt-2 text-lg sm:text-xl font-black uppercase tracking-tight bg-gradient-to-r ${t.gradient} bg-clip-text text-transparent`}>{t.title}</h2>
+                                                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">{t.tagline}</p>
+                                                <div className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-yellow-600 dark:text-yellow-400 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all">
+                                                    Masuk <ArrowRight className="w-4 h-4" />
+                                                </div>
+                                            </div>
                                         </div>
-                                    ) : (
-                                        <div className={`p-3 sm:p-4 lg:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${color} shadow-lg transition-all duration-500 ${empty ? '' : 'group-hover:scale-110 group-hover:rotate-6'}`}>
-                                            <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 text-slate-900 dark:text-white stroke-[2.5]" />
-                                        </div>
-                                    )}
-                                    <span className="text-[10px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 bg-black/[0.04] dark:bg-white/[0.06] border border-black/10 dark:border-white/10 rounded-full px-2.5 py-1">
-                                        {div.projectCount} proyek
-                                    </span>
-                                </div>
-
-                                <div className="relative z-10 mt-auto">
-                                    <div className="flex items-center gap-2">
-                                        <h2 className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight uppercase mb-1 sm:mb-2 group-hover:text-yellow-500 dark:group-hover:text-yellow-400 transition-colors line-clamp-1">
-                                            {div.division}
-                                        </h2>
-                                        {!empty && (
-                                            <LucideIcons.ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 text-slate-600 group-hover:text-yellow-400 group-hover:translate-x-1.5 transition-all duration-500 shrink-0 mb-1 sm:mb-2" />
-                                        )}
-                                    </div>
-                                    <p className="text-slate-500 dark:text-slate-400 text-[9px] sm:text-[10px] lg:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed line-clamp-2">
-                                        {empty ? 'Belum ada proyek' : (meta?.desc || `${div.categories.length} kategori`)}
-                                    </p>
-                                </div>
-
-                                <div className="absolute inset-0 border-2 border-transparent group-hover:border-yellow-500/20 rounded-3xl sm:rounded-[2.5rem] transition-all duration-500 pointer-events-none" />
-                            </motion.button>
-                        );
-                    })}
-                </div>
-            )}
+                                    </motion.button>
+                                );
+                            })}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Admin PIN Modal */}
             <AnimatePresence>
@@ -377,13 +371,10 @@ export default function CategoriesPage() {
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-10"
                     >
-                        {/* Backdrop Blur */}
                         <div
                             className="absolute inset-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-2xl"
                             onClick={() => setShowPinModal(false)}
                         />
-
-                        {/* Modal Content */}
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -433,13 +424,6 @@ export default function CategoriesPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
-
-            {/* Footer */}
-            <footer className="mt-auto text-center relative z-10 pb-10 pt-16 sm:pt-24">
-                <p className="text-slate-500 text-[10px] sm:text-xs font-bold uppercase tracking-[0.3em] opacity-40">
-                    © {new Date().getFullYear()} PT Brantas Abipraya (Persero) • Smart Monitoring System
-                </p>
-            </footer>
         </div>
     );
 }
