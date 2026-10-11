@@ -141,6 +141,21 @@ export async function getSessionSub(): Promise<string | null> {
 }
 
 /**
+ * Identitas sesi SSO: { sub, username }. username dipakai untuk mencocokkan
+ * PIC yang masih berformat placeholder `ldap_<username>` (dari direktori SSO
+ * eksternal) sebelum user bersangkutan pernah login ke aplikasi yang menuliskan
+ * sub asli. PIN → { sub: null, username: null }.
+ */
+export async function getSessionIdentity(): Promise<{ sub: string | null; username: string | null }> {
+    const session = await auth();
+    const u = session?.user as { id?: string; username?: string | null } | undefined;
+    return {
+        sub: (u?.id as string) || null,
+        username: (u?.username as string | null) ?? null,
+    };
+}
+
+/**
  * Guard super-admin. PIN tidak pernah lolos (getSessionSub hanya baca sesi SSO).
  * Return null bila lolos, atau NextResponse 403.
  */
@@ -163,6 +178,27 @@ export async function requireSuperAdmin(req: NextRequest): Promise<NextResponse 
 }
 
 /**
+ * Apakah identitas (sub/username) berhak sebagai PIC proyek berdasarkan picSubs.
+ * - match: true bila sub asli ADA di picSubs, ATAU placeholder `ldap_<username>` ADA.
+ * - placeholder: nilai `ldap_<username>` yang cocok (bila lewat jalur username),
+ *   dipakai pemanggil untuk self-heal (ganti → sub asli). null bila match via sub.
+ *
+ * Satu sumber kebenaran agar GET (gating UI) dan guard tulis konsisten.
+ */
+export function matchProjectPic(
+    picSubs: string[],
+    identity: { sub: string | null; username: string | null },
+): { match: boolean; placeholder: string | null } {
+    const subs = Array.isArray(picSubs) ? picSubs : [];
+    if (identity.sub && subs.includes(identity.sub)) return { match: true, placeholder: null };
+    if (identity.username) {
+        const placeholder = `ldap_${identity.username}`;
+        if (subs.includes(placeholder)) return { match: true, placeholder };
+    }
+    return { match: false, placeholder: null };
+}
+
+/**
  * Guard akses tulis proyek. Lolos (null) bila super-admin ATAU sub ∈ picSubs proyek.
  *
  * Pemilik SATU-SATUNYA try/catch di sekitar findById/isSuperAdmin:
@@ -174,7 +210,7 @@ export async function requireProjectAccess(
     projectId: string,
 ): Promise<NextResponse | null> {
     void req;
-    const sub = await getSessionSub();
+    const { sub, username } = await getSessionIdentity();
     if (!sub) {
         return NextResponse.json(
             { success: false, error: 'Akses edit proyek memerlukan login SSO.' },
@@ -199,7 +235,22 @@ export async function requireProjectAccess(
         if (superAdmin) return null;
 
         const picSubs = Array.isArray(loc.picSubs) ? loc.picSubs : [];
-        if (picSubs.includes(sub)) return null;
+        const { match, placeholder } = matchProjectPic(picSubs, { sub, username });
+
+        if (match) {
+            // SELF-HEAL: bila lolos lewat placeholder `ldap_<username>`, ganti
+            // dengan sub asli agar lookup berikutnya langsung cocok via sub.
+            if (placeholder) {
+                try {
+                    const healed = [...new Set(picSubs.map((s) => (s === placeholder ? sub : s)))];
+                    await Location.updateOne({ _id: loc._id }, { $set: { picSubs: healed } });
+                } catch (healErr) {
+                    // Self-heal gagal tidak boleh menolak akses yang sudah sah.
+                    console.warn('[requireProjectAccess] self-heal gagal:', (healErr as { message?: string })?.message);
+                }
+            }
+            return null;
+        }
 
         return NextResponse.json(
             { success: false, error: 'Anda tidak memiliki akses untuk mengubah proyek ini.' },

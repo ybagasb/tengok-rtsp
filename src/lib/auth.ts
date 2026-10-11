@@ -64,10 +64,52 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             // If an ERP access_token is needed, fetch/mint it in a dedicated
             // server route instead of parking it in the auth cookie.
             if (account && profile) {
+                const p = profile as Record<string, unknown>;
+                const username =
+                    (p['cognito:username'] as string | undefined) ||
+                    (p['preferred_username'] as string | undefined) ||
+                    (p['username'] as string | undefined) ||
+                    null;
+
                 token.sub = profile.sub ? String(profile.sub) : undefined;
                 token.email = profile.email as string;
                 token.name = (profile.name || profile.email) as string;
+                token.username = username;
                 token.provider = "cognito";
+
+                // Rekam identitas SSO (sub asli ↔ username) ke Mongo saat login.
+                // Dipakai untuk resolve/upgrade Location.picSubs yang masih
+                // berformat placeholder `ldap_<username>` (lihat SsoIdentity.ts).
+                // Fail-safe: kegagalan DB TIDAK boleh menggagalkan login.
+                try {
+                    const sub = token.sub;
+                    if (sub) {
+                        const { default: dbConnect } = await import('@/lib/db');
+                        const { default: SsoIdentity } = await import('@/models/SsoIdentity');
+                        await dbConnect();
+                        await SsoIdentity.updateOne(
+                            { cognitoSub: sub },
+                            {
+                                $set: {
+                                    username,
+                                    email: (token.email as string) || null,
+                                    name: (token.name as string) || null,
+                                    lastLoginAt: new Date(),
+                                },
+                                $setOnInsert: { firstLoginAt: new Date() },
+                            },
+                            { upsert: true },
+                        );
+
+                        // Self-heal preventif: ganti placeholder `ldap_<username>`
+                        // di SEMUA proyek dengan UUID asli user ini, sehingga PIC
+                        // bisa langsung edit tanpa harus membuka tiap proyek dulu.
+                        const { healPicSubsForUser } = await import('@/lib/picIdentity');
+                        await healPicSubsForUser(sub, username);
+                    }
+                } catch (e) {
+                    console.warn('[auth] Gagal merekam SsoIdentity:', (e as { message?: string })?.message);
+                }
             }
             return token;
         },
@@ -77,6 +119,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 session.user.id = token.sub as string;
                 session.user.email = token.email as string;
                 session.user.name = token.name as string;
+                (session.user as { username?: string | null }).username =
+                    (token.username as string | null) ?? null;
             }
             return session;
         },

@@ -1410,7 +1410,11 @@ function PicPanel({ projectId }: { projectId: string }) {
 
     const nameFor = (sub: string) => {
         const p = pics.find(x => x.cognitoSub === sub);
-        return p ? (p.fullName || p.username || sub) : sub;
+        if (p && (p.fullName || p.username)) return p.fullName || p.username;
+        // Jaring pengaman terakhir: jangan tampilkan UUID mentah.
+        const m = /^ldap_(.+)$/.exec(sub);
+        if (m) return m[1];
+        return 'User (belum login)';
     };
 
     const addPic = async (u: PicSearchResult) => {

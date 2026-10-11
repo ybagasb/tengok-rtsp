@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
-import { requireAdmin, requireProjectAccess, getAuditActor, getSessionSub, isSuperAdmin } from '@/lib/apiAuth';
+import { requireAdmin, requireProjectAccess, getAuditActor, getSessionIdentity, isSuperAdmin, matchProjectPic } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
 import { getPresignedUrl, deleteObject, isStorageConfigured } from '@/lib/storage';
 
@@ -65,10 +65,24 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
         // Hitung kemampuan akses SEBELUM menandatangani file. Server tetap
         // penegak: hanya editor yang menerima presigned URL / raw key.
-        const sub = await getSessionSub();
+        const { sub, username } = await getSessionIdentity();
         const superAdmin = sub ? await isSuperAdmin(sub) : false;
-        const isPic = !!sub && Array.isArray(loc.picSubs) && loc.picSubs.includes(sub);
+        const picSubs: string[] = Array.isArray(loc.picSubs) ? loc.picSubs : [];
+        // Kecocokan PIC: sub asli ATAU placeholder `ldap_<username>` (user yang
+        // belum pernah login ke aplikasi penulis sub asli). Lihat matchProjectPic.
+        const { match: isPic, placeholder } = matchProjectPic(picSubs, { sub, username });
         const canEdit = superAdmin || isPic;
+
+        // SELF-HEAL: bila PIC dikenali lewat placeholder, upgrade ke sub asli
+        // begitu halaman proyek dibuka (best-effort; tak boleh menggagalkan GET).
+        if (isPic && placeholder && sub) {
+            try {
+                const healed = [...new Set(picSubs.map((s) => (s === placeholder ? sub : s)))];
+                await Location.updateOne({ _id: loc._id }, { $set: { picSubs: healed } });
+            } catch (healErr) {
+                console.warn('[Project GET] self-heal gagal:', (healErr as { message?: string })?.message);
+            }
+        }
 
         // Resolve presigned URL hanya untuk editor. Non-editor: URL null dan
         // raw key dibuang (hanya metadata non-sensitif yang dikirim).
