@@ -29,6 +29,10 @@ BG_SOFT = colors.HexColor('#f8fafc')
 BG_AMBER = colors.HexColor('#fffbeb')
 BG_BLUE = colors.HexColor('#eff6ff')
 LINE = colors.HexColor('#e2e8f0')
+
+# ── Tautan ──────────────────────────────────────────────────────────────────
+# Spreadsheet pendaftaran PIC (username SSO + nama proyek) yang dibagikan admin.
+PIC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1tY8XWli4iPRfTJCNBUiRJbNL8GqXGAbTVCBS1WcIH-Q/edit?usp=sharing'
 GREEN_DK = colors.HexColor('#047857')
 
 OUT = 'public/Panduan-Input-Detail-Proyek.pdf'
@@ -230,15 +234,17 @@ def build():
         'Pastikan Anda pernah <b>login ke aplikasi Tengok memakai akun SSO</b> minimal sekali '
         '(agar akun Anda terbaca sistem).',
         'Daftarkan diri sebagai PIC dengan mengisi <b>username (akun SSO) dan nama proyek</b> '
-        'yang menjadi tanggung jawab Anda melalui tautan/spreadsheet yang dibagikan admin.',
+        'yang menjadi tanggung jawab Anda pada spreadsheet pendaftaran berikut: '
+        f'<link href="{PIC_SHEET_URL}" color="#2563eb"><u>Spreadsheet Pendaftaran PIC</u></link>.',
         'Admin akan <b>mendaftarkan Anda sebagai PIC</b> proyek tersebut.',
         'Setelah terdaftar, <b>muat ulang</b> halaman — tombol Edit akan aktif pada '
         'proyek Anda, dan Anda bisa mulai mengisi data.',
     ]))
     E.append(callout(
-        'Belum didaftarkan sebagai PIC? Hubungi admin/tim IT Anda dan sampaikan '
-        '<b>username SSO</b> serta <b>nama proyek</b> yang Anda tangani. Ini syarat '
-        'wajib sebelum bisa mengedit.', 'Butuh Akses Edit'))
+        'Belum didaftarkan sebagai PIC? Isi <b>username SSO</b> dan <b>nama proyek</b> '
+        'yang Anda tangani di '
+        f'<link href="{PIC_SHEET_URL}" color="#2563eb"><u>Spreadsheet Pendaftaran PIC</u></link>, '
+        'atau hubungi admin/tim IT Anda. Ini syarat wajib sebelum bisa mengedit.', 'Butuh Akses Edit'))
 
     # ══ 2. CARA MASUK & MEMBUKA PROYEK ═══════════════════════════════════════
     E.append(Paragraph('Langkah 1 — Masuk & Membuka Proyek Anda', H2))
