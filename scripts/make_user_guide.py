@@ -205,7 +205,9 @@ def build():
     E.append(numbered([
         'Anda harus <b>masuk memakai akun kantor (SSO)</b> — bukan hanya PIN. '
         'Kalau masuk dengan PIN, Anda hanya bisa melihat, tidak bisa mengisi.',
-        'Setelah masuk dengan benar, akan muncul tombol <b>"Edit"</b> (gambar pensil) '
+        'Anda harus <b>terdaftar sebagai PIC</b> pada proyek yang ingin diisi. '
+        'Tanpa itu, tombol Edit tidak akan aktif untuk proyek tersebut (lihat kotak di bawah).',
+        'Setelah syarat di atas terpenuhi, akan muncul tombol <b>"Edit"</b> (gambar pensil) '
         'di setiap bagian. Itu tandanya Anda boleh mengisi.',
         'Isi data proyek <b>milik Anda sendiri</b>. Pilih proyek yang tepat sebelum mengisi.',
         'Setelah mengisi, <b>selalu tekan tombol "Simpan"</b>. Kalau tidak ditekan, '
@@ -215,6 +217,28 @@ def build():
         'Tidak yakin dengan sebuah kolom? <b>Kosongkan saja.</b> Lebih baik kosong '
         'daripada salah isi. Kolom bisa dilengkapi kapan saja nanti.',
         'Tenang, Tidak Bisa Rusak'))
+
+    # ══ PENTING: Pendaftaran PIC (penyebab utama "tidak bisa edit") ══════════
+    E.append(Paragraph('Kenapa Saya Tidak Bisa Mengedit? (Pendaftaran PIC)', H2))
+    E.append(Paragraph(
+        'Demi keamanan data, setiap proyek hanya dapat diedit oleh pengguna yang '
+        '<b>terdaftar sebagai PIC (penanggung jawab) proyek tersebut</b>. Jadi meskipun '
+        'Anda sudah masuk lewat SSO, tombol Edit <b>tidak akan aktif</b> pada proyek '
+        'yang bukan tanggung jawab Anda sampai akun Anda didaftarkan sebagai PIC-nya.', BODY))
+    E.append(Paragraph('Cara agar bisa mengedit proyek Anda:', H3))
+    E.append(numbered([
+        'Pastikan Anda pernah <b>login ke aplikasi Tengok memakai akun SSO</b> minimal sekali '
+        '(agar akun Anda terbaca sistem).',
+        'Daftarkan diri sebagai PIC dengan mengisi <b>username (akun SSO) dan nama proyek</b> '
+        'yang menjadi tanggung jawab Anda melalui tautan/spreadsheet yang dibagikan admin.',
+        'Admin akan <b>mendaftarkan Anda sebagai PIC</b> proyek tersebut.',
+        'Setelah terdaftar, <b>muat ulang</b> halaman — tombol Edit akan aktif pada '
+        'proyek Anda, dan Anda bisa mulai mengisi data.',
+    ]))
+    E.append(callout(
+        'Belum didaftarkan sebagai PIC? Hubungi admin/tim IT Anda dan sampaikan '
+        '<b>username SSO</b> serta <b>nama proyek</b> yang Anda tangani. Ini syarat '
+        'wajib sebelum bisa mengedit.', 'Butuh Akses Edit'))
 
     # ══ 2. CARA MASUK & MEMBUKA PROYEK ═══════════════════════════════════════
     E.append(Paragraph('Langkah 1 — Masuk & Membuka Proyek Anda', H2))
@@ -228,9 +252,10 @@ def build():
         'Anda sekarang berada di <b>halaman proyek</b>. Di sinilah semua data diisi.',
     ]))
     E.append(callout(
-        'Kalau tombol <b>"Edit"</b> / <b>"Unggah"</b> tidak muncul di halaman proyek, '
-        'berarti Anda belum masuk dengan akun kantor (SSO). Keluar, lalu masuk lagi '
-        'lewat SSO.', 'Kalau Tombol Edit Tidak Ada'))
+        'Tombol <b>"Edit"</b> / <b>"Unggah"</b> tidak muncul? Dua kemungkinan: '
+        '(1) Anda belum masuk dengan akun kantor (SSO) — keluar lalu masuk lagi lewat SSO; '
+        'atau (2) Anda <b>belum terdaftar sebagai PIC</b> proyek itu — lihat bagian '
+        '"Kenapa Saya Tidak Bisa Mengedit?" di atas.', 'Kalau Tombol Edit Tidak Ada'))
 
     # ══ 3. CARA MENGISI (POLA UMUM) ══════════════════════════════════════════
     E.append(Paragraph('Langkah 2 — Pola Mengisi (Sama di Semua Bagian)', H2))
@@ -341,8 +366,12 @@ def build():
     # ══ 5. KALAU ADA MASALAH ═════════════════════════════════════════════════
     E.append(Paragraph('Kalau Ada Masalah', H2))
     E.append(field_table([
-        ('Tombol Edit tidak muncul', 'Anda belum masuk dengan akun kantor (SSO). '
-                                     'Keluar lalu masuk lagi lewat SSO.'),
+        ('Tombol Edit tidak muncul / tidak bisa edit', 'Dua sebab: belum login SSO '
+                                     '(keluar & masuk lagi lewat SSO), ATAU belum terdaftar '
+                                     'sebagai PIC proyek itu (daftarkan username SSO + nama '
+                                     'proyek ke admin).'),
+        ('Sudah PIC tapi tombol tetap tidak aktif', 'Muat ulang halaman. Pastikan Anda '
+                                     'login SSO dengan akun yang sama dengan yang didaftarkan.'),
         ('Gagal mengunggah berkas', 'Pastikan ukuran berkas tidak lebih dari 25 MB.'),
         ('Angka uang tampil aneh', 'Tulis angka tanpa titik/koma (contoh: 400000000).'),
         ('Data hilang/tidak tersimpan', 'Pastikan menekan "Simpan" dan menunggu '
