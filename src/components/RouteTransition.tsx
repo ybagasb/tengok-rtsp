@@ -14,7 +14,7 @@ import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import BrandLoader from './BrandLoader';
 
-const SHOW_ON = ['/categories', '/map', '/multiview', '/project', '/admin'];
+const SHOW_ON = ['/intro', '/categories', '/map', '/multiview', '/project', '/admin'];
 // Durasi "jembatan" transisi antar-rute. Ini hanya menutup jeda singkat antara
 // klik navigasi dan munculnya loader konten milik halaman tujuan (yang akan
 // tetap tampil sampai datanya benar-benar selesai dimuat). Dibuat agak panjang

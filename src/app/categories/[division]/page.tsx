@@ -2,12 +2,26 @@
 
 import { useState, useEffect, use } from 'react';
 import { motion } from 'framer-motion';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, LayoutGrid, Loader2 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { getDivisionTheme } from '@/lib/divisionTheme';
+import CountUp from '@/components/CountUp';
+
+// Objek 3D divisi — lazy-load (ssr:false).
+const DivisionModel3D = dynamic(() => import('@/components/intro/DivisionModel3D'), { ssr: false });
+
+function fIDRShort(v: number) {
+    if (!v) return 'Rp 0';
+    if (v >= 1_000_000_000_000) return `Rp ${(v / 1_000_000_000_000).toFixed(1)} T`;
+    if (v >= 1_000_000_000) return `Rp ${(v / 1_000_000_000).toFixed(1)} M`;
+    if (v >= 1_000_000) return `Rp ${(v / 1_000_000).toFixed(0)} Jt`;
+    return `Rp ${v.toLocaleString('id-ID')}`;
+}
 
 interface Category {
     _id: string;
@@ -30,16 +44,26 @@ export default function DivisionCategoriesPage({ params }: { params: Promise<{ d
     const division = decodeURIComponent(rawDivision);
     const router = useRouter();
     const [categories, setCategories] = useState<Category[]>([]);
+    const [projectCount, setProjectCount] = useState(0);
+    const [totalNilai, setTotalNilai] = useState(0);
     const [loading, setLoading] = useState(true);
+
+    const theme = getDivisionTheme(division);
 
     usePageTracking('categories-division');
 
     useEffect(() => {
         const fetchDivision = async () => {
             try {
-                const { data } = await axios.get('/api/divisions');
-                const found: Division | undefined = (data.data || []).find((d: Division) => d.division === division);
+                const [divRes, locRes] = await Promise.all([
+                    axios.get('/api/divisions'),
+                    axios.get(`/api/locations?division=${encodeURIComponent(division)}`),
+                ]);
+                const found: Division | undefined = (divRes.data.data || []).find((d: Division) => d.division === division);
                 setCategories(found?.categories || []);
+                setProjectCount(found?.projectCount || 0);
+                const locs = locRes.data?.data || [];
+                setTotalNilai(locs.reduce((acc: number, l: any) => acc + (l.contractValue || 0), 0));
             } catch {
                 toast.error('Gagal memuat kategori divisi');
             } finally {
@@ -78,6 +102,51 @@ export default function DivisionCategoriesPage({ params }: { params: Promise<{ d
                     </p>
                 </div>
             </header>
+
+            {/* ── HERO DIVISI: objek 3D + penjelasan + statistik ── */}
+            {theme && (
+                <motion.section
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                    className="relative z-10 max-w-6xl mx-auto w-full mb-8 sm:mb-12"
+                >
+                    <div className="relative rounded-3xl overflow-hidden bg-white/60 dark:bg-slate-900/40 backdrop-blur-xl border border-black/5 dark:border-white/5 shadow-xl grid grid-cols-1 lg:grid-cols-2">
+                        {/* glow aksen */}
+                        <div className="absolute -top-20 -right-20 w-72 h-72 blur-[90px] rounded-full pointer-events-none" style={{ background: theme.glow }} />
+
+                        {/* Teks penjelasan + statistik */}
+                        <div className="relative z-10 p-6 sm:p-9 flex flex-col justify-center gap-4">
+                            <span className={`self-start text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${theme.chipClass}`}>{theme.short}</span>
+                            <h2 className={`text-2xl sm:text-3xl font-black tracking-tight uppercase bg-gradient-to-r ${theme.gradient} bg-clip-text text-transparent`}>
+                                {theme.title}
+                            </h2>
+                            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-md">
+                                {theme.description}
+                            </p>
+                            <div className="flex gap-6 mt-2">
+                                <div>
+                                    <CountUp value={projectCount} className="text-2xl font-black text-slate-900 dark:text-white" style={{ textShadow: `0 0 16px ${theme.glow}` }} />
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Proyek</div>
+                                </div>
+                                <div>
+                                    <CountUp value={categories.length} className="text-2xl font-black text-slate-900 dark:text-white" />
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Kategori</div>
+                                </div>
+                                <div>
+                                    <CountUp value={totalNilai} format={fIDRShort} className="text-2xl font-black text-slate-900 dark:text-white" style={{ textShadow: `0 0 16px ${theme.glow}` }} />
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Nilai Kontrak</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Objek 3D divisi */}
+                        <div className="relative h-56 sm:h-72 lg:h-auto lg:min-h-[300px]">
+                            <DivisionModel3D model={theme.model} className="absolute inset-0" />
+                        </div>
+                    </div>
+                </motion.section>
+            )}
 
             {loading ? (
                 <div className="flex-1 flex items-center justify-center">

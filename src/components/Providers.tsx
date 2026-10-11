@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 import RouteTransition from './RouteTransition';
 
 // Protected routes that require authentication
-const PROTECTED_ROUTES = ['/categories', '/map', '/multiview', '/admin'];
+const PROTECTED_ROUTES = ['/intro', '/categories', '/map', '/multiview', '/admin'];
 
 /**
  * Check if the current path is a protected route

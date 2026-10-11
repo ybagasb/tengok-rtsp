@@ -720,7 +720,7 @@ export default function MapComponent({
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{item.display_name}</div>
-                                                <div className="text-[10px] text-slate-500 truncate mt-0.5 font-medium">Lokasi proyek di {category}</div>
+                                                <div className="text-[10px] text-slate-500 truncate mt-0.5 font-medium">{item.fullData?.category ? `Kategori: ${item.fullData.category}` : 'Lokasi proyek'}</div>
                                             </div>
                                         </button>
                                     )) : !isSearching ? (

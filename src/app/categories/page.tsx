@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { LogOut, Settings, X, ShieldAlert, LayoutGrid, Loader2, User, BookOpen } from 'lucide-react';
+import { LogOut, Settings, X, ShieldAlert, LayoutGrid, Loader2, User, BookOpen, Building2 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -170,7 +170,17 @@ export default function CategoriesPage() {
                 {/* Actions */}
                 <div className="relative flex items-center gap-1.5 sm:gap-3 shrink-0">
 
-                    {/* Toggle tema (Auto / Terang / Gelap) */}
+                    {/* Kembali ke halaman intro (gedung 3D) */}
+                    <button
+                        onClick={() => router.push('/intro')}
+                        className="flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-yellow-500 dark:hover:text-yellow-400 transition-all p-2 sm:px-3 sm:py-2.5 rounded-xl bg-black/[0.04] dark:bg-slate-900/50 backdrop-blur border border-black/10 dark:border-white/5 hover:border-yellow-500/30 group"
+                        title="Kembali ke halaman intro"
+                    >
+                        <Building2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">Intro</span>
+                    </button>
+
+                    {/* Toggle tema */}
                     <ThemeToggle />
 
                     {/* Panduan pengguna (download PDF) — cara mengisi detail proyek */}
