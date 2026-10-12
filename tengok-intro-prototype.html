@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tengok · Prototipe Intro 3D</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#070d18;--fg:#e8eef8;--dim:#8fa0b8;--acc:#f59e0b;--glass:rgba(15,23,42,.72);color-scheme:dark;box-sizing:border-box}
+html,body{height:100%;margin:0;background:radial-gradient(ellipse at 50% 30%,#13233f 0,var(--bg) 70%);color:var(--fg);font-family:Rajdhani,system-ui,sans-serif;overflow:hidden}
+canvas{position:absolute;inset:0;display:block}
+.o{font-family:Orbitron,system-ui,sans-serif}
+.layer{position:absolute;inset:0;pointer-events:none;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+.layer *{pointer-events:auto}
+.top{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:18px;right:18px;display:flex;justify-content:space-between;font-size:12px;letter-spacing:.18em;pointer-events:none}
+.top b{color:var(--acc)}.live:before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:8px;box-shadow:0 0 10px #22c55e;animation:p 1.4s infinite}
+@keyframes p{50%{opacity:.25}}
+.br{position:absolute;width:26px;height:26px;border:2px solid rgba(245,158,11,.7);pointer-events:none}
+.br.a{top:10px;left:10px;border-right:0;border-bottom:0}.br.b{top:10px;right:10px;border-left:0;border-bottom:0}.br.c{bottom:10px;left:10px;border-right:0;border-top:0}.br.d{bottom:10px;right:10px;border-left:0;border-top:0}
+.scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px);pointer-events:none}
+.pane{position:absolute;opacity:0;visibility:hidden;transition:opacity .6s,transform .6s}
+.pane.show{opacity:1;visibility:visible}
+#hq{left:0;right:0;bottom:calc(9vh + env(safe-area-inset-bottom,0px));text-align:center;transform:translateY(20px)}
+#hq.show{transform:none}
+#hq h1{font:900 clamp(22px,4.2vw,44px)/1.1 Orbitron,sans-serif;letter-spacing:.12em;margin:0;text-shadow:0 0 24px rgba(245,158,11,.5)}
+#hq p{margin:8px 0 18px;color:var(--dim);letter-spacing:.2em;font-size:13px}
+.btn{font:700 13px Orbitron,sans-serif;letter-spacing:.2em;color:#111;background:var(--acc);border:0;padding:13px 26px;cursor:pointer;clip-path:polygon(12px 0,100% 0,calc(100% - 12px) 100%,0 100%);animation:g 1.8s infinite}
+@keyframes g{50%{filter:drop-shadow(0 0 12px #f59e0b)}}
+#split{left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:12px;justify-content:center;transform:translateY(30px)}
+#split.show{transform:none}
+.dv{--c:#f59e0b;flex:1;max-width:340px;padding:12px 14px;background:var(--glass);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.12);border-top:3px solid var(--c);cursor:pointer;transition:transform .25s,box-shadow .25s;clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%)}
+.dv.h{transform:translateY(-8px);box-shadow:0 0 28px -4px var(--c)}
+.dv small{color:var(--c);letter-spacing:.2em;font:700 10px Orbitron,sans-serif}
+.dv h3{margin:4px 0;font:700 clamp(11px,1.4vw,15px)/1.25 Orbitron,sans-serif}
+.dv p{margin:0;color:var(--dim);font-size:14px;line-height:1.25}
+#detail{top:70px;right:20px;width:min(420px,calc(100% - 40px));max-height:calc(100% - 100px);overflow:auto;background:var(--glass);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.14);border-left:4px solid var(--c);padding:18px;transform:translateX(30px)}
+#detail.show{transform:none}
+#detail small{color:var(--c);font:700 11px Orbitron,sans-serif;letter-spacing:.22em}
+#detail h2{margin:6px 0 8px;font:900 20px/1.2 Orbitron,sans-serif}
+#detail>p{color:var(--dim);margin:0 0 14px;font-size:15px}
+.lv{display:flex;align-items:center;gap:12px;padding:11px 12px;margin-bottom:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);cursor:pointer;transition:.2s;font-weight:600;font-size:16px}
+.lv:hover{background:rgba(255,255,255,.12);border-color:var(--c);transform:translateX(-4px)}
+.lv i{font:700 12px Orbitron,sans-serif;color:var(--c);font-style:normal}
+.lv b{margin-left:auto;font:700 10px Orbitron,sans-serif;color:var(--c);letter-spacing:.15em}
+.note{font-size:12px;color:var(--dim);margin-top:10px}
+.back{background:transparent;color:var(--fg);border:1px solid rgba(255,255,255,.3);font:700 11px Orbitron,sans-serif;letter-spacing:.15em;padding:9px 14px;cursor:pointer;margin-bottom:14px;animation:none;clip-path:none}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .6s}
+@media(max-width:800px){#split{flex-direction:column;gap:6px}.dv p{display:none}#detail{top:auto;bottom:12px;right:12px;left:12px;width:auto;max-height:46%}}
+</style>
+</head>
+<body>
+<div class="top o"><div><b>TENGOK</b> · PT BRANTAS ABIPRAYA</div><div class="live">SISTEM ONLINE</div></div>
+<div class="scan"></div><span class="br a"></span><span class="br b"></span><span class="br c"></span><span class="br d"></span>
+<div class="layer">
+  <div id="hq" class="pane"><h1>KANTOR PUSAT</h1><p>PT BRANTAS ABIPRAYA (PERSERO)</p><button class="btn" id="go">KLIK GEDUNG · MULAI ▶</button></div>
+  <div id="split" class="pane"></div>
+  <div id="detail" class="pane"></div>
+</div>
+<div id="flash"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const T=THREE;
+const ren=new T.WebGLRenderer({antialias:true,alpha:true});
+ren.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(ren.domElement);
+const scene=new T.Scene();scene.fog=new T.FogExp2(0x0a1220,.011);
+const cam=new T.PerspectiveCamera(40,1,.1,400);
+scene.add(new T.HemisphereLight(0xaec6ff,0x1a2233,.85));
+const sun=new T.DirectionalLight(0xffe2b0,.9);sun.position.set(20,40,30);scene.add(sun);
+
+// ---- helper & material (prosedural, sama seperti aset sebelumnya) ----
+const M=(c,o={})=>new T.MeshStandardMaterial(Object.assign({color:c,roughness:.65,metalness:.1,flatShading:true},o));
+function cv(w,h,f){const c=document.createElement('canvas');c.width=w;c.height=h;f(c.getContext('2d'),w,h);const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;return t}
+function glass(rx,ry){const t=cv(64,64,(g,w,h)=>{const q=g.createLinearGradient(0,0,w,h);q.addColorStop(0,'#2a63e0');q.addColorStop(1,'#12379f');g.fillStyle=q;g.fillRect(0,0,w,h);g.strokeStyle='rgba(190,215,255,.6)';g.lineWidth=3;g.strokeRect(0,0,w,h)});t.repeat.set(rx,ry);return new T.MeshStandardMaterial({map:t,roughness:.15,metalness:.7})}
+const C={grey:M(0xc9cbd2),dgrey:M(0x6c7079),conc:M(0xbdbab2),asph:M(0x35383d),amber:M(0xf2a516),orange:M(0xe8700c),white:M(0xf4f4f4),rock:M(0x7b756c),water:M(0x2bb5b0,{transparent:true,opacity:.88,roughness:.2})};
+function b(w,h,d,m,x,y,z,p){const o=new T.Mesh(new T.BoxGeometry(w,h,d),m);o.position.set(x,y,z);p.add(o);return o}
+function cyl(a,c,r,m,p,seg=6){const d=new T.Vector3().subVectors(c,a),l=d.length();const o=new T.Mesh(new T.CylinderGeometry(r,r,l,seg),m);o.position.copy(a).addScaledVector(d,.5);o.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d.normalize());p.add(o)}
+function seg(a,c,w,t,m,p){const o=new T.Mesh(new T.BoxGeometry(w,t,a.distanceTo(c)+.05),m);o.position.copy(a).add(c).multiplyScalar(.5);o.lookAt(c);p.add(o)}
+const V=(x,y,z)=>new T.Vector3(x,y,z);
+
+function gedung(){const g=new T.Group();
+  b(30,3,20,C.dgrey,0,1.5,0,g);b(13,28,11,glass(5,14),-3,17,-1,g);b(9,20,9,glass(4,10),9.5,13,-2,g);
+  b(14,12,10,C.grey,-12,9,3,g);b(14.2,2.5,10.2,glass(6,1),-12,9,3,g);
+  for(let i=1;i<=4;i++)b(13.6,.5,11.6,C.grey,-3,3+i*5.4,-1,g);
+  b(14,.8,12,C.dgrey,-3,31.4,-1,g);b(10,.8,10,C.dgrey,9.5,23.4,-2,g);b(14.4,.8,10.4,C.dgrey,-12,15.4,3,g);
+  b(12,1,7,C.grey,2,4,10,g);[[-3,10],[7,10]].forEach(([x,z])=>b(.9,3,.9,C.grey,x,2.5,z,g));
+  b(4,2,3,C.dgrey,-6,32.4,-1,g);b(3,1.6,3,C.dgrey,0,32.2,2,g);b(3,1.5,3,C.dgrey,9.5,24.5,-2,g);return g}
+function hq(){const g=gedung();
+  const r=new T.Mesh(new T.TorusGeometry(4.6,.4,8,40),C.amber);r.position.set(-3,17,4.7);g.add(r);
+  const d=new T.Mesh(new T.CircleGeometry(4.3,32),glass(3,3));d.position.set(-3,17,4.55);g.add(d);return g}
+function bendungan(){const g=new T.Group();
+  const sh=new T.Shape();sh.moveTo(-2,0);sh.lineTo(12,0);sh.lineTo(3,16);sh.lineTo(-1,16);sh.closePath();
+  const body=new T.Mesh(new T.ExtrudeGeometry(sh,{depth:44,bevelEnabled:false}),C.conc);body.position.z=-22;g.add(body);
+  b(34,14.5,60,C.water,-18,7.25,0,g);b(3,1,44,C.grey,1,16.5,0,g);
+  for(let i=-2;i<=2;i++)b(1.2,3.5,3,C.grey,1,18,i*3,g);b(3.2,.6,18,C.grey,1,19.6,0,g);
+  const ang=Math.atan2(-16,9),n=V(16,9,0).normalize();
+  const ch=b(18.4,.5,13,C.grey,7.5+n.x*.3,8+n.y*.3,0,g);ch.rotation.z=ang;
+  const st=b(18.4,.3,9,C.water,7.5+n.x*.6,8+n.y*.6,0,g);st.rotation.z=ang;
+  b(10,1,14,C.grey,15,.5,0,g);b(11,6,14,C.grey,19,3,-11,g);b(12,.8,15,C.dgrey,19,6.4,-11,g);
+  cyl(V(4,14,-13.5),V(14,3.5,-10),.9,C.dgrey,g,8);cyl(V(4,14,-8.5),V(14,3.5,-8),.9,C.dgrey,g,8);
+  b(16,1,26,C.water,31,.5,-4,g);
+  const rk=(x,y,z,s)=>{const o=new T.Mesh(new T.DodecahedronGeometry(s,0),C.rock);o.position.set(x,y,z);o.scale.y=.75;g.add(o)};
+  for(let i=0;i<7;i++){const s=7+((i*5)%4);rk(i*3-8,s*.5,-30-(i%2)*3,s);rk(i*3-8,s*.5,30+(i%2)*3,s)}
+  rk(-3,18,-27,8);rk(-3,18,27,8);rk(8,9,-30,9);rk(8,9,30,9);rk(20,5,-24,6);rk(20,5,24,6);rk(-18,5,-33,8);rk(-18,5,33,8);return g}
+function tol(){const g=new T.Group(),Y=7;
+  b(94,.8,5.4,C.asph,2,Y,0,g);for(let x=-44;x<48;x+=4)b(1.6,.05,.25,C.white,x,Y+.43,0,g);
+  [-1,1].forEach(s=>b(94,.6,.4,C.orange,2,Y+.7,s*2.9,g));
+  for(let x=-40;x<=46;x+=12){b(1.4,Y-.4,1.4,C.dgrey,x,(Y-.4)/2,0,g);b(3.2,.6,1.8,C.amber,x,Y-.7,0,g)}
+  b(4.4,.3,60,C.asph,0,.2,0,g);for(let z=-28;z<30;z+=4)b(.25,.05,1.6,C.white,0,.4,z,g);
+  [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([sx,sz])=>{
+    const P0=V(sx*12,Y,sz*2.6),P1=V(sx*25,3.6,sz*9),P2=V(sx*2.6,.3,sz*20),pts=[];
+    for(let i=0;i<=14;i++){const t=i/14,u=1-t;pts.push(V(u*u*P0.x+2*u*t*P1.x+t*t*P2.x,Y+(.3-Y)*t,u*u*P0.z+2*u*t*P1.z+t*t*P2.z))}
+    for(let i=0;i<14;i++)seg(pts[i],pts[i+1],3.6,.7,C.asph,g);
+    pts.forEach((p,i)=>{if(i%3==1&&p.y>1.6){b(1.1,p.y-.5,1.1,C.dgrey,p.x,(p.y-.5)/2,p.z,g);b(2.4,.5,2.4,C.amber,p.x,p.y-.55,p.z,g)}})});
+  [-1,1].forEach(s=>b(1.3,24,1.3,C.conc,30,12,s*3.4,g));
+  b(1.3,1.2,8.2,C.conc,30,17,0,g);b(1.5,1.2,8.2,C.conc,30,23.2,0,g);
+  [-1,1].forEach(s=>{for(let i=0;i<6;i++){const top=V(30,23-i*1.6,s*3.4);[-1,1].forEach(d=>cyl(top,V(30+d*(5+i*2.6),Y+.4,s*2.9),.1,C.amber,g,4))}});return g}
+
+// holografik: garis tepi + normalisasi ukuran/posisi
+function glow(g,col,op){const a=[];g.traverse(o=>{if(o.isMesh)a.push(o)});a.forEach(o=>o.add(new T.LineSegments(new T.EdgesGeometry(o.geometry,30),new T.LineBasicMaterial({color:col,transparent:true,opacity:op}))))}
+function fit(g,size,col){glow(g,col,.28);const bb=new T.Box3().setFromObject(g),s=bb.getSize(V(0,0,0)),k=size/Math.max(s.x,s.y*1.25,s.z),c=bb.getCenter(V(0,0,0));
+  g.position.set(-c.x*k,-bb.min.y*k,-c.z*k);g.scale.setScalar(k);const w=new T.Group();w.add(g);w.userData.g=g;return w}
+
+// ---- data divisi (nama proyek dari hasil riset; status CCTV = contoh) ----
+const DIV=[
+{n:'DIVISI 1',t:'GEDUNG & BANGUNAN',c:'#3b82f6',d:'Konstruksi gedung, M&E, bandara & pembangkit.',items:['Gedung Perkantoran & Pemerintahan','Gedung Hijau','Mekanikal & Elektrikal','Bandara & Pembangkit'],f:gedung},
+{n:'DIVISI 2',t:'BENDUNGAN & SUMBER DAYA AIR',c:'#14b8a6',d:'Bendungan, irigasi, terowongan & reklamasi.',items:['Bendungan Ciawi','Bendungan Keureuto','Bendungan Jragung','Bendungan Semantok'],f:bendungan},
+{n:'DIVISI 3',t:'JALAN, TOL & INFRASTRUKTUR',c:'#f59e0b',d:'Jalan tol, flyover, jalan & jembatan.',items:['Tol Cisumdawu Seksi 5B & 6B','Jalan Seredala–Dekai, Papua','Jembatan & Flyover'],f:tol}];
+const XS=[-19,0,19];
+
+// ---- lantai grid, bintang, platform ----
+const grid=new T.GridHelper(260,90,0xf59e0b,0x22304d);grid.material.transparent=true;
+grid.material.opacity=.22;grid.position.y=-.02;scene.add(grid);
+{const p=[];for(let i=0;i<500;i++)p.push((Math.random()-.5)*260,Math.random()*90+5,-Math.random()*140-10);
+ const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(p,3));scene.add(new T.Points(g,new T.PointsMaterial({color:0xaec6ff,size:.5,transparent:true,opacity:.6})))}
+function platform(r,col){const g=new T.Group(),m=(o)=>new T.MeshBasicMaterial({color:col,transparent:true,opacity:o,side:T.DoubleSide});
+  const d=new T.Mesh(new T.CircleGeometry(r,56),m(.1));d.rotation.x=-Math.PI/2;g.add(d);
+  const ring=new T.Mesh(new T.RingGeometry(r-.35,r,72),m(.9));ring.rotation.x=-Math.PI/2;g.add(ring);
+  const sc=new T.Mesh(new T.RingGeometry(r*.98,r,72),m(.6));sc.rotation.x=-Math.PI/2;g.add(sc);g.userData={ring,sc,d};g.position.y=.03;scene.add(g);return g}
+
+const hqW=fit(hq(),19,0xf59e0b);scene.add(hqW);const hqP=platform(15,0xf59e0b);
+const mods=DIV.map((d,i)=>{const w=fit(d.f(),14,new T.Color(d.c).getHex());w.position.x=XS[i];w.scale.setScalar(0);w.visible=false;w.userData.i=i;w.userData.s=0;scene.add(w);
+  const p=platform(10.5,new T.Color(d.c).getHex());p.position.x=XS[i];p.visible=false;
+  const l=new T.PointLight(new T.Color(d.c).getHex(),1.2,34);l.position.set(XS[i],6,6);scene.add(l);return{w,p}});
+
+// ---- UI ----
+const $=id=>document.getElementById(id);
+$('split').innerHTML=DIV.map((d,i)=>`<div class="dv" data-i="${i}" style="--c:${d.c}"><small>${d.n}</small><h3>${d.t}</h3><p>${d.d}</p></div>`).join('');
+let phase='hq',t0=0,sel=-1,hov=-1,kids=[];
+function show(id,on){$(id).classList.toggle('show',on)}
+show('hq',true);
+function startSplit(){if(phase!=='hq')return;phase='explode';t0=performance.now();show('hq',false);
+  $('flash').style.opacity=.7;setTimeout(()=>$('flash').style.opacity=0,90);
+  kids=hqW.userData.g.children.map(c=>({c,p:c.position.clone(),s:c.scale.clone(),d:c.position.clone().normalize().add(V(Math.random()-.5,Math.random(),Math.random()-.5)).normalize(),r:V(Math.random()-.5,Math.random()-.5,Math.random()-.5).multiplyScalar(6)}));
+  mods.forEach(m=>{m.w.visible=true});}
+function open(i){if(phase!=='split')return;sel=i;phase='detail';const d=DIV[i];show('split',false);
+  const el=$('detail');el.style.setProperty('--c',d.c);
+  el.innerHTML=`<button class="back" id="bk">◀ KEMBALI</button><small>${d.n}</small><h2>${d.t}</h2><p>${d.d}</p>`+d.items.map((x,k)=>`<div class="lv"><i>0${k+1}</i>${x}<b>MASUK ▶</b></div>`).join('')+`<div class="note">Prototipe: daftar level = kategori proyek (Category.identifier). Status CCTV &amp; data asli diambil dari database Tengok.</div>`;
+  $('bk').onclick=back;show('detail',true)}
+function back(){if(phase!=='detail')return;phase='split';sel=-1;show('detail',false);show('split',true)}
+$('go').onclick=startSplit;
+document.querySelectorAll('.dv').forEach(e=>{e.onclick=()=>open(+e.dataset.i);e.onmouseenter=()=>hov=+e.dataset.i;e.onmouseleave=()=>hov=-1});
+addEventListener('keydown',e=>{if(e.key==='Escape')back()});
+
+// ---- pointer & raycast ----
+const ray=new T.Raycaster(),pt=new T.Vector2(),mx={x:0,y:0};
+function ptr(e){pt.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);mx.x=pt.x;mx.y=pt.y}
+function pick(list){ray.setFromCamera(pt,cam);const h=ray.intersectObjects(list,true)[0];return h?h.object:null}
+function idxOf(o){while(o){if(o.userData&&o.userData.i!==undefined)return o.userData.i;o=o.parent}return -1}
+ren.domElement.addEventListener('pointermove',e=>{ptr(e);if(phase==='split'){const o=pick(mods.map(m=>m.w));hov=o?idxOf(o):-1;document.body.style.cursor=hov>=0?'pointer':'default'}
+  else if(phase==='hq')document.body.style.cursor=pick([hqW])?'pointer':'default'});
+ren.domElement.addEventListener('pointerdown',e=>{ptr(e);
+  if(phase==='hq'&&pick([hqW]))startSplit();
+  else if(phase==='split'){const o=pick(mods.map(m=>m.w));if(o)open(idxOf(o))}});
+
+// ---- loop ----
+const ease=x=>1-Math.pow(1-x,3),back2=x=>{const c=1.7;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
+const camP=V(0,9,34),look=V(0,7,0),par=V(0,0,0);let last=performance.now();
+function resize(){ren.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+camP.set(0,30,80);
+(function loop(now){requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.05);last=now;
+  const f=Math.max(1,1.75/cam.aspect);let P,L;
+  if(phase==='hq'){P=V(0,9*f,34*f);L=V(0,7,0)}
+  else if(phase==='detail'){const X=XS[sel];P=V(X+2,7*f,22*f);L=V(X+(innerWidth>800?7:0),5,0)}
+  else{P=V(0,11*f,40*f);L=V(0,4,0)}
+  camP.lerp(P,.045);look.lerp(L,.05);par.lerp(V(mx.x*2.2,-mx.y*1.2,0),.05);
+  cam.position.copy(camP).add(par);cam.lookAt(look);
+  const tt=now/1000;
+  // HQ
+  if(hqW.visible){hqW.rotation.y+=dt*(phase==='hq'?.45:.2);
+    hqP.userData.sc.scale.setScalar(.5+(tt%2)/2);hqP.userData.sc.material.opacity=.7*(1-(tt%2)/2)}
+  let pr=0;
+  if(phase==='explode'){pr=Math.min(1,(now-t0)/1500);const e=pr*pr;
+    kids.forEach(k=>{k.c.position.copy(k.p).addScaledVector(k.d,e*60);k.c.rotation.set(k.r.x*e,k.r.y*e,k.r.z*e);k.c.scale.copy(k.s).multiplyScalar(Math.max(0,1-e*e))});
+    hqP.scale.setScalar(1+pr*.4);hqP.userData.ring.material.opacity=.9*(1-pr);
+    if(pr>=1){hqW.visible=false;hqP.visible=false;phase='split';show('split',true);t0=0}}
+  // divisi
+  mods.forEach((m,i)=>{
+    const a=phase==='explode'?back2(Math.max(0,Math.min(1,(pr-.4)/.6-i*.1))):(phase==='hq'?0:1);
+    const h=(i===hov||i===sel)?1.1:1,dim=(phase==='detail'&&i!==sel)?.55:1;
+    m.w.userData.s+=((a*h*dim)-m.w.userData.s)*Math.min(1,dt*7);m.w.scale.setScalar(Math.max(.0001,m.w.userData.s));
+    m.w.rotation.y+=dt*((i===hov||i===sel)?.9:.3);m.w.position.y=Math.sin(tt*1.2+i)*.35*a;
+    m.p.visible=a>.02;m.p.scale.setScalar(Math.max(.01,a));
+    const sc=m.p.userData.sc,u=(tt*.5+i*.3)%1;sc.scale.setScalar(.45+u*.55);sc.material.opacity=.7*(1-u);
+    m.p.userData.ring.material.opacity=(i===hov||i===sel)?1:.55;
+    document.querySelectorAll('.dv')[i].classList.toggle('h',i===hov)});
+  grid.position.z=(tt*2)%2.9;
+  ren.render(scene,cam)})(last);
+</script>
+</body>
+</html>

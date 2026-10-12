@@ -55,4 +55,5 @@ docker-compose.yml
 # file data sumber (kerja, bukan bagian aplikasi)
 *.xlsx
 *.pptx
+*.zip
 Segmentasi Proyek.pdf

@@ -1,13 +1,14 @@
-"use client";
+﻿"use client";
 
 /**
- * BrantasBuilding3D — model 3D gedung kantor pusat PT Brantas Abipraya
- * (prosedural, Three.js). Dapat diputar (drag) & zoom (scroll/pinch),
- * auto-rotate. Dipakai di intro halaman kategori.
+ * BrantasBuilding3D - model 3D gedung kantor pusat PT Brantas Abipraya (fase hq).
  *
- * Lazy-loaded (ssr:false) agar Three.js tak membebani halaman lain & tak
- * bentrok dengan MapLibre. Cleanup penuh saat unmount (dispose geometri/
- * material/texture + renderer) agar tidak ada memory leak WebGL.
+ * Langkah 1: Port model hq() dari prototipe tengok-intro-prototype.html.
+ * Model hq() = gedung() (flat-shaded, material kaca) + cincin Torus amber
+ * + disc kaca fasad bulat khas gedung Brantas. Garis tepi amber via glow(),
+ * normalisasi bounding-box via fit(). OrbitControls + auto-rotate statis.
+ *
+ * Lazy-loaded (ssr:false). Cleanup penuh saat unmount.
  */
 
 import { useEffect, useRef } from 'react';
@@ -28,13 +29,11 @@ export default function BrantasBuilding3D({
         const W = () => mount.clientWidth || window.innerWidth;
         const H = () => mount.clientHeight || window.innerHeight;
 
-        // ── Scene (transparan — background halaman tembus) ──────────────────
+        // Scene transparan
         const scene = new THREE.Scene();
+        const cam = new THREE.PerspectiveCamera(40, W() / H(), 0.1, 400);
+        cam.position.set(0, 9, 34);
 
-        const cam = new THREE.PerspectiveCamera(45, W() / H(), 0.1, 500);
-        cam.position.set(34, 10, 48);
-
-        // alpha:true + clearColor transparan agar menyatu dengan latar halaman.
         const ren = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         ren.setSize(W(), H());
@@ -43,170 +42,144 @@ export default function BrantasBuilding3D({
         mount.appendChild(ren.domElement);
 
         const ctl = new OrbitControls(cam, ren.domElement);
-        ctl.target.set(0, 12, 0);
+        ctl.target.set(0, 7, 0);
         ctl.enableDamping = true;
         ctl.autoRotate = true;
-        ctl.autoRotateSpeed = 0.6;
+        ctl.autoRotateSpeed = 0.8;
         ctl.maxPolarAngle = Math.PI / 2.02;
-        ctl.minDistance = 15;
-        ctl.maxDistance = 130;
+        ctl.minDistance = 10;
+        ctl.maxDistance = 80;
 
-        // Lacak resource untuk dispose.
+        // resource tracking
         const disposables: Array<{ dispose: () => void }> = [];
         const track = <T extends { dispose: () => void }>(o: T): T => { disposables.push(o); return o; };
 
-        // ── Cahaya ─────────────────────────────────────────────────────────
-        scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x556644, 0.85));
-        const sun = new THREE.DirectionalLight(0xfff2dd, 1.1);
-        sun.position.set(40, 60, 50);
+        // Cahaya (sama dengan prototipe)
+        scene.add(new THREE.HemisphereLight(0xaec6ff, 0x1a2233, 0.85));
+        const sun = new THREE.DirectionalLight(0xffe2b0, 0.9);
+        sun.position.set(20, 40, 30);
         sun.castShadow = true;
-        sun.shadow.mapSize.set(2048, 2048);
-        Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 50, bottom: -50, near: 1, far: 200 });
+        sun.shadow.mapSize.set(1024, 1024);
         scene.add(sun);
 
-        // ── Util tekstur prosedural ──────────────────────────────────────────
-        function tex(w: number, h: number, draw: (g: CanvasRenderingContext2D, w: number, h: number) => void, rx = 1, ry = 1) {
-            const c = document.createElement('canvas');
-            c.width = w; c.height = h;
-            draw(c.getContext('2d')!, w, h);
+        // Helper material & tekstur prosedural (persis prototipe)
+        const M = (c: number, o: THREE.MeshStandardMaterialParameters = {}) =>
+            track(new THREE.MeshStandardMaterial(Object.assign(
+                { color: c, roughness: .65, metalness: .1, flatShading: true }, o
+            )));
+
+        function cv(w: number, h: number, f: (g: CanvasRenderingContext2D, w: number, h: number) => void) {
+            const c = document.createElement('canvas'); c.width = w; c.height = h;
+            f(c.getContext('2d')!, w, h);
             const t = new THREE.CanvasTexture(c);
             t.wrapS = t.wrapT = THREE.RepeatWrapping;
+            track(t); return t;
+        }
+        function glass(rx: number, ry: number) {
+            const t = cv(64, 64, (g, w, h) => {
+                const q = g.createLinearGradient(0, 0, w, h);
+                q.addColorStop(0, '#2a63e0'); q.addColorStop(1, '#12379f');
+                g.fillStyle = q; g.fillRect(0, 0, w, h);
+                g.strokeStyle = 'rgba(190,215,255,.6)'; g.lineWidth = 3; g.strokeRect(0, 0, w, h);
+            });
             t.repeat.set(rx, ry);
-            t.anisotropy = 8;
-            track(t);
-            return t;
-        }
-        const glassTex = (rx: number, ry: number) => tex(128, 128, (g, w, h) => {
-            const gr = g.createLinearGradient(0, 0, w, h);
-            gr.addColorStop(0, '#1c4fd0'); gr.addColorStop(.5, '#1237a8'); gr.addColorStop(1, '#2a63e0');
-            g.fillStyle = gr; g.fillRect(0, 0, w, h);
-            g.strokeStyle = 'rgba(180,210,255,.55)'; g.lineWidth = 3; g.strokeRect(0, 0, w, h);
-            g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.lineWidth = 1.5; g.stroke();
-        }, rx, ry);
-        const acpTex = (rx: number, ry: number) => tex(128, 128, (g, w, h) => {
-            g.fillStyle = '#b9b9c4'; g.fillRect(0, 0, w, h);
-            g.strokeStyle = '#8c8c99'; g.lineWidth = 2; g.strokeRect(0, 0, w, h);
-        }, rx, ry);
-        const stoneTex = tex(256, 128, (g, w, h) => {
-            g.fillStyle = '#4a4742'; g.fillRect(0, 0, w, h);
-            for (let i = 0; i < 70; i++) { const s = 70 + Math.random() * 30 | 0; g.fillStyle = `rgb(${s},${s - 4},${s - 10})`; g.fillRect(Math.random() * w, Math.random() * h, 30 + Math.random() * 30, 14 + Math.random() * 10); }
-        }, 8, 1);
-
-        const M = (c: number, o: THREE.MeshStandardMaterialParameters = {}) => track(new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: .6, metalness: .1 }, o)));
-        const glassMat = (rx: number, ry: number) => track(new THREE.MeshStandardMaterial({ map: glassTex(rx, ry), roughness: .12, metalness: .75 }));
-        const grey = M(0xc8c8d0), dgrey = M(0x6e6e78);
-        const stone = track(new THREE.MeshStandardMaterial({ map: stoneTex, roughness: .9 }));
-
-        function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = scene) {
-            const geo = track(new THREE.BoxGeometry(w, h, d));
-            const m = new THREE.Mesh(geo, mat);
-            m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; parent.add(m);
-            return m;
+            return track(new THREE.MeshStandardMaterial({ map: t, roughness: .15, metalness: .7 }));
         }
 
-        const bldg = new THREE.Group(); scene.add(bldg);
-        const FH = 3.4, G = 4.6;
+        const C = {
+            grey:  M(0xc9cbd2),
+            dgrey: M(0x6c7079),
+            amber: M(0xf2a516),
+        };
 
-        // Shadow catcher transparan — menangkap bayangan gedung tanpa tanah/rumput.
-        // Gedung tetap "berpijak" tapi latar halaman tetap tembus.
-        const shadowGeo = track(new THREE.PlaneGeometry(400, 400));
-        const shadowMat = track(new THREE.ShadowMaterial({ opacity: 0.28 }));
-        const shadowCatcher = new THREE.Mesh(shadowGeo, shadowMat);
-        shadowCatcher.rotation.x = -Math.PI / 2;
-        shadowCatcher.receiveShadow = true;
-        scene.add(shadowCatcher);
+        function b(w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, p: THREE.Object3D) {
+            const o = new THREE.Mesh(track(new THREE.BoxGeometry(w, h, d)), m);
+            o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; p.add(o); return o;
+        }
 
-        // Lobi & pilotis
-        box(22, G, 10, M(0x20303f, { metalness: .6, roughness: .2 }), -1, G / 2, -3, bldg);
-        ([[-12, 6], [-5, 6], [2, 6], [9, 6], [13, 6], [-12, -7], [13, -7]] as const).forEach(([x, z]) => box(1.3, G, 1.3, grey, x, G / 2, z, bldg));
-        ([[-10, 10], [-5, 10]] as const).forEach(([x, z]) => box(1, G - .3, 1, grey, x, (G - .3) / 2, z, bldg));
-        box(10, .5, 6, grey, -8, G - .05, 9, bldg);
+        // gedung() - massa geometri persis prototipe
+        function gedung(): THREE.Group {
+            const g = new THREE.Group();
+            b(30, 3, 20, C.dgrey, 0, 1.5, 0, g);
+            b(13, 28, 11, glass(5, 14), -3, 17, -1, g);
+            b(9, 20, 9, glass(4, 10), 9.5, 13, -2, g);
+            b(14, 12, 10, C.grey, -12, 9, 3, g);
+            b(14.2, 2.5, 10.2, glass(6, 1), -12, 9, 3, g);
+            for (let i = 1; i <= 4; i++) b(13.6, .5, 11.6, C.grey, -3, 3 + i * 5.4, -1, g);
+            b(14, .8, 12, C.dgrey, -3, 31.4, -1, g);
+            b(10, .8, 10, C.dgrey, 9.5, 23.4, -2, g);
+            b(14.4, .8, 10.4, C.dgrey, -12, 15.4, 3, g);
+            b(12, 1, 7, C.grey, 2, 4, 10, g);
+            [[-3, 10], [7, 10]].forEach(([x, z]) => b(.9, 3, .9, C.grey, x, 2.5, z, g));
+            b(4, 2, 3, C.dgrey, -6, 32.4, -1, g);
+            b(3, 1.6, 3, C.dgrey, 0, 32.2, 2, g);
+            b(3, 1.5, 3, C.dgrey, 9.5, 24.5, -2, g);
+            return g;
+        }
 
-        // Massa utama (ACP)
-        const mainH = 7 * FH;
-        box(15, mainH, 15, track(new THREE.MeshStandardMaterial({ map: acpTex(5, 8), roughness: .55, metalness: .2 })), -4.5, G + mainH / 2, 0, bldg);
-        // Lingkaran kaca depan
-        const cy = G + mainH * 0.46, cx = -5.2;
-        const circGeo = track(new THREE.CircleGeometry(5.4, 64));
-        const circ = new THREE.Mesh(circGeo, glassMat(3, 3));
-        circ.position.set(cx, cy, 3.05 + 4.5); bldg.add(circ);
-        const ringGeo = track(new THREE.TorusGeometry(5.5, .28, 12, 64));
-        const ring = new THREE.Mesh(ringGeo, dgrey); ring.position.set(cx, cy, 3.1 + 4.5); bldg.add(ring);
-        box(8, .9, .3, M(0x2a2a32), -6, G + mainH - 3, 7.55, bldg);
-        ([[-2.4], [0.4]] as const).forEach(([x]) => box(.9, 1.6, .2, M(0x223a5c, { metalness: .7, roughness: .15 }), x - 2, G + 3.2, 7.55, bldg));
+        // hq() = gedung() + cincin Torus amber + disc kaca fasad
+        function hq(): THREE.Group {
+            const g = gedung();
+            const r = new THREE.Mesh(track(new THREE.TorusGeometry(4.6, .4, 8, 40)), C.amber);
+            r.position.set(-3, 17, 4.7); g.add(r);
+            const d = new THREE.Mesh(track(new THREE.CircleGeometry(4.3, 32)), glass(3, 3));
+            d.position.set(-3, 17, 4.55); g.add(d);
+            return g;
+        }
 
-        // Sayap kaca
-        const gw = glassMat(4, 9);
-        box(9, mainH + 3, 13, gw, 8.5, G + (mainH + 3) / 2, -.5, bldg);
-        box(5, mainH + FH * 1.5, 10, glassMat(3, 9), 14.2, G + (mainH + FH * 1.5) / 2, -1.5, bldg);
-        box(3.2, mainH + 2.2, 9, glassMat(2, 9), -13.2, G + (mainH + 2.2) / 2, -1.5, bldg);
-        box(.5, mainH + 3, .5, dgrey, 4.1, G + (mainH + 3) / 2, 7.2, bldg);
-        box(16, .6, 16, dgrey, -4.5, G + mainH + .3, 0, bldg);
-        box(9.6, .6, 13.6, dgrey, 8.5, G + mainH + 3.3, -.5, bldg);
-        box(4, 2, 4, grey, -5, G + mainH + 1.6, -3, bldg);
-        // Logo emas
-        const logoGeo = track(new THREE.CircleGeometry(.7, 24));
-        const logo = new THREE.Mesh(logoGeo, track(new THREE.MeshBasicMaterial({ color: 0xf2b705 })));
-        logo.position.set(9, G + mainH - 1.2, 6.02); bldg.add(logo);
+        // glow() - garis tepi EdgesGeometry persis prototipe
+        function glow(g: THREE.Group, col: number, op: number) {
+            g.traverse(o => {
+                if ((o as THREE.Mesh).isMesh) {
+                    const mesh = o as THREE.Mesh;
+                    mesh.add(new THREE.LineSegments(
+                        track(new THREE.EdgesGeometry(mesh.geometry, 30)),
+                        track(new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: op }))
+                    ));
+                }
+            });
+        }
 
-        // Kanopi melengkung
-        const sh = new THREE.Shape();
-        sh.moveTo(-12, 0); sh.lineTo(16, 0); sh.lineTo(16, -2);
-        sh.bezierCurveTo(10, -6.5, 4, -1.5, -2, -4.8);
-        sh.bezierCurveTo(-6, -7.2, -10, -5, -12, -3.2); sh.closePath();
-        const canGeo = track(new THREE.ExtrudeGeometry(sh, { depth: .6, bevelEnabled: false }));
-        const can = new THREE.Mesh(canGeo, grey);
-        can.rotation.x = -Math.PI / 2; can.position.set(0, G + 3.1, 7.5); can.castShadow = can.receiveShadow = true; bldg.add(can);
+        // fit() - normalisasi ukuran & pusat, alas di y=0 persis prototipe
+        function fit(g: THREE.Group, size: number, col: number): THREE.Group {
+            glow(g, col, 0.28);
+            const bb = new THREE.Box3().setFromObject(g);
+            const s = bb.getSize(new THREE.Vector3());
+            const k = size / Math.max(s.x, s.y * 1.25, s.z);
+            const c = bb.getCenter(new THREE.Vector3());
+            g.position.set(-c.x * k, -bb.min.y * k, -c.z * k);
+            g.scale.setScalar(k);
+            const w = new THREE.Group(); w.add(g);
+            (w.userData as Record<string, unknown>).g = g;
+            return w;
+        }
 
-        // Pagar batu + papan nama
-        box(46, 1.4, 1.8, stone, 0, .7, 19, scene);
-        box(24, 3, .9, M(0x3a3935, { roughness: .8 }), -2, 1.4 + 1.5, 19, scene);
-        const nameTex = tex(1024, 128, (g, w, h) => {
-            g.fillStyle = '#3a3935'; g.fillRect(0, 0, w, h);
-            g.fillStyle = '#e8b64a'; g.font = 'bold 78px Georgia,serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-            g.fillText('BRANTAS ABIPRAYA', w / 2, h / 2 + 4);
-        });
-        const labelGeo = track(new THREE.PlaneGeometry(23, 2.9));
-        const label = new THREE.Mesh(labelGeo, track(new THREE.MeshBasicMaterial({ map: nameTex })));
-        label.position.set(-2, 2.9, 19.47); scene.add(label);
-        const label2 = label.clone(); label2.rotation.y = Math.PI; label2.position.z = 18.53; scene.add(label2);
+        // Shadow catcher
+        const shadowMesh = new THREE.Mesh(
+            track(new THREE.PlaneGeometry(200, 200)),
+            track(new THREE.ShadowMaterial({ opacity: 0.22 }))
+        );
+        shadowMesh.rotation.x = -Math.PI / 2;
+        shadowMesh.receiveShadow = true;
+        scene.add(shadowMesh);
 
-        // Tiang bendera
-        const poleGeo = track(new THREE.CylinderGeometry(.06, .08, 9, 8));
-        const pole = new THREE.Mesh(poleGeo, M(0xdddddd)); pole.position.set(2, 4.5, 12); scene.add(pole);
-        const fgGeo = track(new THREE.PlaneGeometry(2.4, 1.6, 10, 1));
-        const flag = new THREE.Mesh(fgGeo, track(new THREE.MeshBasicMaterial({
-            map: tex(64, 64, (g, w, h) => { g.fillStyle = '#d8142a'; g.fillRect(0, 0, w, h / 2); g.fillStyle = '#fff'; g.fillRect(0, h / 2, w, h / 2); }),
-            side: THREE.DoubleSide,
-        })));
-        flag.position.set(3.2, 8.1, 12); scene.add(flag);
+        // Bangun model HQ
+        const hqModel = hq();
+        const hqWrapped = fit(hqModel, 19, 0xf59e0b);
+        scene.add(hqWrapped);
 
-        // (Tanpa tanah/jalan/rumput/pohon/kendaraan — hanya gedung & plaza.)
-
-        // ── Resize ─────────────────────────────────────────────────────────
+        // Resize
         const onResize = () => { cam.aspect = W() / H(); cam.updateProjectionMatrix(); ren.setSize(W(), H()); };
         window.addEventListener('resize', onResize);
         const ro = new ResizeObserver(onResize);
         ro.observe(mount);
 
-        // ── Loop ───────────────────────────────────────────────────────────
-        const clk = new THREE.Clock();
+        // Loop
         let raf = 0;
-        const flagPos = fgGeo.attributes.position as THREE.BufferAttribute;
-        const loop = () => {
-            const t = clk.getElapsedTime();
-            for (let i = 0; i < flagPos.count; i++) {
-                const x = flagPos.getX(i);
-                flagPos.setZ(i, Math.sin(x * 2.2 - t * 3) * .12 * (x + 1.2) / 2.4);
-            }
-            flagPos.needsUpdate = true;
-            ctl.update();
-            ren.render(scene, cam);
-            raf = requestAnimationFrame(loop);
-        };
+        const loop = () => { ctl.update(); ren.render(scene, cam); raf = requestAnimationFrame(loop); };
         loop();
 
-        // ── Cleanup (hindari leak WebGL) ─────────────────────────────────────
+        // Cleanup
         return () => {
             cancelAnimationFrame(raf);
             window.removeEventListener('resize', onResize);

@@ -1,9 +1,11 @@
 "use client";
 
 /**
- * DivisionModel3D — objek 3D prosedural khas tiap divisi (gedung / bendungan /
- * tol). Diport dari generator Three.js. Transparan (menyatu latar), orbit +
- * auto-rotate, cleanup penuh saat unmount.
+ * DivisionModel3D - objek 3D prosedural khas tiap divisi (gedung / bendungan / tol).
+ *
+ * Langkah 1: Port helper glow() + fit() dari prototipe, sesuaikan material
+ * ke flatShading:true. Model gedung/bendungan/tol identik dengan prototipe.
+ * Kamera ortografis isometrik, auto-rotate, cleanup penuh saat unmount.
  *
  * Lazy-load (ssr:false) di tempat pemakaian.
  */
@@ -15,10 +17,12 @@ import type { DivisionModelKey } from '@/lib/divisionTheme';
 
 export default function DivisionModel3D({
     model,
+    accentHex = '#f59e0b',
     className = '',
     interactive = true,
 }: {
     model: DivisionModelKey;
+    accentHex?: string;
     className?: string;
     interactive?: boolean;
 }) {
@@ -37,7 +41,7 @@ export default function DivisionModel3D({
         ren.setClearColor(0x000000, 0);
         mount.appendChild(ren.domElement);
 
-        // Kamera ortografis (tampilan isometrik stabil).
+        // Kamera ortografis (isometrik stabil)
         const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -500, 500);
         const ctl = new OrbitControls(cam, ren.domElement);
         ctl.enableDamping = true;
@@ -54,10 +58,11 @@ export default function DivisionModel3D({
         sun.position.set(40, 70, 30);
         scene.add(sun);
 
-        // ── resource tracking ──
+        // resource tracking
         const disposables: Array<{ dispose: () => void }> = [];
         const track = <T extends { dispose: () => void }>(o: T): T => { disposables.push(o); return o; };
         const geo = (g: THREE.BufferGeometry) => track(g);
+        // flatShading:true persis prototipe
         const M = (c: number, o: THREE.MeshStandardMaterialParameters = {}) =>
             track(new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: .65, metalness: .1, flatShading: true }, o)));
 
@@ -73,12 +78,12 @@ export default function DivisionModel3D({
                 g.strokeStyle = 'rgba(190,215,255,.6)'; g.lineWidth = 3; g.strokeRect(0, 0, w, h);
             });
             t.repeat.set(rx, ry);
-            return track(new THREE.MeshStandardMaterial({ map: t, roughness: .15, metalness: .7 }));
+            return track(new THREE.MeshStandardMaterial({ map: t, roughness: .4, metalness: .35 }));
         }
         const C = {
             grey: M(0xc9cbd2), dgrey: M(0x6c7079), conc: M(0xbdbab2), asph: M(0x35383d),
             amber: M(0xf2a516), orange: M(0xe8700c), white: M(0xf4f4f4), rock: M(0x7b756c),
-            water: M(0x2bb5b0, { transparent: true, opacity: .88, roughness: .2 }),
+            water: M(0x1b8f8c, { transparent: true, opacity: .6, roughness: .2 }),
         };
         const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
         function b(w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, p: THREE.Object3D) {
@@ -96,8 +101,35 @@ export default function DivisionModel3D({
             o.position.copy(a).add(c).multiplyScalar(.5); o.lookAt(c); p.add(o);
         }
 
-        // ── Divisi 1: Gedung ──
-        function gedung() {
+        // glow() - garis tepi EdgesGeometry persis prototipe
+        function glow(g: THREE.Group, col: number, op: number) {
+            g.traverse(o => {
+                if ((o as THREE.Mesh).isMesh) {
+                    const mesh = o as THREE.Mesh;
+                    mesh.add(new THREE.LineSegments(
+                        track(new THREE.EdgesGeometry(mesh.geometry, 30)),
+                        track(new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: op }))
+                    ));
+                }
+            });
+        }
+
+        // fit() - normalisasi ukuran & pusat, alas di y=0 persis prototipe
+        function fit(g: THREE.Group, size: number, col: number): THREE.Group {
+            glow(g, col, 0.28);
+            const bb = new THREE.Box3().setFromObject(g);
+            const s = bb.getSize(new THREE.Vector3());
+            const k = size / Math.max(s.x, s.y * 1.25, s.z);
+            const c = bb.getCenter(new THREE.Vector3());
+            g.position.set(-c.x * k, -bb.min.y * k, -c.z * k);
+            g.scale.setScalar(k);
+            const w = new THREE.Group(); w.add(g);
+            (w.userData as Record<string, unknown>).g = g;
+            return w;
+        }
+
+        // Divisi 1: Gedung
+        function gedung(): THREE.Group {
             const g = new THREE.Group();
             b(30, 3, 20, C.dgrey, 0, 1.5, 0, g);
             b(13, 28, 11, glass(5, 14), -3, 17, -1, g);
@@ -115,12 +147,12 @@ export default function DivisionModel3D({
             return g;
         }
 
-        // ── Divisi 2: Bendungan ──
-        function bendungan() {
+        // Divisi 2: Bendungan
+        function bendungan(): THREE.Group {
             const g = new THREE.Group();
             const sh = new THREE.Shape(); sh.moveTo(-2, 0); sh.lineTo(12, 0); sh.lineTo(3, 16); sh.lineTo(-1, 16); sh.closePath();
             const body = new THREE.Mesh(geo(new THREE.ExtrudeGeometry(sh, { depth: 44, bevelEnabled: false })), C.conc); body.position.z = -22; g.add(body);
-            b(34, 14.5, 60, C.water, -18, 7.25, 0, g);
+            b(22, 12, 40, C.water, -13, 6, 0, g);
             b(3, 1, 44, C.grey, 1, 16.5, 0, g);
             for (let i = -2; i <= 2; i++) b(1.2, 3.5, 3, C.grey, 1, 18, i * 3, g);
             for (let i = -1; i <= 1; i += 1) b(.5, 3, 4.6, C.dgrey, -.6, 16.6, i * 3, g);
@@ -133,13 +165,13 @@ export default function DivisionModel3D({
             [[-14], [-9]].forEach(([z]) => cyl(V(4, 14, z + .5), V(14, 3.5, -10 + (z + 14) * .4), .9, C.dgrey, g, 8));
             b(16, 1, 26, C.water, 31, .5, -4, g);
             const rk = (x: number, y: number, z: number, s: number) => { const o = new THREE.Mesh(geo(new THREE.DodecahedronGeometry(s, 0)), C.rock); o.position.set(x, y, z); o.scale.y = .75; g.add(o); };
-            for (let i = 0; i < 7; i++) { const s = 7 + ((i * 5) % 4); rk(i * 3 - 8, s * .5, -30 - (i % 2) * 3, s); rk(i * 3 - 8, s * .5, 30 + (i % 2) * 3, s); }
-            rk(-3, 18, -27, 8); rk(-3, 18, 27, 8); rk(8, 9, -30, 9); rk(8, 9, 30, 9); rk(20, 5, -24, 6); rk(20, 5, 24, 6); rk(-18, 5, -33, 8); rk(-18, 5, 33, 8);
+            for (let i = 0; i < 7; i++) { const s = 7 + ((i * 5) % 4); rk(i * 3 - 8, s * .5, -34 - (i % 2) * 3, s); rk(i * 3 - 8, s * .5, 34 + (i % 2) * 3, s); }
+            rk(-3, 18, -31, 8); rk(-3, 18, 31, 8); rk(8, 9, -34, 9); rk(8, 9, 34, 9); rk(20, 5, -28, 6); rk(20, 5, 28, 6); rk(-18, 5, -37, 8); rk(-18, 5, 37, 8);
             return g;
         }
 
-        // ── Divisi 3: Jalan, Tol & Jembatan ──
-        function tol() {
+        // Divisi 3: Jalan, Tol & Jembatan
+        function tol(): THREE.Group {
             const g = new THREE.Group();
             const Y = 7;
             b(94, .8, 5.4, C.asph, 2, Y, 0, g);
@@ -154,7 +186,7 @@ export default function DivisionModel3D({
                 for (let i = 0; i <= 14; i++) { const t = i / 14, u = 1 - t; pts.push(V(u * u * P0.x + 2 * u * t * P1.x + t * t * P2.x, Y + (.3 - Y) * t, u * u * P0.z + 2 * u * t * P1.z + t * t * P2.z)); }
                 for (let i = 0; i < 14; i++) segm(pts[i], pts[i + 1], 3.6, .7, C.asph, g);
                 pts.forEach((p, i) => { if (i % 3 === 1 && p.y > 1.6) { b(1.1, p.y - .5, 1.1, C.dgrey, p.x, (p.y - .5) / 2, p.z, g); b(2.4, .5, 2.4, C.amber, p.x, p.y - .55, p.z, g); } });
-                for (let i = 0; i < 14; i++) { const a = pts[i].clone(), c = pts[i + 1].clone(); const nx = (c.z - a.z), nz = -(c.x - a.x), l = Math.hypot(nx, nz) || 1; const o = V(nx / l * 1.9, .6, nz / l * 1.9); segm(a.clone().add(o), c.clone().add(o), .3, .5, C.orange, g); }
+                for (let i = 0; i < 14; i++) { const a = pts[i].clone(), c = pts[i + 1].clone(); const nx = (c.z - a.z), nz = -(c.x - a.x), l = Math.hypot(nx, nz) || 1; const ov = V(nx / l * 1.9, .6, nz / l * 1.9); segm(a.clone().add(ov), c.clone().add(ov), .3, .5, C.orange, g); }
             });
             [-1, 1].forEach(s => { b(1.3, 24, 1.3, C.conc, 30, 12, s * 3.4, g); });
             b(1.3, 1.2, 8.2, C.conc, 30, 17, 0, g); b(1.5, 1.2, 8.2, C.conc, 30, 23.2, 0, g);
@@ -165,24 +197,26 @@ export default function DivisionModel3D({
         const BUILD = { gedung, bendungan, tol } as const;
         const VIEW = { gedung: { s: 34, cy: 15 }, bendungan: { s: 38, cy: 8 }, tol: { s: 44, cy: 8 } } as const;
 
-        const obj = BUILD[model]();
+        // Warna aksen untuk glow garis tepi
+        const accentColor = new THREE.Color(accentHex).getHex();
+
+        const rawGroup = BUILD[model]();
+        const obj = fit(rawGroup, VIEW[model].s, accentColor);
         scene.add(obj);
         const v = VIEW[model];
-        const size = v.s;
         ctl.target.set(0, v.cy, 0);
         cam.position.set(80, v.cy + 68, 80);
         cam.zoom = 1;
 
-        const fit = () => {
+        const fitCam = () => {
             const a = W() / H();
-            cam.left = -size * a; cam.right = size * a; cam.top = size; cam.bottom = -size;
+            cam.left = -v.s * a; cam.right = v.s * a; cam.top = v.s; cam.bottom = -v.s;
             cam.updateProjectionMatrix(); ren.setSize(W(), H());
         };
-        fit();
+        fitCam();
 
-        const onResize = () => fit();
-        window.addEventListener('resize', onResize);
-        const ro = new ResizeObserver(fit); ro.observe(mount);
+        window.addEventListener('resize', fitCam);
+        const ro = new ResizeObserver(fitCam); ro.observe(mount);
 
         let raf = 0;
         const loop = () => { ctl.update(); ren.render(scene, cam); raf = requestAnimationFrame(loop); };
@@ -190,14 +224,14 @@ export default function DivisionModel3D({
 
         return () => {
             cancelAnimationFrame(raf);
-            window.removeEventListener('resize', onResize);
+            window.removeEventListener('resize', fitCam);
             ro.disconnect();
             ctl.dispose();
             disposables.forEach(d => { try { d.dispose(); } catch { /* ignore */ } });
             ren.dispose();
             if (ren.domElement.parentNode === mount) mount.removeChild(ren.domElement);
         };
-    }, [model, interactive]);
+    }, [model, interactive, accentHex]);
 
     return <div ref={mountRef} className={className} style={{ width: '100%', height: '100%' }} />;
 }

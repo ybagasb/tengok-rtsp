@@ -131,7 +131,7 @@ export default function MapComponent({
     const hasCategory = Boolean(category);
     const hasDivision = Boolean(division);
     const hasContext = hasCategory || hasDivision;
-    const [scopeMode, setScopeMode] = useState<'context' | 'division' | 'all'>('context');
+    const [scopeMode, setScopeMode] = useState<'context' | 'division' | 'all'>(category ? 'context' : 'division');
     const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
 
     // The scope actually used when fetching:
@@ -556,7 +556,13 @@ export default function MapComponent({
                 {!sharedMode && (
                     <div className={`flex flex-col gap-2 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] pointer-events-auto ${selectedLocation ? 'opacity-0 -translate-x-6 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
                         <button
-                            onClick={() => router.push('/categories')}
+                            onClick={() =>
+                                router.push(
+                                    division
+                                        ? `/categories?div=${encodeURIComponent(division)}`
+                                        : '/categories'
+                                )
+                            }
                             className="p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
                             title="Kembali ke Kategori"
                         >
