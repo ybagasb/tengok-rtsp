@@ -58,36 +58,45 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        // Hitung kamera per (division, category) & per division
-        const catCameraMap = new Map<string, { total: number; online: number }>();
-        const divCameraMap = new Map<string, { total: number; online: number }>();
+        // 3. Kumpulkan ID kamera unik per (division, category) & per division untuk deduplikasi
+        const catCameraSets = new Map<string, Set<string>>();
+        const divCameraSets = new Map<string, Set<string>>();
 
         for (const div of DIVISIONS) {
-            divCameraMap.set(div, { total: 0, online: 0 });
+            divCameraSets.set(div, new Set<string>());
         }
 
         for (const loc of locations) {
             if (!loc.division) continue;
-            const divCam = divCameraMap.get(loc.division);
+            const divSet = divCameraSets.get(loc.division);
             const catKey = `${loc.division}::${loc.category}`;
-            let catCam = catCameraMap.get(catKey);
-            if (!catCam) {
-                catCam = { total: 0, online: 0 };
-                catCameraMap.set(catKey, catCam);
+            let catSet = catCameraSets.get(catKey);
+            if (!catSet) {
+                catSet = new Set<string>();
+                catCameraSets.set(catKey, catSet);
             }
 
             if (Array.isArray(loc.cameras)) {
                 for (const camId of loc.cameras) {
-                    const isOnline = statusById.get(String(camId)) === 'online';
-                    if (divCam) {
-                        divCam.total++;
-                        if (isOnline) divCam.online++;
-                    }
-                    catCam.total++;
-                    if (isOnline) catCam.online++;
+                    if (!camId) continue;
+                    const idStr = String(camId);
+                    divSet?.add(idStr);
+                    catSet.add(idStr);
                 }
             }
         }
+
+        // Helper untuk menghitung total kamera unik dan yang online
+        const countCameras = (idSet?: Set<string>) => {
+            if (!idSet || idSet.size === 0) return { total: 0, online: 0 };
+            let online = 0;
+            for (const id of idSet) {
+                if (statusById.get(id) === 'online') {
+                    online++;
+                }
+            }
+            return { total: idSet.size, online };
+        };
 
         const allCategories = (await Category.find().lean()) as any[];
         const catByIdentifier = new Map(allCategories.map(c => [c.identifier, c]));
@@ -95,13 +104,13 @@ export async function GET(req: NextRequest) {
         const result = DIVISIONS.map(div => {
             const rows = grouped.filter(g => g._id.division === div);
             const projectCount = rows.reduce((acc, r) => acc + r.count, 0);
-            const divCam = divCameraMap.get(div) || { total: 0, online: 0 };
+            const divCam = countCameras(divCameraSets.get(div));
 
             const categories = rows
                 .map(r => {
                     const cat = catByIdentifier.get(r._id.category);
                     if (!cat) return null;
-                    const catCam = catCameraMap.get(`${div}::${r._id.category}`) || { total: 0, online: 0 };
+                    const catCam = countCameras(catCameraSets.get(`${div}::${r._id.category}`));
                     return {
                         ...cat,
                         projectCount: r.count,

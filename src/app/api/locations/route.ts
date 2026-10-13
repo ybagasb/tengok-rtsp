@@ -27,7 +27,7 @@ const LOCATION_EDITABLE_FIELDS = [
     // Ikhtiar
     'cpi', 'spi', 'ccc',
     // Finansial (ringkas)
-    'cashIn', 'cashOut', 'saldoKas', 'saldoHutang', 'bad', 'piutang', 'bebanKonstruksi', 'hasilUsaha',
+    'tagihanBruto', 'cashIn', 'cashOut', 'saldoKas', 'saldoHutang', 'bad', 'piutang', 'bebanKonstruksi', 'hasilUsaha',
     // Operasi (ringkas)
     'pu', 'bk', 'lk',
     // Daftar operasional & legal

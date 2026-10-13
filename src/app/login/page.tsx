@@ -16,6 +16,7 @@ export default async function LoginPage() {
     // (JANGAN redirect hanya karena cookie ada, harus valid di PinSession agar tidak loop)
     const cookieStore = await cookies();
     const pinToken = cookieStore.get('auth_token')?.value;
+    let pinLive = false;
     if (pinToken) {
         try {
             await dbConnect();
@@ -23,12 +24,14 @@ export default async function LoginPage() {
                 token: pinToken,
                 expiresAt: { $gt: new Date() },
             });
-            if (live) {
-                redirect('/categories');
-            }
+            pinLive = Boolean(live);
         } catch {
             // Jika DB error, biarkan user tetap melihat form login
         }
+    }
+
+    if (pinLive) {
+        redirect('/categories');
     }
 
     return <LoginForm />;

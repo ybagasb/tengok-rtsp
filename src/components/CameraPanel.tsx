@@ -96,6 +96,7 @@ export interface IPopulatedLocation {
     cpi?: number;
     spi?: number;
     // Finansial (ringkas)
+    tagihanBruto?: number;
     cashIn?: number;
     cashOut?: number;
     saldoKas?: number;
@@ -606,7 +607,9 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             </div>
 
                             {/* Ringkasan Cash Flow */}
-                            {(location.cashIn != null || location.cashOut != null || location.saldoKas != null || location.saldoHutang != null || location.bad != null || location.piutang != null || location.ccc != null) && (() => {
+                            {(location.cashIn != null || location.cashOut != null || location.saldoKas != null || location.saldoHutang != null || location.bad != null || location.piutang != null || location.ccc != null || location.tagihanBruto != null || location.name?.toLowerCase().includes('kendari')) && (() => {
+                                const isKendari = Boolean(location.name?.toLowerCase().includes('kendari'));
+                                const tagihanBruto = location.tagihanBruto ?? (isKendari ? 49_000_000_000 : undefined);
                                 const saldoKas = location.saldoKas ?? ((location.cashIn ?? 0) - (location.cashOut ?? 0));
                                 const surplus = (location.cashIn ?? 0) - (location.cashOut ?? 0);
                                 const showCashBars = location.cashIn != null || location.cashOut != null;
@@ -634,9 +637,9 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             </div>
                                         )}
 
-                                        {/* Saldo Kas / Piutang — nilai tunggal */}
+                                        {/* Tagihan Bruto & Piutang — nilai ringkas */}
                                         <div className="grid grid-cols-2 gap-2.5">
-                                            <FinMini label="Saldo Kas" value={saldoKas} tone="text-sky-400 bg-sky-500/5 border-sky-500/20" />
+                                            <FinMini label="Tagihan Bruto" value={tagihanBruto} tone="text-sky-400 bg-sky-500/5 border-sky-500/20" />
                                             <FinMini label="Piutang" value={location.piutang} tone="text-violet-400 bg-violet-500/5 border-violet-500/20" />
                                         </div>
 

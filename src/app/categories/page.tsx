@@ -14,13 +14,12 @@
  * Tidak menyentuh auth, API, model DB.
  */
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { signOut, useSession } from "next-auth/react";
 import {
-  Loader2,
   ArrowRight,
   ArrowLeft,
   RotateCcw,
@@ -42,16 +41,12 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { DIVISION_THEME, type DivisionKey } from "@/lib/divisionTheme";
 import type { IntroScene3DProps } from "@/components/intro/IntroScene3D";
 
-// Lazy-load IntroScene3D (Three.js tidak boleh SSR)
+// Lazy-load IntroScene3D (Three.js tidak boleh SSR, loader tunggal via overlay HUD)
 const IntroScene3D = dynamic<IntroScene3DProps>(
   () => import("@/components/intro/IntroScene3D"),
   {
     ssr: false,
-    loading: () => (
-      <div className="w-full h-full flex items-center justify-center bg-[#070d18]">
-        <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
-      </div>
-    ),
+    loading: () => null,
   }
 );
 
@@ -131,6 +126,54 @@ export default function CategoriesPage() {
   const [phaseReady, setPhaseReady] = useState(false);
   const [forceReduced, setForceReduced] = useState(false);
 
+  // ── Sekuens 3D & Navigasi ─────────────────────────────────────────────────
+  const [phase, setPhase] = useState<"hq" | "explode" | "split" | "detail">("hq");
+  const [selectedDiv, setSelectedDiv] = useState(-1);
+  const [pointerDiv, setPointerDiv] = useState(-1);
+  const [focusDiv, setFocusDiv] = useState(-1);
+  const activeHoveredDiv = pointerDiv >= 0 ? pointerDiv : focusDiv;
+  const [focusRowIndex, setFocusRowIndex] = useState(0);
+  const [announcement, setAnnouncement] = useState("");
+  const [showPinModal, setShowPinModal] = useState(false);
+  const explodeDoneRef = useRef(false);
+
+  const resetNavFocus = useCallback(() => {
+    setFocusDiv(-1);
+    setFocusRowIndex(0);
+    setPointerDiv(-1);
+  }, []);
+
+  const startButtonRef = useRef<HTMLButtonElement>(null);
+  const divisionCardsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const allProjectsButtonRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const isKeyRepeatRef = useRef(false);
+  const pendingFocusRowRef = useRef<number | null>(null);
+
+  const [flash, setFlash] = useState(false);
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const [sceneReady, setSceneReady] = useState(false);
+  const [sceneMounted, setSceneMounted] = useState(false);
+  const [sceneError, setSceneError] = useState(false);
+  const onSceneReady = useCallback(() => setSceneReady(true), []);
+  const onSceneMounted = useCallback(() => setSceneMounted(true), []);
+  const onSceneError = useCallback(() => {
+    console.error("[Intro3D] Error inisialisasi dilaporkan dari IntroScene3D");
+    setSceneError(true);
+  }, []);
+
+  // Cleanup timeout flash putih saat unmount
+  useEffect(() => {
+    return () => {
+      if (flashTimeoutRef.current) {
+        clearTimeout(flashTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Inisialisasi fase: cek sessionStorage (intro sekali per sesi) & ?div= dari URL (SSR-safe)
   useEffect(() => {
     setMounted(true);
@@ -158,9 +201,10 @@ export default function CategoriesPage() {
         setPhase("split");
         setSelectedDiv(-1);
       }
+      resetNavFocus();
       setPhaseReady(true);
     }
-  }, []);
+  }, [resetNavFocus]);
 
   const isReduced = mounted ? forceReduced : false;
   const { data: session } = useSession();
@@ -175,43 +219,175 @@ export default function CategoriesPage() {
   const isSuperAdmin = accessData?.isSuperAdmin === true;
 
   // Data divisi & kategori dari DB (di-cache oleh SWR, polling tiap 30 detik untuk update status kamera)
-  const { data: divisionsRes } = useSWR<{ success: boolean; data: DivisionData[] }>(
+  const { data: divisionsRes, error: divisionsError } = useSWR<{ success: boolean; data: DivisionData[] }>(
     "/api/divisions",
     accessFetcher,
-    { refreshInterval: 30000 }
+    { refreshInterval: 30000, refreshWhenHidden: false }
   );
   const dbDivisions = divisionsRes?.data || [];
+  const isDivisionsLoading = !divisionsRes && !divisionsError;
 
   // Status CCTV per divisi (urutan sesuai ORDER) untuk dikirim ke scene 3D
-  const divisionStatus = ORDER.map((divKey) => {
-    const d = dbDivisions.find((x) => x.division === divKey);
-    return {
-      total: d?.cameraTotal ?? 0,
-      online: d?.cameraOnline ?? 0,
-    };
-  });
+  // Di-memoize dengan dependency divisionsRes?.data agar tidak membuat array baru di setiap render
+  const divisionStatus = useMemo(() => {
+    const list = divisionsRes?.data || [];
+    return ORDER.map((divKey) => {
+      const d = list.find((x) => x.division === divKey);
+      return {
+        total: d?.cameraTotal ?? 0,
+        online: d?.cameraOnline ?? 0,
+      };
+    });
+  }, [divisionsRes?.data]);
 
-  // ── Sekuens 3D ─────────────────────────────────────────────────────────────
-  const [phase, setPhase] = useState<"hq" | "explode" | "split" | "detail">("hq");
-  const [selectedDiv, setSelectedDiv] = useState(-1);
-  const [hoveredDiv, setHoveredDiv] = useState(-1);
-  const [flash, setFlash] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showAllCategories, setShowAllCategories] = useState(false);
+
+
+  // Efek fokus keyboard kartu divisi di fase split (side effect dipisahkan dari updater)
+  useEffect(() => {
+    if (phase === "split" && focusDiv >= 0 && focusDiv <= 2) {
+      divisionCardsRef.current[focusDiv]?.focus();
+    }
+  }, [focusDiv, phase]);
+
+  // Timer 1 (6 detik): dimulai SETELAH IntroScene3D ter-mount (sceneMounted === true).
+  // Bila belum ada onReady saat timer habis, tandai sceneError.
+  useEffect(() => {
+    if (!sceneMounted || sceneReady || sceneError) return;
+    const timer = setTimeout(() => {
+      if (!sceneReady) {
+        console.warn("[Intro3D] Safety timeout 6 detik terlewati sebelum onReady terpanggil.");
+        setSceneError(true);
+      }
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [sceneMounted, sceneReady, sceneError]);
+
+  // Timer 2 (30 detik): dimulai saat phaseReady === true (chunk download guard).
+  // Bila sceneMounted masih false saat timer habis, tandai sceneError.
+  useEffect(() => {
+    if (!phaseReady || sceneMounted || sceneReady || sceneError) return;
+    const timer = setTimeout(() => {
+      if (!sceneMounted) {
+        console.warn("[Intro3D] Chunk timeout 30 detik terlewati sebelum IntroScene3D ter-mount.");
+        setSceneError(true);
+      }
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [phaseReady, sceneMounted, sceneReady, sceneError]);
+
+  // Data divisi & kategori aktif di fase detail (di-memoize di level komponen)
+  const currentDivKey = selectedDiv >= 0 && selectedDiv < ORDER.length ? ORDER[selectedDiv] : null;
+  const currentTheme = currentDivKey ? DIVISION_THEME[currentDivKey] : null;
+  const currentDivData = useMemo(() => {
+    if (!currentDivKey) return null;
+    return divisionsRes?.data?.find((d) => d.division === currentDivKey) || null;
+  }, [currentDivKey, divisionsRes?.data]);
+
+  const levelItems = useMemo(() => {
+    if (!currentDivKey) return [];
+    if (currentDivData?.categories && currentDivData.categories.length > 0) {
+      return currentDivData.categories;
+    }
+    // FALLBACK hanya bila request gagal (divisionsError). Jangan pakai saat masih loading.
+    if (divisionsError) {
+      return FALLBACK_LEVELS[currentDivKey] || [];
+    }
+    return [];
+  }, [currentDivKey, currentDivData, divisionsError]);
+
+  const sortedItems = useMemo(() => {
+    return [...levelItems].sort(
+      (a, b) => (b.projectCount || 0) - (a.projectCount || 0)
+    );
+  }, [levelItems]);
+
+  const maxProjectCount = useMemo(() => {
+    return Math.max(1, ...sortedItems.map((c) => c.projectCount || 0));
+  }, [sortedItems]);
+
+  const totalProjects = useMemo(() => {
+    if (isDivisionsLoading) return "…";
+    return (
+      currentDivData?.projectCount ??
+      sortedItems.reduce((acc, c) => acc + (c.projectCount || 0), 0)
+    );
+  }, [currentDivData, sortedItems, isDivisionsLoading]);
+
+  const isSearching = searchQuery.trim().length > 0;
+  const filteredItems = useMemo(() => {
+    return isSearching
+      ? sortedItems.filter((c) =>
+          c.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+        )
+      : sortedItems;
+  }, [isSearching, sortedItems, searchQuery]);
+
+  const displayedItems = useMemo(() => {
+    return isSearching || showAllCategories
+      ? filteredItems
+      : filteredItems.slice(0, 5);
+  }, [isSearching, showAllCategories, filteredItems]);
+
+  const remainingCount = filteredItems.length - 5;
+
+
+
+  // Clamp focusRowIndex & penuhi pendingFocusRow saat daftar kategori berubah (pencarian, expand/collapse)
+  useEffect(() => {
+    if (pendingFocusRowRef.current !== null) {
+      const target = Math.min(displayedItems.length, pendingFocusRowRef.current);
+      pendingFocusRowRef.current = null;
+      setFocusRowIndex(target);
+      return;
+    }
+    setFocusRowIndex((prev) => {
+      const max = displayedItems.length;
+      if (prev > max) return max;
+      return prev;
+    });
+  }, [displayedItems.length]);
+
+  // Efek fokus dan scroll baris kategori di fase detail via data-row-index (side effect dipisahkan dari updater)
+  useEffect(() => {
+    if (phase !== "detail") return;
+
+    const scrollBehavior: ScrollBehavior = isReduced || isKeyRepeatRef.current ? "auto" : "smooth";
+
+    if (focusRowIndex === 0) {
+      allProjectsButtonRef.current?.focus({ preventScroll: true });
+      if (listRef.current) {
+        listRef.current.scrollTop = 0;
+      }
+      return;
+    }
+
+    if (focusRowIndex > 0 && listRef.current) {
+      const el = listRef.current.querySelector<HTMLElement>(`[data-row-index="${focusRowIndex}"]`);
+      if (el) {
+        el.focus({ preventScroll: true });
+        el.scrollIntoView({ block: "nearest", behavior: scrollBehavior });
+      }
+    }
+  }, [focusRowIndex, phase, displayedItems.length, isReduced]);
 
   const onBuildingClick = useCallback(() => {
     if (phase !== "hq") return;
-    console.log(
-      `[Intro3D] onBuildingClick dipanggil. isReduced: ${isReduced}`
-    );
     setFlash(true);
-    setTimeout(() => setFlash(false), 90);
+    if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    flashTimeoutRef.current = setTimeout(() => {
+      setFlash(false);
+      flashTimeoutRef.current = null;
+    }, 90);
     // Jalankan fase explode (IntroScene3D)
     setPhase("explode");
-  }, [phase, isReduced]);
+    resetNavFocus();
+    setAnnouncement("Gedung terbuka");
+  }, [phase, resetNavFocus]);
 
   const onExplodeComplete = useCallback(() => {
-    console.log("[Intro3D] onExplodeComplete dipanggil -> beralih ke fase 'split'");
+    if (explodeDoneRef.current) return;
+    explodeDoneRef.current = true;
+    console.debug("[Intro3D] onExplodeComplete dipanggil -> beralih ke fase 'split'");
     if (typeof window !== "undefined") {
       try {
         sessionStorage.setItem(INTRO_KEY, "true");
@@ -220,20 +396,30 @@ export default function CategoriesPage() {
       }
     }
     setPhase("split");
-  }, []);
+    resetNavFocus();
+    setAnnouncement("Pilihan divisi terbuka");
+  }, [resetNavFocus]);
+
+  const handleSkipIntro = useCallback(() => {
+    if (phase === "hq" || phase === "explode") {
+      onExplodeComplete();
+    }
+  }, [phase, onExplodeComplete]);
 
   const onDivisionClick = useCallback(
     (i: number) => {
       if (phase !== "split") return;
       const divKey = ORDER[i];
-      console.log(`[Intro3D] onDivisionClick dipanggil: ${divKey} (index ${i}) -> beralih ke fase 'detail'`);
+      console.debug(`[Intro3D] onDivisionClick dipanggil: ${divKey} (index ${i}) -> beralih ke fase 'detail'`);
       setSearchQuery("");
       setShowAllCategories(false);
       setSelectedDiv(i);
       setPhase("detail");
+      resetNavFocus();
+      setAnnouncement(`Divisi ${i + 1} dipilih. Masuk ke panel level.`);
       router.replace(`/categories?div=${encodeURIComponent(divKey)}`);
     },
-    [phase, router]
+    [phase, router, resetNavFocus]
   );
 
   const handleBackToSplit = useCallback(() => {
@@ -241,10 +427,13 @@ export default function CategoriesPage() {
     setShowAllCategories(false);
     setPhase("split");
     setSelectedDiv(-1);
+    resetNavFocus();
+    setAnnouncement("Kembali ke pilihan divisi");
     router.replace("/categories");
-  }, [router]);
+  }, [router, resetNavFocus]);
 
   const handleReplayIntro = useCallback(() => {
+    explodeDoneRef.current = false;
     if (typeof window !== "undefined") {
       try {
         sessionStorage.removeItem(INTRO_KEY);
@@ -256,9 +445,10 @@ export default function CategoriesPage() {
     setShowAllCategories(false);
     setPhase("hq");
     setSelectedDiv(-1);
-    setHoveredDiv(-1);
+    resetNavFocus();
+    setAnnouncement("Memutar ulang intro gedung");
     router.replace("/categories");
-  }, [router]);
+  }, [router, resetNavFocus]);
 
   const handleLevelClick = useCallback(
     (divisionKey: DivisionKey, categoryIdentifier?: string) => {
@@ -275,34 +465,269 @@ export default function CategoriesPage() {
     [router]
   );
 
-  // Esc key listener untuk kembali ke fase split saat di fase detail
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (phase === "detail") {
-          handleBackToSplit();
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [phase, handleBackToSplit]);
-
   const onDivisionHover = useCallback(
     (i: number) => {
-      setHoveredDiv(i);
+      if (i >= 0) {
+        if (
+          document.activeElement &&
+          divisionCardsRef.current.includes(document.activeElement as HTMLButtonElement)
+        ) {
+          (document.activeElement as HTMLElement).blur();
+        }
+        setFocusDiv(-1);
+      }
+      setPointerDiv(i);
     },
     []
   );
 
+  // ── SATU handler keydown di page.tsx (Navigasi Keyboard) ─────────────
+  useEffect(() => {
+    const handleKeyUp = () => {
+      isKeyRepeatRef.current = false;
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Abaikan bila modifier Ctrl/Alt/Meta aktif (jangan bajak shortcut browser)
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      // 2. Abaikan bila modal PIN terbuka
+      if (showPinModal) return;
+
+      const targetEl = e.target as HTMLElement | null;
+      const isInput =
+        targetEl &&
+        (targetEl.tagName === "INPUT" ||
+          targetEl.tagName === "TEXTAREA" ||
+          targetEl.tagName === "SELECT" ||
+          targetEl.isContentEditable);
+
+      // Bila fokus ada di dalam input (mis. pencarian):
+      if (isInput) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          if (searchQuery) {
+            setSearchQuery("");
+          } else {
+            targetEl.blur();
+          }
+          return;
+        }
+
+        if (e.key === "ArrowDown") {
+          if (displayedItems.length > 0) {
+            e.preventDefault();
+            targetEl.blur();
+            const firstRowEl = listRef.current?.querySelector<HTMLElement>('[data-row-index="1"]');
+            firstRowEl?.focus({ preventScroll: true });
+            setFocusRowIndex(1);
+            firstRowEl?.scrollIntoView({ block: "nearest" });
+          }
+          return;
+        }
+
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (isDivisionsLoading) {
+            return;
+          }
+          const isSearchingQuery = searchQuery.trim() !== "";
+          if (isSearchingQuery && displayedItems.length === 1 && currentDivKey) {
+            handleLevelClick(currentDivKey, displayedItems[0].identifier);
+          } else if (isSearchingQuery && displayedItems.length > 1) {
+            targetEl.blur();
+            const firstRowEl = listRef.current?.querySelector<HTMLElement>('[data-row-index="1"]');
+            firstRowEl?.focus({ preventScroll: true });
+            setFocusRowIndex(1);
+            firstRowEl?.scrollIntoView({ block: "nearest" });
+          }
+          // Bila query kosong, Enter tidak membuka apa pun
+          return;
+        }
+
+        return;
+      }
+
+      // 2b. Handler keydown global jangan membajak elemen interaktif lain.
+      // Untuk Enter dan Space: bila e.target adalah <button>, <a>, [role=button], <summary>
+      // yang BUKAN elemen yang dikelola handler, langsung return tanpa preventDefault.
+      if (e.key === "Enter" || e.key === " ") {
+        const isInteractive = Boolean(
+          targetEl &&
+          (targetEl.tagName === "BUTTON" ||
+            targetEl.tagName === "A" ||
+            targetEl.getAttribute("role") === "button" ||
+            targetEl.tagName === "SUMMARY")
+        );
+
+        const isManagedElement = Boolean(
+          targetEl &&
+          (targetEl === startButtonRef.current ||
+            divisionCardsRef.current.includes(targetEl as HTMLButtonElement) ||
+            targetEl === allProjectsButtonRef.current ||
+            Boolean(targetEl.closest?.("[data-row-index]")))
+        );
+
+        if (isInteractive && !isManagedElement) {
+          return;
+        }
+      }
+
+      // 3. Navigasi per fase
+      if (phase === "hq") {
+        if (e.key === "Enter" || e.key === " ") {
+          const isTargetBodyOrStart =
+            targetEl === document.body ||
+            targetEl === document.documentElement ||
+            targetEl === startButtonRef.current;
+          if (!isTargetBodyOrStart) return;
+          e.preventDefault();
+          onBuildingClick();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          handleSkipIntro();
+        }
+      } else if (phase === "explode") {
+        if (e.key === "Enter" || e.key === "Escape" || e.key === " ") {
+          e.preventDefault();
+          handleSkipIntro();
+        }
+      } else if (phase === "split") {
+        if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+          e.preventDefault();
+          setPointerDiv(-1);
+          const current = focusDiv >= 0 ? focusDiv : (pointerDiv >= 0 ? pointerDiv : -1);
+          const next = current < 0 ? 0 : (current + 1) % 3;
+          setAnnouncement(`Fokus: ${ORDER[next]}`);
+          setFocusDiv(next);
+        } else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+          e.preventDefault();
+          setPointerDiv(-1);
+          const current = focusDiv >= 0 ? focusDiv : (pointerDiv >= 0 ? pointerDiv : -1);
+          const next = current <= 0 ? 2 : current - 1;
+          setAnnouncement(`Fokus: ${ORDER[next]}`);
+          setFocusDiv(next);
+        } else if (e.key === "1") {
+          e.preventDefault();
+          resetNavFocus();
+          onDivisionClick(0);
+        } else if (e.key === "2") {
+          e.preventDefault();
+          resetNavFocus();
+          onDivisionClick(1);
+        } else if (e.key === "3") {
+          e.preventDefault();
+          resetNavFocus();
+          onDivisionClick(2);
+        } else if (e.key === "Enter" || e.key === " ") {
+          const target = focusDiv >= 0 ? focusDiv : pointerDiv;
+          if (target >= 0 && target <= 2) {
+            e.preventDefault();
+            onDivisionClick(target);
+          } else {
+            e.preventDefault();
+            setPointerDiv(-1);
+            setAnnouncement(`Fokus: ${ORDER[0]}`);
+            setFocusDiv(0);
+          }
+        }
+      } else if (phase === "detail") {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          handleBackToSplit();
+        } else if (e.key === "/") {
+          e.preventDefault();
+          searchInputRef.current?.focus();
+        } else if (e.key === "ArrowDown") {
+          e.preventDefault();
+          isKeyRepeatRef.current = e.repeat;
+          const isCompactLast =
+            !isSearching && !showAllCategories && remainingCount > 0 && focusRowIndex === displayedItems.length;
+          if (isCompactLast) {
+            setShowAllCategories(true);
+            pendingFocusRowRef.current = focusRowIndex + 1;
+          } else {
+            const totalRows = 1 + displayedItems.length;
+            const next = Math.min(totalRows - 1, focusRowIndex + 1);
+            setFocusRowIndex(next);
+          }
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          isKeyRepeatRef.current = e.repeat;
+          const next = Math.max(0, focusRowIndex - 1);
+          setFocusRowIndex(next);
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          isKeyRepeatRef.current = false;
+          setFocusRowIndex(0);
+          if (listRef.current) {
+            listRef.current.scrollTo({ top: 0 });
+          }
+        } else if (e.key === "End") {
+          e.preventDefault();
+          isKeyRepeatRef.current = false;
+          if (!isSearching && !showAllCategories && remainingCount > 0) {
+            setShowAllCategories(true);
+            pendingFocusRowRef.current = filteredItems.length;
+          } else {
+            setFocusRowIndex(displayedItems.length);
+          }
+        } else if (e.key === "Enter") {
+          if (isDivisionsLoading) {
+            e.preventDefault();
+            return; // Abaikan Enter sampai data tiba
+          }
+          if (currentDivKey) {
+            e.preventDefault();
+            if (focusRowIndex === 0) {
+              handleLevelClick(currentDivKey);
+            } else {
+              const cat = displayedItems[focusRowIndex - 1];
+              if (cat) {
+                handleLevelClick(currentDivKey, cat.identifier);
+              }
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [
+    phase,
+    focusDiv,
+    pointerDiv,
+    focusRowIndex,
+    showPinModal,
+    searchQuery,
+    displayedItems,
+    remainingCount,
+    isSearching,
+    showAllCategories,
+    filteredItems,
+    currentDivKey,
+    isDivisionsLoading,
+    onBuildingClick,
+    handleSkipIntro,
+    onDivisionClick,
+    handleBackToSplit,
+    handleLevelClick,
+    resetNavFocus,
+  ]);
+
   // ── Profil / Logout / PIN management ──────────────────────────────────────
   const [showProfile, setShowProfile] = useState(false);
-  const [showPinModal, setShowPinModal] = useState(false);
   const [pin, setPin] = useState(["", "", "", "", "", ""]);
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const handleLogout = async () => {
+    resetNavFocus();
     setShowProfile(false);
     if (typeof window !== "undefined") {
       try {
@@ -379,7 +804,7 @@ export default function CategoriesPage() {
           <IntroScene3D
             phase={phase}
             selectedDiv={selectedDiv}
-            hoveredDiv={hoveredDiv}
+            hoveredDiv={activeHoveredDiv}
             divisionColors={DIV_COLORS}
             divisionStatus={divisionStatus}
             reducedMotion={isReduced}
@@ -387,10 +812,96 @@ export default function CategoriesPage() {
             onExplodeComplete={onExplodeComplete}
             onDivisionClick={onDivisionClick}
             onDivisionHover={onDivisionHover}
+            onReady={onSceneReady}
+            onError={onSceneError}
+            onMounted={onSceneMounted}
             className="absolute inset-0"
           />
         )}
       </div>
+
+      {/* ── Overlay Loading / Error Scene (HUD style di bawah header z-30) ── */}
+      <AnimatePresence>
+        {!sceneReady && (
+          <motion.div
+            key="scene-loader-overlay"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className={`absolute inset-0 z-[25] flex flex-col items-center justify-center bg-[#070d18]/90 backdrop-blur-sm select-none ${
+              sceneError ? "pointer-events-auto px-4" : "pointer-events-none"
+            }`}
+          >
+            {sceneError ? (
+              <div className="flex flex-col items-center gap-4 text-center max-w-md">
+                <div className="p-3.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.25)]">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-red-400 font-['Orbitron',sans-serif]">
+                    Scene 3D gagal dimuat
+                  </span>
+                  <p className="text-[11px] sm:text-xs text-slate-400 font-['Rajdhani',sans-serif] tracking-wider">
+                    Inisialisasi visual 3D mengalami kendala pada perangkat ini. Anda dapat memuat ulang atau langsung masuk ke peta divisi.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.location.reload();
+                    }
+                  }}
+                  className="mt-1 flex items-center gap-2 px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-['Orbitron',sans-serif] font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] active:scale-95 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Muat ulang
+                </button>
+
+                {/* 3 Tombol Akses Peta Langsung bila WebGL tidak tersedia */}
+                <div className="w-full pt-3 mt-1 border-t border-white/10 flex flex-col gap-2">
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-slate-400 font-['Orbitron',sans-serif]">
+                    Masuk Langsung ke Peta Divisi:
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 w-full">
+                    {ORDER.map((div) => {
+                      const t = DIVISION_THEME[div];
+                      return (
+                        <a
+                          key={div}
+                          href={`/map?division=${encodeURIComponent(div)}`}
+                          className="px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-white font-['Orbitron',sans-serif] text-[10px] sm:text-xs font-bold uppercase tracking-wider text-center transition-all hover:border-amber-400/50"
+                          style={{ borderLeft: `3px solid ${t.accentHex}` }}
+                        >
+                          {t.short}
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <span className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-amber-400 font-['Orbitron',sans-serif] drop-shadow-[0_0_14px_rgba(245,158,11,0.5)]">
+                  MEMUAT SCENE…
+                </span>
+                {/* Bar tipis beranimasi gaya HUD */}
+                <div className="w-48 sm:w-64 h-[2px] bg-white/10 rounded-full overflow-hidden relative">
+                  {isReduced ? (
+                    <div className="w-full h-full bg-amber-400" />
+                  ) : (
+                    <motion.div
+                      className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-amber-400 to-transparent"
+                      animate={{ x: ["-100%", "300%"] }}
+                      transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header — z-30, semi-transparan di atas canvas */}
       <header className="relative z-30 flex items-center justify-between gap-2 px-4 sm:px-10 py-4 sm:py-5 shrink-0 bg-[#070d18]/60 backdrop-blur-md border-b border-white/5">
@@ -583,8 +1094,9 @@ export default function CategoriesPage() {
               PT BRANTAS ABIPRAYA (PERSERO)
             </p>
             <button
+              ref={startButtonRef}
               onClick={onBuildingClick}
-              className="mt-3 px-6 sm:px-8 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-[0.2em] transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:shadow-[0_0_30px_rgba(245,158,11,0.8)] active:scale-95 cursor-pointer"
+              className="mt-3 px-6 sm:px-8 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-[0.2em] transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:shadow-[0_0_30px_rgba(245,158,11,0.8)] active:scale-95 cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
               style={{
                 clipPath: "polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)",
               }}
@@ -593,63 +1105,82 @@ export default function CategoriesPage() {
             </button>
           </motion.div>
         ) : phase === "split" ? (
-          <motion.div
-            key="split-ui"
-            initial={isReduced ? false : { opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, transition: { duration: 0.3 } }}
-            transition={{ duration: 0.6 }}
-            className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-3 px-3 sm:px-6 pb-4 sm:pb-6"
-            style={{ paddingBottom: "calc(14px + env(safe-area-inset-bottom, 0px))" }}
-          >
-            {/* Judul */}
+          <>
+            {/* Judul Fase Split dinaikkan ke atas di bawah header agar tidak menimpa cincin platform 3D */}
             <motion.div
               initial={isReduced ? false : { opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.5 }}
-              className="text-center mb-1"
+              className="absolute inset-x-0 top-20 sm:top-24 z-10 flex flex-col items-center text-center pointer-events-none px-4"
             >
-              <h1 className="text-lg sm:text-2xl font-black uppercase tracking-tight">
-                Pilih{" "}
-                <span className="bg-gradient-to-r from-yellow-400 to-amber-300 bg-clip-text text-transparent">
-                  Divisi
-                </span>
-              </h1>
-              <p className="text-[10px] text-slate-500 tracking-wider">
-                Klik model atau kartu untuk masuk
-              </p>
+              <div className="px-5 py-2 rounded-2xl bg-slate-950/80 backdrop-blur-md border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
+                <h1 className="text-lg sm:text-2xl font-black uppercase tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+                  Pilih{" "}
+                  <span className="bg-gradient-to-r from-yellow-400 to-amber-300 bg-clip-text text-transparent">
+                    Divisi
+                  </span>
+                </h1>
+                <p className="text-[10px] sm:text-xs text-slate-300 tracking-wider font-['Rajdhani',sans-serif] font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+                  Klik model 3D atau kartu untuk masuk
+                </p>
+              </div>
             </motion.div>
 
-            {/* Kartu 3 divisi (grid max-w-[1100px], min-h-[96px], persis spesifikasi V2) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-[1100px]">
-              {ORDER.map((div, i) => {
-                const t = DIVISION_THEME[div];
-                const isHov = hoveredDiv === i;
-                const divData = dbDivisions.find((d) => d.division === div);
-                const pCount = divData?.projectCount ?? 0;
-                const cCount = divData?.categories?.length ?? FALLBACK_LEVELS[div].length;
-                const camTot = divData?.cameraTotal ?? 0;
-                const camOn = divData?.cameraOnline ?? 0;
-                const tier = statusTier(camTot, camOn);
-                const tierColor = statusTierColor(tier, t.accentHex);
+            <motion.div
+              key="split-ui"
+              initial={isReduced ? false : { opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, transition: { duration: 0.3 } }}
+              transition={{ duration: 0.6 }}
+              className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-3 px-3 sm:px-6 pb-16 sm:pb-16"
+              style={{ paddingBottom: "calc(4.25rem + env(safe-area-inset-bottom, 0px))" }}
+            >
+              {/* Kartu 3 divisi (grid max-w-[1100px], min-h-[96px], persis spesifikasi V2) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-[1100px]">
+                {ORDER.map((div, i) => {
+                  const t = DIVISION_THEME[div];
+                  const isHov = activeHoveredDiv === i;
+                  const divData = dbDivisions.find((d) => d.division === div);
+                  const pCount = divData?.projectCount ?? 0;
+                  const cCount = divData?.categories?.length ?? FALLBACK_LEVELS[div].length;
+                  const camTot = divData?.cameraTotal ?? 0;
+                  const camOn = divData?.cameraOnline ?? 0;
+                  const tier = statusTier(camTot, camOn);
+                  const tierColor = statusTierColor(tier, t.accentHex);
 
-                return (
-                  <motion.button
-                    key={div}
-                    onClick={() => onDivisionClick(i)}
-                    onMouseEnter={() => setHoveredDiv(i)}
-                    onMouseLeave={() => setHoveredDiv(-1)}
-                    initial={isReduced ? false : { opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: isHov ? -8 : 0 }}
-                    transition={{ delay: 0.3 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                    className="group min-h-[96px] text-left p-3.5 sm:p-4 backdrop-blur-md border border-white/10 transition-all flex flex-col justify-between cursor-pointer"
-                    style={{
-                      background: "rgba(15,23,42,.78)",
-                      borderTop: `3px solid ${t.accentHex}`,
-                      clipPath: "polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%)",
-                      boxShadow: isHov ? `0 0 28px -4px ${t.accentHex}` : undefined,
-                    }}
-                  >
+                  return (
+                    <motion.button
+                      key={div}
+                      ref={(el) => { divisionCardsRef.current[i] = el; }}
+                      tabIndex={0}
+                      aria-label={`${div} - ${t.title}. ${camTot === 0 ? "Belum ada kamera" : `${camOn} dari ${camTot} kamera online`}`}
+                      onClick={() => onDivisionClick(i)}
+                      onMouseEnter={() => {
+                        if (
+                          document.activeElement &&
+                          divisionCardsRef.current.includes(document.activeElement as HTMLButtonElement)
+                        ) {
+                          (document.activeElement as HTMLElement).blur();
+                        }
+                        setFocusDiv(-1);
+                        setPointerDiv(i);
+                      }}
+                      onMouseLeave={() => setPointerDiv(-1)}
+                      onFocus={() => {
+                        setPointerDiv(-1);
+                        setFocusDiv(i);
+                      }}
+                      initial={isReduced ? false : { opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: isHov ? -8 : 0 }}
+                      transition={{ delay: 0.3 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                      className="group min-h-[96px] text-left p-3.5 sm:p-4 backdrop-blur-md border border-white/10 transition-all flex flex-col justify-between cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                      style={{
+                        background: "rgba(15,23,42,.78)",
+                        borderTop: `3px solid ${t.accentHex}`,
+                        clipPath: "polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%)",
+                        boxShadow: isHov ? `0 0 28px -4px ${t.accentHex}` : undefined,
+                      }}
+                    >
                     <div>
                       <div className="flex items-center justify-between">
                         <span
@@ -697,45 +1228,10 @@ export default function CategoriesPage() {
               })}
             </div>
           </motion.div>
-        ) : phase === "detail" && selectedDiv >= 0 ? (
-          (() => {
-            const currentDivKey = ORDER[selectedDiv];
-            const currentTheme = DIVISION_THEME[currentDivKey];
-            const currentDivData = dbDivisions.find((d) => d.division === currentDivKey);
-            const levelItems =
-              currentDivData?.categories && currentDivData.categories.length > 0
-                ? currentDivData.categories
-                : FALLBACK_LEVELS[currentDivKey];
-
-            // 1. Urutkan kategori berdasarkan jumlah proyek terbanyak menurun
-            const sortedItems = [...levelItems].sort(
-              (a, b) => (b.projectCount || 0) - (a.projectCount || 0)
-            );
-            const maxProjectCount = Math.max(
-              1,
-              ...sortedItems.map((c) => c.projectCount || 0)
-            );
-            const totalProjects =
-              currentDivData?.projectCount ??
-              sortedItems.reduce((acc, c) => acc + (c.projectCount || 0), 0);
-
-            // 2. Filter pencarian bila query diisi
-            const isSearching = searchQuery.trim().length > 0;
-            const filteredItems = isSearching
-              ? sortedItems.filter((c) =>
-                  c.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
-                )
-              : sortedItems;
-
-            // 3. Tampilkan 5 teratas bila tidak mencari dan belum toggle 'lihat semua'
-            const displayedItems =
-              isSearching || showAllCategories
-                ? filteredItems
-                : filteredItems.slice(0, 5);
-            const remainingCount = filteredItems.length - 5;
-
-            return (
-              <motion.div
+        </>
+        ) : phase === "detail" && currentDivKey && currentTheme ? (
+          (
+            <motion.div
                 key="detail-ui"
                 initial={isReduced ? false : { opacity: 0, x: 30 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -802,8 +1298,19 @@ export default function CategoriesPage() {
 
                   {/* Tombol Utama Paling Atas: SEMUA PROYEK DIVISI INI · N ▶ */}
                   <button
-                    onClick={() => handleLevelClick(currentDivKey)}
-                    className="w-full flex items-center justify-between px-4 py-3 mb-3.5 font-['Orbitron',sans-serif] font-black text-xs sm:text-sm tracking-wider uppercase transition-all shadow-lg hover:brightness-110 active:scale-[0.99] cursor-pointer"
+                    ref={allProjectsButtonRef}
+                    data-row-index="0"
+                    disabled={isDivisionsLoading}
+                    onClick={() => {
+                      if (isDivisionsLoading) return;
+                      handleLevelClick(currentDivKey);
+                    }}
+                    onFocus={() => setFocusRowIndex(0)}
+                    className={`w-full flex items-center justify-between px-4 py-3 mb-3.5 font-['Orbitron',sans-serif] font-black text-xs sm:text-sm tracking-wider uppercase transition-all shadow-lg hover:brightness-110 active:scale-[0.99] cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ${
+                      isDivisionsLoading ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                    } ${
+                      focusRowIndex === 0 ? "ring-2 ring-white shadow-[0_0_20px_rgba(255,255,255,0.3)]" : ""
+                    }`}
                     style={{
                       background: currentTheme.accentHex,
                       color: "#070d18",
@@ -824,11 +1331,12 @@ export default function CategoriesPage() {
                     <div className="relative mb-3">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
+                        ref={searchInputRef}
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Cari kategori..."
-                        className="w-full pl-9 pr-8 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-white/30 transition-all font-['Rajdhani',sans-serif] font-medium"
+                        placeholder="Cari kategori... (tekan / untuk fokus)"
+                        className="w-full pl-9 pr-8 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-white/30 transition-all font-['Rajdhani',sans-serif] font-medium focus-visible:ring-2 focus-visible:ring-amber-400"
                       />
                       {searchQuery && (
                         <button
@@ -848,14 +1356,32 @@ export default function CategoriesPage() {
                       {isSearching ? "HASIL PENCARIAN" : "PILIH LEVEL / KATEGORI"}
                     </span>
                     <span className="text-[10px] font-bold tracking-wider text-slate-400 font-mono">
-                      {filteredItems.length} Kategori
+                      {isDivisionsLoading ? "…" : `${filteredItems.length} Kategori`}
                     </span>
                   </div>
                 </div>
 
                 {/* ── Daftar Kategori (Area Scroll Mandiri) ────────────────── */}
-                <div className="flex-1 overflow-y-auto overscroll-contain pr-1 space-y-2 min-h-0">
-                  {displayedItems.length === 0 ? (
+                <div
+                  ref={listRef}
+                  className="flex-1 overflow-y-auto overscroll-contain px-1.5 py-1 space-y-2 min-h-0"
+                >
+                  {isDivisionsLoading ? (
+                    <div className="space-y-2 py-1">
+                      {[...Array(5)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-full h-12 rounded-lg bg-white/5 border border-white/5 animate-pulse flex items-center px-3.5 gap-3 pointer-events-none"
+                        >
+                          <div className="w-5 h-4 bg-white/10 rounded" />
+                          <div className="flex-1 space-y-1.5">
+                            <div className="w-3/4 h-3 bg-white/10 rounded" />
+                            <div className="w-1/3 h-2 bg-white/5 rounded" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : displayedItems.length === 0 ? (
                     <div className="py-8 text-center text-xs text-slate-400 font-['Rajdhani',sans-serif]">
                       Tidak ada kategori yang cocok dengan &ldquo;{searchQuery}&rdquo;.
                     </div>
@@ -870,14 +1396,22 @@ export default function CategoriesPage() {
                       return (
                         <button
                           key={cat.identifier || idx}
+                          data-row-index={idx + 1}
+                          tabIndex={0}
+                          aria-label={`${cat.name}, ${pCount} proyek, ${cat.cameraOnline ?? 0} dari ${cat.cameraTotal ?? 0} CCTV online`}
                           onClick={() => handleLevelClick(currentDivKey, cat.identifier)}
-                          className="group relative overflow-hidden w-full flex items-center gap-3 px-3.5 py-2.5 sm:py-3 text-left bg-white/[0.04] hover:bg-white/[0.12] border border-white/10 transition-all cursor-pointer rounded-lg"
+                          onFocus={() => setFocusRowIndex(idx + 1)}
+                          className={`group relative overflow-hidden w-full flex items-center gap-3 px-3.5 py-2.5 sm:py-3 text-left bg-white/[0.04] hover:bg-white/[0.12] border transition-all cursor-pointer rounded-lg scroll-my-1 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ${
+                            focusRowIndex === idx + 1
+                              ? "border-amber-400 bg-white/[0.12] ring-1 ring-amber-400/50"
+                              : "border-white/10"
+                          }`}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.borderColor = currentTheme.accentHex;
                             e.currentTarget.style.transform = "translateX(-3px)";
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
+                            e.currentTarget.style.borderColor = focusRowIndex === idx + 1 ? "#f59e0b" : "rgba(255,255,255,0.1)";
                             e.currentTarget.style.transform = "none";
                           }}
                         >
@@ -960,14 +1494,66 @@ export default function CategoriesPage() {
                 {/* ── Area Bawah / Footer Note ──────────────────────────────── */}
                 <div className="shrink-0 pt-3 border-t border-white/10 mt-3">
                   <p className="text-[10px] text-slate-400 leading-normal font-['Rajdhani',sans-serif]">
-                    Daftar level bersumber dari kategori proyek Tengok. Klik level untuk membuka peta &amp; CCTV proyek.
+                    Daftar level bersumber dari kategori proyek Tengok. Klik level atau tekan Enter untuk membuka peta &amp; CCTV proyek.
                   </p>
                 </div>
               </motion.div>
-            );
-          })()
+          )
         ) : null}
       </AnimatePresence>
+
+      {/* ── Tombol "LEWATI ▶" di pojok kanan bawah selama fase hq dan explode ── */}
+      {(phase === "hq" || phase === "explode") && (
+        <button
+          onClick={handleSkipIntro}
+          className="absolute bottom-6 right-6 z-30 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-slate-300 hover:text-white text-[11px] font-['Orbitron',sans-serif] font-bold uppercase tracking-wider backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+          title="Lewati intro gedung ke pilihan divisi (Esc/Enter)"
+        >
+          <span>LEWATI</span>
+          <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
+        </button>
+      )}
+
+      {/* ── Petunjuk Tombol Keyboard di Bawah Layar (Hanya Desktop / Non-Sentuh) ── */}
+      <div className="pointer-events-none fixed bottom-3 inset-x-0 z-20 hidden md:flex [@media(hover:none)]:hidden items-center justify-center">
+        <div className="px-3.5 py-1.5 rounded-full bg-slate-950/75 border border-white/10 backdrop-blur-md text-[10px] text-slate-400 font-mono tracking-wider flex items-center gap-2 shadow-xl">
+          {phase === "hq" && (
+            <>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Space</kbd> / <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Enter</kbd> mulai</span>
+              <span className="text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Esc</kbd> lewati</span>
+            </>
+          )}
+          {phase === "explode" && (
+            <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Enter</kbd> / <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Esc</kbd> lewati</span>
+          )}
+          {phase === "split" && (
+            <>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">←</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">→</kbd> pilih</span>
+              <span className="text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">1</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">2</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">3</kbd> pintasan</span>
+              <span className="text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Enter</kbd> masuk</span>
+            </>
+          )}
+          {phase === "detail" && (
+            <>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">↑</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">↓</kbd> pilih</span>
+              <span className="text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">/</kbd> cari</span>
+              <span className="text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Enter</kbd> masuk</span>
+              <span className="text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Esc</kbd> kembali</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Region Aksesibilitas Screen Reader (Visually Hidden) ── */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
 
       {/* Admin PIN Modal */}
       <AnimatePresence>

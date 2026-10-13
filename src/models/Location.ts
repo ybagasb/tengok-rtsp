@@ -117,6 +117,7 @@ export interface ILocationData {
     spi?: number;                // Schedule Performance Index (mis. 0.98)
 
     // ── Finansial (ringkas, angka tunggal) ───────────────────────────────────
+    tagihanBruto?: number;       // Tagihan bruto (IDR)
     cashIn?: number;             // Total penerimaan (IDR)
     cashOut?: number;            // Total pengeluaran (IDR)
     saldoKas?: number;           // Cash balance (IDR); default = cashIn - cashOut
@@ -290,6 +291,7 @@ const LocationSchema: Schema = new Schema({
     spi: { type: Number },
 
     // Finansial (ringkas)
+    tagihanBruto: { type: Number },
     cashIn: { type: Number },
     cashOut: { type: Number },
     saldoKas: { type: Number },

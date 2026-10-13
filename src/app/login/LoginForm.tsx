@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import axios from 'axios';
@@ -13,6 +13,15 @@ export default function LoginForm() {
     const [loading, setLoading] = useState(false);
     const [ssoLoading, setSsoLoading] = useState(false);
     const router = useRouter();
+
+    // 2d. Hangatkan (warm-up) chunk IntroScene3D dari halaman login
+    useEffect(() => {
+        try {
+            void import('@/components/intro/IntroScene3D');
+        } catch {
+            // Abaikan kegagalan prefetch
+        }
+    }, []);
 
     const handlePinLogin = async (e: React.FormEvent) => {
         e.preventDefault();

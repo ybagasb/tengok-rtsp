@@ -58,6 +58,7 @@ interface LocationData {
     cpi?: number;
     spi?: number;
     // Finansial (ringkas)
+    tagihanBruto?: number;
     cashIn?: number;
     cashOut?: number;
     saldoKas?: number;
@@ -313,7 +314,8 @@ export default function MapComponent({
                 if (!hasProbed) {
                     hasProbed = true;
                     const allCameraIds = fetched.flatMap((loc: any) => (loc.cameras || []).map((cam: any) => cam._id));
-                    if (allCameraIds.length > 0) {
+                    const shouldProbe = scopeMode !== 'division' && scopeMode !== 'all';
+                    if (shouldProbe && allCameraIds.length > 0) {
                         axios.post('/api/cameras/probe-now', { cameraIds: allCameraIds }).catch(() => {});
                     }
                     if (!sharedMode) {
@@ -464,7 +466,7 @@ export default function MapComponent({
         window.addEventListener('pointerup', onUp);
     }, []);
 
-    if (!category && !sharedMode) return null;
+    if (!category && !division && !sharedMode) return null;
 
     return (
         <div ref={rootRef} className="flex h-screen w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
@@ -695,7 +697,7 @@ export default function MapComponent({
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onFocus={() => setShowSuggestions(true)}
                                 onKeyDown={handleKeyDown}
-                                placeholder={`Cari ${category || 'lokasi'}...`}
+                                placeholder={`Cari ${category || (division ? `proyek ${division}` : 'lokasi')}...`}
                                 className="w-full bg-white/85 dark:bg-slate-900/80 backdrop-blur-2xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm py-3 sm:py-4 pl-9 sm:pl-11 pr-10 sm:pr-12 rounded-2xl border border-black/10 dark:border-white/10 focus:border-yellow-500/50 focus:ring-4 focus:ring-yellow-500/10 transition-all outline-none shadow-2xl"
                             />
                             {searchQuery && (

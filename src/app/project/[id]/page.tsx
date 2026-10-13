@@ -10,7 +10,7 @@ import {
     TrendingUp, Info, LayoutDashboard, Upload, Trash2, Pencil, Check, X,
     Phone, User, Building2, Calendar, Clock, CircleDollarSign, Download, ExternalLink,
     Wrench, AlertTriangle, ChevronDown, ChevronUp, Plus, Minus,
-    PieChart, ArrowUpRight, ArrowDownRight, Layers, Target, Wallet,
+    PieChart, ArrowUpRight, ArrowDownRight, Layers, Target, Wallet, Receipt,
     Menu, GitBranch, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import BrandLoader from '@/components/BrandLoader';
@@ -64,6 +64,7 @@ interface Project {
     cpi?: number;
     spi?: number;
     // Finansial (ringkas)
+    tagihanBruto?: number;
     cashIn?: number;
     cashOut?: number;
     saldoKas?: number;
@@ -463,7 +464,9 @@ function MoneyCard({ label, value, icon: Icon, tone }: { label: string; value?: 
 
 function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
     const [editing, setEditing] = useState(false);
+    const isKendari = Boolean(project.name?.toLowerCase().includes('kendari'));
     const initForm = () => ({
+        tagihanBruto: project.tagihanBruto?.toString() ?? (isKendari ? '49000000000' : ''),
         cashIn: project.cashIn?.toString() ?? '',
         cashOut: project.cashOut?.toString() ?? '',
         saldoKas: project.saldoKas?.toString() ?? '',
@@ -487,6 +490,7 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
     // Saldo kas otomatis bila belum diisi manual.
     const autoSaldoKas = (Number(form.cashIn) || 0) - (Number(form.cashOut) || 0);
     const displaySaldoKas = project.saldoKas ?? ((project.cashIn ?? 0) - (project.cashOut ?? 0));
+    const displayTagihanBruto = project.tagihanBruto ?? (isKendari ? 49_000_000_000 : undefined);
 
     const save = async () => {
         setSaving(true);
@@ -496,6 +500,7 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
             const puV = form.pu === '' ? null : Number(form.pu);
             const bkV = form.bk === '' ? null : Number(form.bk);
             await axios.patch(`/api/projects/${project._id}`, {
+                tagihanBruto: form.tagihanBruto === '' ? undefined : Number(form.tagihanBruto),
                 cashIn: form.cashIn === '' ? undefined : Number(form.cashIn),
                 cashOut: form.cashOut === '' ? undefined : Number(form.cashOut),
                 saldoKas: form.saldoKas === '' ? autoSaldoKas : Number(form.saldoKas),
@@ -527,13 +532,14 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
 
             {!editing ? (
                 <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <MoneyCard label="Cash In (Penerimaan)"  value={project.cashIn}  icon={ArrowDownRight} tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
-                        <MoneyCard label="Cash Out (Pengeluaran)" value={project.cashOut} icon={ArrowUpRight}   tone="bg-rose-500/10 border-rose-500/20 text-rose-400" />
-                        <MoneyCard label="Saldo Kas (Cash Balance)" value={displaySaldoKas} icon={Wallet}       tone="bg-sky-500/10 border-sky-500/20 text-sky-400" />
-                        <MoneyCard label="Saldo Hutang"           value={project.saldoHutang} icon={CircleDollarSign} tone="bg-amber-500/10 border-amber-500/20 text-amber-400" />
-                        <MoneyCard label="BAD (komponen hutang)"  value={project.bad} icon={CircleDollarSign} tone="bg-orange-500/10 border-orange-500/20 text-orange-400" />
-                        <MoneyCard label="Piutang"                value={project.piutang} icon={CircleDollarSign} tone="bg-violet-500/10 border-violet-500/20 text-violet-400" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <MoneyCard label="Tagihan Bruto"          value={displayTagihanBruto} icon={Receipt}            tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
+                        <MoneyCard label="Cash In (Penerimaan)"   value={project.cashIn}      icon={ArrowDownRight}     tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
+                        <MoneyCard label="Cash Out (Pengeluaran)" value={project.cashOut}     icon={ArrowUpRight}       tone="bg-rose-500/10 border-rose-500/20 text-rose-400" />
+                        <MoneyCard label="Saldo Kas (Cash Balance)" value={displaySaldoKas}   icon={Wallet}             tone="bg-sky-500/10 border-sky-500/20 text-sky-400" />
+                        <MoneyCard label="Saldo Hutang"           value={project.saldoHutang} icon={CircleDollarSign}   tone="bg-amber-500/10 border-amber-500/20 text-amber-400" />
+                        <MoneyCard label="BAD (komponen hutang)"  value={project.bad}         icon={CircleDollarSign}   tone="bg-orange-500/10 border-orange-500/20 text-orange-400" />
+                        <MoneyCard label="Piutang"                value={project.piutang}     icon={CircleDollarSign}   tone="bg-violet-500/10 border-violet-500/20 text-violet-400" />
                     </div>
                     {project.ccc != null && (
                         <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex items-center justify-between">
@@ -549,6 +555,7 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                 </>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <MoneyInput label="Tagihan Bruto" value={form.tagihanBruto} onChange={v => setForm({ ...form, tagihanBruto: v })} hint="Total tagihan bruto proyek (Rp)." />
                     <MoneyInput label="Cash In" value={form.cashIn} onChange={v => setForm({ ...form, cashIn: v })} hint="Total uang yang sudah masuk/diterima proyek." />
                     <MoneyInput label="Cash Out" value={form.cashOut} onChange={v => setForm({ ...form, cashOut: v })} hint="Total uang yang sudah keluar/dibelanjakan." />
                     <div>

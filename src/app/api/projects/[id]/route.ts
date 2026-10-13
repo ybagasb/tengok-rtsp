@@ -23,7 +23,7 @@ const EDITABLE_FIELDS = [
     // Field baru — ikhtiar
     'cpi', 'spi',
     // Field baru — finansial (ringkas)
-    'cashIn', 'cashOut', 'saldoKas', 'saldoHutang', 'bad', 'piutang', 'ccc', 'bebanKonstruksi', 'hasilUsaha',
+    'tagihanBruto', 'cashIn', 'cashOut', 'saldoKas', 'saldoHutang', 'bad', 'piutang', 'ccc', 'bebanKonstruksi', 'hasilUsaha',
     // Field baru — operasi (ringkas)
     'pu', 'bk', 'lk',
     // Field baru — monitoring pengadaan (major item)
@@ -181,7 +181,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             }
         }
         // Finansial: angka IDR >= 0. (saldoKas & lk boleh negatif — ditangani di bawah.)
-        for (const money of ['cashIn', 'cashOut', 'saldoHutang', 'bad', 'piutang', 'bebanKonstruksi', 'pu', 'bk'] as const) {
+        for (const money of ['tagihanBruto', 'cashIn', 'cashOut', 'saldoHutang', 'bad', 'piutang', 'bebanKonstruksi', 'pu', 'bk'] as const) {
             if (money in update) {
                 const n = Number(update[money]);
                 update[money] = Number.isFinite(n) && n >= 0 ? n : undefined;

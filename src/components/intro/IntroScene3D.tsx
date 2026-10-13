@@ -56,6 +56,12 @@ export interface IntroScene3DProps {
   onDivisionClick: (i: number) => void;
   /** Dipanggil saat hover berubah (i=-1 berarti tidak hover) */
   onDivisionHover: (i: number) => void;
+  /** Dipanggil SEKALI setelah frame pertama dirender (2c) */
+  onReady?: () => void;
+  /** Dipanggil bila inisialisasi WebGLRenderer gagal (try/catch) */
+  onError?: () => void;
+  /** Dipanggil segera saat IntroScene3D ter-mount di DOM */
+  onMounted?: () => void;
   className?: string;
 }
 
@@ -70,26 +76,32 @@ export default function IntroScene3D({
   onExplodeComplete,
   onDivisionClick,
   onDivisionHover,
+  onReady,
+  onError,
+  onMounted,
   className = "",
 }: IntroScene3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   // Refs untuk props agar loop animasi selalu baca nilai terkini tanpa rebuild scene
   const stateRef = useRef({ phase, selectedDiv, hoveredDiv, reducedMotion, divisionStatus });
-  const cbRef = useRef({ onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover });
+  const cbRef = useRef({ onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onReady, onError, onMounted });
 
   useEffect(() => {
     stateRef.current = { phase, selectedDiv, hoveredDiv, reducedMotion, divisionStatus };
   }, [phase, selectedDiv, hoveredDiv, reducedMotion, divisionStatus]);
 
   useEffect(() => {
-    cbRef.current = { onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover };
-  }, [onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover]);
+    cbRef.current = { onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onReady, onError, onMounted };
+  }, [onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onReady, onError, onMounted]);
 
   // Effect utama: bangun scene & jalankan loop. Hanya berjalan sekali.
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
+
+    // Laporkan bahwa IntroScene3D telah ter-mount di DOM
+    cbRef.current.onMounted?.();
 
     const W = () => mount.clientWidth || window.innerWidth;
     const H = () => mount.clientHeight || window.innerHeight;
@@ -100,8 +112,16 @@ export default function IntroScene3D({
 
     const cam = new THREE.PerspectiveCamera(40, W() / H(), 0.1, 400);
 
-    const ren = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    let currentPr = Math.min(window.devicePixelRatio || 1, 2);
+    let ren: THREE.WebGLRenderer;
+    try {
+      ren = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    } catch (err) {
+      console.warn("[Intro3D] Gagal membuat WebGLRenderer:", err);
+      cbRef.current.onError?.();
+      return;
+    }
+    ren.setPixelRatio(currentPr);
     ren.setSize(W(), H());
     ren.setClearColor(0x070d18, 1);
     mount.appendChild(ren.domElement);
@@ -477,10 +497,17 @@ export default function IntroScene3D({
     scene.add(debris);
 
     // ---- 3 divisi: model (scale=0) + platform + PointLight ----------------
+    // Skala visual seimbang per model di atas platform r=8.8 (gedung 1.0, bendungan 1.35, tol 1.20)
+    const MODEL_SCALES: Record<DivisionModelKey, number> = {
+      gedung: 1.0,
+      bendungan: 1.35,
+      tol: 1.2,
+    };
     const divColors3 = [...divisionColors].slice(0, 3);
     const mods = MODEL_KEYS.map((key, i) => {
       const col = new THREE.Color(divColors3[i] ?? "#f59e0b").getHex();
-      const w = fit(BUILD[key](), 14, col);
+      const scaleMultiplier = MODEL_SCALES[key] ?? 1.0;
+      const w = fit(BUILD[key](), 14 * scaleMultiplier, col);
       w.position.x = XS[i];
       w.scale.setScalar(0.0001); // hampir nol; visible=false saat scale < 0.02
       w.visible = false;
@@ -623,9 +650,114 @@ export default function IntroScene3D({
     let lastPhase = phase;
     let last = performance.now();
     let raf = 0;
+    let isDisposed = false;
+    let hiddenAt = 0;
+
+    // Profiling untuk adaptasi pixel ratio (2b): sampel 60 durasi frame
+    const frameDurations: number[] = [];
+    let slowWindowsCount = 0;
+    let lastFrameTime = performance.now();
+
+    // Pelaporan onReady (2c)
+    let hasReportedReady = false;
+    let renderCount = 0;
+
+    const stopLoop = () => {
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+    };
+
+    const startLoop = () => {
+      if (raf || isDisposed) return;
+      last = performance.now();
+      lastFrameTime = performance.now();
+      raf = requestAnimationFrame(loop);
+    };
+
+    // 2a. Hentikan render saat tab tersembunyi, reset waktu & profiler saat kembali visible
+    const onVis = () => {
+      if (document.hidden) {
+        hiddenAt = performance.now();
+        stopLoop();
+      } else {
+        const now = performance.now();
+        if (hiddenAt > 0) {
+          const pauseDuration = now - hiddenAt;
+          if (t0 > 0) {
+            t0 += pauseDuration;
+          }
+          hiddenAt = 0;
+        }
+        last = now;
+        lastFrameTime = now;
+        // Reset akumulator frame agar jeda background tidak mendistorsi pengukuran
+        frameDurations.length = 0;
+        slowWindowsCount = 0;
+        startLoop();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
 
     const loop = (now: number) => {
+      if (isDisposed || document.hidden) {
+        raf = 0;
+        return;
+      }
       raf = requestAnimationFrame(loop);
+
+      // 2b. Ukur durasi frame untuk adaptasi pixel ratio
+      const frameDuration = now - lastFrameTime;
+      lastFrameTime = now;
+
+      // Mulai mengukur hanya setelah scene siap (hasReportedReady === true)
+      if (hasReportedReady) {
+        // Buang frame > 100 ms (jangan tambahkan ke hitungan maupun jumlah)
+        if (frameDuration <= 100) {
+          frameDurations.push(frameDuration);
+
+          if (frameDurations.length >= 60) {
+            const sum = frameDurations.reduce((acc, d) => acc + d, 0);
+            const avgFrameMs = sum / frameDurations.length;
+            const variance =
+              frameDurations.reduce((acc, d) => acc + (d - avgFrameMs) ** 2, 0) /
+              frameDurations.length;
+            const stdDev = Math.sqrt(variance);
+            frameDurations.length = 0;
+
+            // Jangan turunkan bila rata-rata stabil di sekitar 33 ms dengan variasi kecil (pembatasan 30 fps OS / hemat baterai: stdDev < 3)
+            const isCapped30Fps = avgFrameMs >= 31 && avgFrameMs <= 36 && stdDev < 3;
+
+            if (avgFrameMs > 24 && !isCapped30Fps) {
+              slowWindowsCount++;
+              // Turunkan pixel ratio hanya bila 3 jendela 60-frame BERTURUT-TURUT rata-ratanya > 24 ms
+              if (slowWindowsCount >= 3) {
+                slowWindowsCount = 0;
+                if (currentPr > 1.5) {
+                  currentPr = 1.5;
+                  ren.setPixelRatio(currentPr);
+                  ren.setSize(W(), H(), false);
+                  console.debug(
+                    `[Intro3D] Pixel ratio diturunkan ke 1.5 (3 jendela 60-frame berturut-turut avg: ${avgFrameMs.toFixed(1)}ms, stdDev: ${stdDev.toFixed(1)}ms)`
+                  );
+                } else if (currentPr > 1.0) {
+                  currentPr = 1.0;
+                  ren.setPixelRatio(currentPr);
+                  ren.setSize(W(), H(), false);
+                  console.debug(
+                    `[Intro3D] Pixel ratio diturunkan ke 1.0 (3 jendela 60-frame berturut-turut avg: ${avgFrameMs.toFixed(1)}ms, stdDev: ${stdDev.toFixed(1)}ms)`
+                  );
+                }
+              }
+            } else {
+              // Rata-rata normal atau stabil di 30 fps cap -> reset hitungan jendela berturut-turut
+              slowWindowsCount = 0;
+            }
+          }
+        }
+      }
+
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const { phase: ph, selectedDiv: sel, hoveredDiv: hov } = stateRef.current;
@@ -691,8 +823,12 @@ export default function IntroScene3D({
             m.w.visible = true;
           });
         } else if (ph === "split" || ph === "detail") {
+          explodeDone = true;
           hqW.visible = false;
           hqP.visible = false;
+          shock.visible = false;
+          debris.visible = false;
+          fxSpawned = false;
           mods.forEach((m) => {
             m.w.visible = true;
           });
@@ -931,12 +1067,21 @@ export default function IntroScene3D({
       grid.position.z = (tt * 2) % 2.9;
 
       ren.render(scene, cam);
+      renderCount++;
+
+      // 2c. Panggil onReady SEKALI setelah frame pertama selesai dirender (frame ke-2 setelah build)
+      if (!hasReportedReady && renderCount >= 2) {
+        hasReportedReady = true;
+        cbRef.current.onReady?.();
+      }
     };
     raf = requestAnimationFrame(loop);
 
     // ---- Cleanup penuh (zero memory leak) --------------------------------
     return () => {
-      cancelAnimationFrame(raf);
+      isDisposed = true;
+      stopLoop();
+      document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("resize", onResize);
       ro.disconnect();
       ren.domElement.removeEventListener("pointermove", onPtrMove);
