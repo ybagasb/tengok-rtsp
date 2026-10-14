@@ -14,8 +14,13 @@ export default function LoginForm() {
     const [ssoLoading, setSsoLoading] = useState(false);
     const router = useRouter();
 
-    // 2d. Hangatkan (warm-up) chunk IntroScene3D dari halaman login
+    // 2d. Hangatkan (warm-up) chunk IntroScene3D dari halaman login & reset intro flag
     useEffect(() => {
+        try {
+            sessionStorage.removeItem("tengok_intro_seen_v1");
+        } catch {
+            // ignore
+        }
         try {
             void import('@/components/intro/IntroScene3D');
         } catch {

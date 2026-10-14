@@ -30,6 +30,8 @@ const EDITABLE_FIELDS = [
     'monitoringPengadaan',
     // Field baru — legal & change management
     'changeManagement',
+    // Field baru — progress mingguan W1-W4 (RA/RI)
+    'progressMinggu',
 ] as const;
 
 

@@ -34,6 +34,20 @@ export interface IProgressKeuangan {
     realisasi: number;       // Realisasi keuangan (IDR)
 }
 
+// Progress mingguan (W1–W4): Rencana (RA) dan Realisasi (RI) dalam persen.
+export interface IProgressMinggu {
+    bulan: string;           // Label bulan, e.g. "Oktober 2026"
+    tahun: number;           // Tahun, e.g. 2026
+    w1Ra: number;            // Minggu 1 Rencana (%)
+    w1Ri: number;            // Minggu 1 Realisasi (%)
+    w2Ra: number;            // Minggu 2 Rencana (%)
+    w2Ri: number;            // Minggu 2 Realisasi (%)
+    w3Ra: number;            // Minggu 3 Rencana (%)
+    w3Ri: number;            // Minggu 3 Realisasi (%)
+    w4Ra: number;            // Minggu 4 Rencana (%)
+    w4Ri: number;            // Minggu 4 Realisasi (%)
+}
+
 export interface ISumberDaya {
     namaAlat: string;        // Nama sumber daya, e.g. "Excavator", "Tukang", "Besi Beton"
     jumlah: number;          // Kuantitas
@@ -149,6 +163,9 @@ export interface ILocationData {
 
     // ── Progress keuangan per DIPA ───────────────────────────────────────────
     progressKeuangan?: IProgressKeuangan[];
+
+    // ── Progress mingguan W1–W4 (RA/RI) ─────────────────────────────────────
+    progressMinggu?: IProgressMinggu[];
     tagihanBelumDiproses?: number; // Nilai progress yang belum ditagihkan (IDR)
 
     // ── Lingkup pekerjaan ────────────────────────────────────────────────────
@@ -214,6 +231,19 @@ const ProgressKeuanganSchema = new Schema<IProgressKeuangan>({
     tahun: { type: Number, required: true },
     rencana: { type: Number, required: true },
     realisasi: { type: Number, required: true },
+}, { _id: false });
+
+const ProgressMingguSchema = new Schema<IProgressMinggu>({
+    bulan:  { type: String, required: true },
+    tahun:  { type: Number, required: true },
+    w1Ra:   { type: Number, default: 0 },
+    w1Ri:   { type: Number, default: 0 },
+    w2Ra:   { type: Number, default: 0 },
+    w2Ri:   { type: Number, default: 0 },
+    w3Ra:   { type: Number, default: 0 },
+    w3Ri:   { type: Number, default: 0 },
+    w4Ra:   { type: Number, default: 0 },
+    w4Ri:   { type: Number, default: 0 },
 }, { _id: false });
 
 const SumberDayaSchema = new Schema<ISumberDaya>({
@@ -324,6 +354,9 @@ const LocationSchema: Schema = new Schema({
     // Progress keuangan
     progressKeuangan: { type: [ProgressKeuanganSchema], default: [] },
     tagihanBelumDiproses: { type: Number },
+
+    // Progress mingguan W1–W4
+    progressMinggu: { type: [ProgressMingguSchema], default: [] },
 
     // Lingkup pekerjaan
     lingkupPekerjaan: { type: [String], default: [] },

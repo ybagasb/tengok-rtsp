@@ -1112,7 +1112,16 @@ export default function IntroScene3D({
       disposables.forEach((d) => {
         try { d.dispose(); } catch { /* ignore */ }
       });
-      ren.dispose();
+      try {
+        ren.forceContextLoss();
+      } catch {
+        /* ignore */
+      }
+      try {
+        ren.dispose();
+      } catch {
+        /* ignore */
+      }
       if (ren.domElement.parentNode === mount) mount.removeChild(ren.domElement);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

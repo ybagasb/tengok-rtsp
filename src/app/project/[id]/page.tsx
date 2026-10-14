@@ -20,7 +20,8 @@ type Tab =
     | 'summary'
     | 'ikhtiar'
     | 'finansial'
-    | 'milestones' | 'resources' | 'changemgmt'
+    | 'operasi'
+    | 'changemgmt'
     | 'issues'
     | 'info' | 'location' | 'contract' | 'progress' | 'gallery' | 'documents';
 
@@ -35,6 +36,13 @@ interface Kendala { masalah: string; penyebab: string; tindakan: string; harapan
 type ChangeJenis = 'PERUBAHAN_HARGA' | 'PERUBAHAN_LINGKUP' | 'KLAIM' | 'LEGAL_ISSUE' | 'LAINNYA';
 interface ChangeManagement { judul: string; jenis?: ChangeJenis; deskripsi?: string; dampak?: string; mitigasi?: string; nilai?: number; tanggal?: string; target?: string; pic?: string; status: 'USULAN' | 'DISETUJUI' | 'DITOLAK'; dariKendala?: boolean; }
 interface MonitoringPengadaan { nama: string; persentase: number; }
+interface ProgressMinggu {
+    bulan: string; tahun: number;
+    w1Ra: number; w1Ri: number;
+    w2Ra: number; w2Ri: number;
+    w3Ra: number; w3Ri: number;
+    w4Ra: number; w4Ri: number;
+}
 
 const CHANGE_JENIS_OPTIONS: { value: ChangeJenis; label: string }[] = [
     { value: 'PERUBAHAN_HARGA', label: 'Perubahan Harga' },
@@ -104,6 +112,7 @@ interface Project {
     gallery?: GalleryItem[];
     documents?: DocItem[];
     cameras?: { _id: string; name: string; status: string }[];
+    progressMinggu?: ProgressMinggu[];
     // Kontrol akses (dihitung server) — gating kosmetik; server tetap penegak.
     access?: { canEdit: boolean; isSuperAdmin: boolean; isPic: boolean };
     // Timestamp (dikirim sebagai JSON string dari API)
@@ -145,10 +154,14 @@ const TAB_GROUPS: TabGroup[] = [
         ],
     },
     {
-        group: 'Operasional',
+        group: 'Operasi',
         items: [
-            { id: 'milestones', label: 'Milestone', icon: ClipboardList },
-            { id: 'resources',  label: 'Sumber Daya', icon: Wrench },
+            { id: 'operasi', label: 'Operasi', icon: Layers },
+        ],
+    },
+    {
+        group: 'Change',
+        items: [
             { id: 'changemgmt', label: 'Change Management', icon: GitBranch },
         ],
     },
@@ -350,8 +363,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             {tab === 'summary'    && <SummaryTab project={project} status={status} onlineCams={onlineCams} onGoTab={selectTab} />}
                             {tab === 'ikhtiar'    && <IkhtiarTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'finansial'  && <FinansialTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'milestones' && <MilestonesTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'resources'  && <ResourcesTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'operasi'    && <OperasiTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'changemgmt' && <ChangeManagementTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'issues'     && <IssuesTab project={project} isAdmin={canEdit} onSaved={fetchProject} onToChangeMgmt={() => setTab('changemgmt')} />}
                             {tab === 'info'       && <InfoTab project={project} isAdmin={canEdit} isSuperAdmin={isSuperAdmin} onSaved={fetchProject} />}
@@ -477,8 +489,6 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
         bebanKonstruksi: project.bebanKonstruksi?.toString() ?? '',
         huPendapatan: project.hasilUsaha?.pendapatan?.toString() ?? '',
         huBiaya: project.hasilUsaha?.biaya?.toString() ?? '',
-        pu: project.pu?.toString() ?? '',
-        bk: project.bk?.toString() ?? '',
         progressKeuangan: (project.progressKeuangan ?? []) as ProgressKeuangan[],
         tagihanBelumDiproses: project.tagihanBelumDiproses?.toString() ?? '',
     });
@@ -497,8 +507,6 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
         try {
             const huP = form.huPendapatan === '' ? null : Number(form.huPendapatan);
             const huB = form.huBiaya === '' ? null : Number(form.huBiaya);
-            const puV = form.pu === '' ? null : Number(form.pu);
-            const bkV = form.bk === '' ? null : Number(form.bk);
             await axios.patch(`/api/projects/${project._id}`, {
                 tagihanBruto: form.tagihanBruto === '' ? undefined : Number(form.tagihanBruto),
                 cashIn: form.cashIn === '' ? undefined : Number(form.cashIn),
@@ -512,10 +520,6 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                 hasilUsaha: (huP != null || huB != null)
                     ? { pendapatan: huP ?? 0, biaya: huB ?? 0, laba: (huP ?? 0) - (huB ?? 0) }
                     : undefined,
-                // PU/BK → LK dihitung otomatis di server bila keduanya ada.
-                pu: puV ?? undefined,
-                bk: bkV ?? undefined,
-                lk: (puV != null && bkV != null) ? puV - bkV : undefined,
                 progressKeuangan: form.progressKeuangan,
                 tagihanBelumDiproses: form.tagihanBelumDiproses === '' ? undefined : Number(form.tagihanBelumDiproses),
             });
@@ -570,51 +574,6 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                         <p className="mt-1.5 text-[11px] text-slate-500">&gt; 90 hari ditandai perhatian (merah).</p>
                     </div>
                     <MoneyInput label="Beban Konstruksi" value={form.bebanKonstruksi} onChange={v => setForm({ ...form, bebanKonstruksi: v })} hint="Total beban/biaya konstruksi proyek." />
-                </div>
-            )}
-
-            {/* Kinerja Operasi: PU / BK / LK */}
-            {!editing ? (
-                (project.pu != null || project.bk != null || project.lk != null) ? (() => {
-                    const lk = project.lk ?? ((project.pu ?? 0) - (project.bk ?? 0));
-                    const rugi = lk < 0;
-                    const margin = (project.pu && project.pu > 0) ? (lk / project.pu) * 100 : null;
-                    return (
-                        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Kinerja Operasi (PU / BK / LK)</h3>
-                                {margin != null && (
-                                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${rugi ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
-                                        LK {margin.toFixed(1)}%
-                                    </span>
-                                )}
-                            </div>
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center">
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">PU</div>
-                                    <div className="text-sm font-black text-sky-400 font-mono mt-1">{formatIDRShort(project.pu)}</div>
-                                </div>
-                                <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 text-center">
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">BK</div>
-                                    <div className="text-sm font-black text-rose-400 font-mono mt-1">{formatIDRShort(project.bk)}</div>
-                                </div>
-                                <div className={`p-3 rounded-xl text-center border ${rugi ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{rugi ? 'LK (Rugi)' : 'LK'}</div>
-                                    <div className={`text-sm font-black font-mono mt-1 ${rugi ? 'text-rose-400' : 'text-emerald-400'}`}>{formatIDRShort(lk)}</div>
-                                </div>
-                            </div>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">PU · Pendapatan Usaha &nbsp; BK · Beban Konstruksi &nbsp; LK · Laba Kotor</p>
-                        </div>
-                    );
-                })() : null
-            ) : (
-                <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center">Kinerja Operasi (PU / BK / LK)<InfoTip text="PU = Pendapatan Usaha, BK = Beban Konstruksi. LK (Laba Kotor) dihitung otomatis = PU − BK." /></h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <MoneyInput label="PU — Pendapatan Usaha" value={form.pu} onChange={v => setForm({ ...form, pu: v })} hint="Pendapatan usaha dari sisi operasi proyek." />
-                        <MoneyInput label="BK — Beban Konstruksi" value={form.bk} onChange={v => setForm({ ...form, bk: v })} hint="Beban/biaya konstruksi dari sisi operasi proyek." />
-                    </div>
-                    <p className="text-[11px] text-slate-500">LK (Laba Kotor) dihitung otomatis: {formatIDR((Number(form.pu) || 0) - (Number(form.bk) || 0))}</p>
                 </div>
             )}
 
@@ -807,6 +766,509 @@ function MilestonesTab({ project, isAdmin, onSaved }: { project: Project; isAdmi
     );
 }
 
+// ── Operasi (Kinerja Operasi + Progress Mingguan W1-W4 + Milestone + Sumber Daya) ──────────
+function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+    // ── State untuk Kinerja Operasi PU/BK/LK ──
+    const [editingKinerja, setEditingKinerja] = useState(false);
+    const [kinerjaForm, setKinerjaForm] = useState({
+        pu: project.pu?.toString() ?? '',
+        bk: project.bk?.toString() ?? '',
+    });
+    const [savingKinerja, setSavingKinerja] = useState(false);
+
+    // ── State untuk Progress Mingguan W1-W4 ──
+    const [editingMinggu, setEditingMinggu] = useState(false);
+    const [mingguList, setMingguList] = useState<ProgressMinggu[]>(project.progressMinggu ?? []);
+    const [savingMinggu, setSavingMinggu] = useState(false);
+
+    // ── State untuk Milestone (reuse MilestonesTab logic) ──
+    const [editingMs, setEditingMs] = useState(false);
+    const [msList, setMsList] = useState<Milestone[]>(project.milestones ?? []);
+    const [savingMs, setSavingMs] = useState(false);
+
+    // ── State untuk Sumber Daya ──
+    const [editingSd, setEditingSd] = useState(false);
+    const [sumberDaya, setSumberDaya] = useState<SumberDaya[]>(project.sumberDaya ?? []);
+    const [savingSd, setSavingSd] = useState(false);
+    const [editingMon, setEditingMon] = useState(false);
+    const [monitoring, setMonitoring] = useState<MonitoringPengadaan[]>(project.monitoringPengadaan ?? []);
+    const [savingMon, setSavingMon] = useState(false);
+
+    const saveKinerja = async () => {
+        setSavingKinerja(true);
+        try {
+            const puV = kinerjaForm.pu === '' ? null : Number(kinerjaForm.pu);
+            const bkV = kinerjaForm.bk === '' ? null : Number(kinerjaForm.bk);
+            await axios.patch(`/api/projects/${project._id}`, {
+                pu: puV ?? undefined,
+                bk: bkV ?? undefined,
+                lk: (puV != null && bkV != null) ? puV - bkV : undefined,
+            });
+            toast.success('Kinerja Operasi tersimpan');
+            setEditingKinerja(false);
+            onSaved();
+        } catch { toast.error('Gagal menyimpan'); }
+        finally { setSavingKinerja(false); }
+    };
+
+    const saveMinggu = async () => {
+        setSavingMinggu(true);
+        try {
+            await axios.patch(`/api/projects/${project._id}`, { progressMinggu: mingguList });
+            toast.success('Progress mingguan tersimpan');
+            setEditingMinggu(false);
+            onSaved();
+        } catch { toast.error('Gagal menyimpan'); }
+        finally { setSavingMinggu(false); }
+    };
+
+    const saveMs = async () => {
+        setSavingMs(true);
+        try {
+            await axios.patch(`/api/projects/${project._id}`, { milestones: msList });
+            toast.success('Milestone tersimpan');
+            setEditingMs(false);
+            onSaved();
+        } catch { toast.error('Gagal menyimpan'); }
+        finally { setSavingMs(false); }
+    };
+
+    const saveSd = async () => {
+        setSavingSd(true);
+        try {
+            await axios.patch(`/api/projects/${project._id}`, { sumberDaya });
+            toast.success('Sumber daya tersimpan');
+            setEditingSd(false);
+            onSaved();
+        } catch { toast.error('Gagal menyimpan'); }
+        finally { setSavingSd(false); }
+    };
+
+    const saveMonitoring = async () => {
+        setSavingMon(true);
+        try {
+            await axios.patch(`/api/projects/${project._id}`, { monitoringPengadaan: monitoring });
+            toast.success('Monitoring pengadaan tersimpan');
+            setEditingMon(false);
+            onSaved();
+        } catch { toast.error('Gagal menyimpan'); }
+        finally { setSavingMon(false); }
+    };
+
+    const progMs = (m: Milestone) => (m.progress != null ? m.progress : (m.done ? 100 : 0));
+    const overallMs = msList.length ? msList.reduce((a, m) => a + progMs(m), 0) / msList.length : 0;
+    const setProgressMs = (i: number, v: number) => {
+        const p = Math.max(0, Math.min(100, Math.round(v)));
+        const a = [...msList];
+        a[i] = { ...a[i], progress: p, done: p >= 100 };
+        setMsList(a);
+    };
+
+    const groupedSd = sumberDaya.reduce<Record<string, { item: SumberDaya; idx: number }[]>>((acc, sd, idx) => {
+        const key = (sd.kategori || '').trim() || 'Lainnya';
+        (acc[key] ||= []).push({ item: sd, idx });
+        return acc;
+    }, {});
+
+    const lk = project.lk ?? ((project.pu ?? 0) - (project.bk ?? 0));
+    const rugiKinerja = lk < 0;
+    const marginKinerja = (project.pu && project.pu > 0) ? (lk / project.pu) * 100 : null;
+
+    // W1-W4 visual chart helper
+    const WEEKS = ['W1', 'W2', 'W3', 'W4'] as const;
+    type WKey = typeof WEEKS[number];
+    const getW = (row: ProgressMinggu, w: WKey, type: 'Ra' | 'Ri') => {
+        const key = `${w.toLowerCase()}${type}` as keyof ProgressMinggu;
+        return (row[key] as number) ?? 0;
+    };
+
+    return (
+        <div className="space-y-8">
+
+            {/* ── 1. KINERJA OPERASI PU / BK / LK ── */}
+            <div className="space-y-4">
+                <SectionHeader
+                    title="Kinerja Operasi (PU / BK / LK)"
+                    isAdmin={isAdmin}
+                    editing={editingKinerja}
+                    onEdit={() => setEditingKinerja(true)}
+                    onCancel={() => { setKinerjaForm({ pu: project.pu?.toString() ?? '', bk: project.bk?.toString() ?? '' }); setEditingKinerja(false); }}
+                    onSave={saveKinerja}
+                    saving={savingKinerja}
+                />
+                {!editingKinerja ? (
+                    (project.pu != null || project.bk != null || project.lk != null) ? (
+                        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-slate-500 dark:text-slate-400">Hasil kinerja operasi proyek periode berjalan.</span>
+                                {marginKinerja != null && (
+                                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${rugiKinerja ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                                        LK {marginKinerja.toFixed(1)}%
+                                    </span>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center space-y-1">
+                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">PU</div>
+                                    <div className="text-base font-black text-sky-400 font-mono">{formatIDRShort(project.pu)}</div>
+                                    <div className="text-[10px] text-slate-500 font-mono">{project.pu != null ? formatIDR(project.pu) : ''}</div>
+                                </div>
+                                <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/20 text-center space-y-1">
+                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">BK</div>
+                                    <div className="text-base font-black text-rose-400 font-mono">{formatIDRShort(project.bk)}</div>
+                                    <div className="text-[10px] text-slate-500 font-mono">{project.bk != null ? formatIDR(project.bk) : ''}</div>
+                                </div>
+                                <div className={`p-4 rounded-xl text-center border space-y-1 ${rugiKinerja ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
+                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{rugiKinerja ? 'LK (Rugi)' : 'LK'}</div>
+                                    <div className={`text-base font-black font-mono ${rugiKinerja ? 'text-rose-400' : 'text-emerald-400'}`}>{formatIDRShort(lk)}</div>
+                                    <div className="text-[10px] text-slate-500 font-mono">{formatIDR(lk)}</div>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold border-t border-black/5 dark:border-white/5 pt-3">
+                                PU · Pendapatan Usaha &nbsp;·&nbsp; BK · Beban Konstruksi &nbsp;·&nbsp; LK · Laba Kotor
+                            </p>
+                        </div>
+                    ) : <EmptyState text="Belum ada data Kinerja Operasi (PU / BK / LK)." />
+                ) : (
+                    <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <MoneyInput label="PU — Pendapatan Usaha" value={kinerjaForm.pu} onChange={v => setKinerjaForm({ ...kinerjaForm, pu: v })} hint="Pendapatan usaha dari sisi operasi proyek (IDR)." />
+                            <MoneyInput label="BK — Beban Konstruksi" value={kinerjaForm.bk} onChange={v => setKinerjaForm({ ...kinerjaForm, bk: v })} hint="Beban/biaya konstruksi operasi (IDR)." />
+                        </div>
+                        <p className="text-[11px] text-slate-500">LK (Laba Kotor) dihitung otomatis: {formatIDR((Number(kinerjaForm.pu) || 0) - (Number(kinerjaForm.bk) || 0))}</p>
+                    </div>
+                )}
+            </div>
+
+            {/* ── 2. PROGRESS MINGGUAN W1–W4 RA/RI ── */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Mingguan (W1–W4) · RA / RI</h3>
+                    {isAdmin && (editingMinggu ? (
+                        <div className="flex gap-2">
+                            <button onClick={() => { setMingguList(project.progressMinggu ?? []); setEditingMinggu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
+                            <button onClick={saveMinggu} disabled={savingMinggu} className="px-3 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                        </div>
+                    ) : (
+                        <div className="flex gap-2">
+                            <button onClick={() => setMingguList(s => [...s, { bulan: '', tahun: new Date().getFullYear(), w1Ra: 0, w1Ri: 0, w2Ra: 0, w2Ri: 0, w3Ra: 0, w3Ri: 0, w4Ra: 0, w4Ri: 0 }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Tambah Bulan</button>
+                            <button onClick={() => setEditingMinggu(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                        </div>
+                    ))}
+                </div>
+
+                {mingguList.length === 0 && !editingMinggu
+                    ? <EmptyState text="Belum ada data progress mingguan. Klik '+ Tambah Bulan' untuk mengisi." />
+                    : editingMinggu ? (
+                        <div className="space-y-4">
+                            {mingguList.map((row, i) => (
+                                <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <input placeholder="Bulan (mis. Oktober 2026)" value={row.bulan} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], bulan: e.target.value }; setMingguList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input type="number" placeholder="Tahun" value={row.tahun} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setMingguList(a); }} className="w-24 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <button onClick={() => setMingguList(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {WEEKS.map(w => (
+                                            <div key={w} className="space-y-2">
+                                                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
+                                                <div className="space-y-1">
+                                                    <div>
+                                                        <label className="text-[9px] text-sky-400 font-bold uppercase">RA (%)</label>
+                                                        <input type="number" min={0} max={100} step={0.01} value={getW(row, w, 'Ra')} onChange={e => { const a = [...mingguList]; (a[i] as any)[`${w.toLowerCase()}Ra`] = Number(e.target.value); setMingguList(a); }} className="w-full mt-0.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-sky-500/20 text-slate-900 dark:text-white text-xs outline-none focus:border-sky-500/50" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] text-amber-400 font-bold uppercase">RI (%)</label>
+                                                        <input type="number" min={0} max={100} step={0.01} value={getW(row, w, 'Ri')} onChange={e => { const a = [...mingguList]; (a[i] as any)[`${w.toLowerCase()}Ri`] = Number(e.target.value); setMingguList(a); }} className="w-full mt-0.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-amber-500/20 text-slate-900 dark:text-white text-xs outline-none focus:border-amber-500/50" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {mingguList.map((row, i) => (
+                                <div key={i} className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <div className="text-sm font-bold text-slate-900 dark:text-white">{row.bulan || `Bulan ${i+1}`}</div>
+                                            {row.tahun && <div className="text-[10px] text-slate-500 font-mono">Tahun {row.tahun}</div>}
+                                        </div>
+                                        <div className="flex gap-2 text-[10px] font-bold">
+                                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-400" /> RA (Rencana)</span>
+                                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" /> RI (Realisasi)</span>
+                                        </div>
+                                    </div>
+                                    {/* Bar chart visual */}
+                                    <div className="grid grid-cols-4 gap-3">
+                                        {WEEKS.map(w => {
+                                            const ra = getW(row, w, 'Ra');
+                                            const ri = getW(row, w, 'Ri');
+                                            const ahead = ri >= ra;
+                                            const deviasi = ri - ra;
+                                            return (
+                                                <div key={w} className="space-y-2">
+                                                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
+                                                    {/* Visual stacked bar */}
+                                                    <div className="relative h-20 rounded-xl bg-black/[0.04] dark:bg-white/[0.04] border border-black/5 dark:border-white/5 overflow-hidden flex flex-col justify-end">
+                                                        {/* RA bar */}
+                                                        <div
+                                                            className="absolute bottom-0 left-0 right-0 bg-sky-500/20 border-t border-sky-500/40 transition-all duration-700"
+                                                            style={{ height: `${Math.min(ra, 100)}%` }}
+                                                        />
+                                                        {/* RI bar */}
+                                                        <motion.div
+                                                            className={`absolute bottom-0 left-0 w-1/2 transition-all duration-700 ${ahead ? 'bg-emerald-500/60' : 'bg-rose-500/60'}`}
+                                                            initial={{ height: 0 }}
+                                                            animate={{ height: `${Math.min(ri, 100)}%` }}
+                                                            transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }}
+                                                        />
+                                                    </div>
+                                                    <div className="text-center space-y-0.5">
+                                                        <div className="text-[10px] text-sky-400 font-mono font-bold">{ra.toFixed(1)}%</div>
+                                                        <div className={`text-[10px] font-mono font-bold ${ahead ? 'text-emerald-400' : 'text-rose-400'}`}>{ri.toFixed(1)}%</div>
+                                                        <div className={`text-[9px] font-bold ${ahead ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                            {deviasi >= 0 ? '+' : ''}{deviasi.toFixed(1)}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {/* Tabel ringkas */}
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-xs border-collapse">
+                                            <thead>
+                                                <tr className="border-b border-black/5 dark:border-white/5">
+                                                    <th className="py-1.5 px-2 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Minggu</th>
+                                                    <th className="py-1.5 px-2 text-center text-[10px] font-bold uppercase tracking-wider text-sky-400">RA (%)</th>
+                                                    <th className="py-1.5 px-2 text-center text-[10px] font-bold uppercase tracking-wider text-amber-400">RI (%)</th>
+                                                    <th className="py-1.5 px-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">Deviasi</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {WEEKS.map(w => {
+                                                    const ra = getW(row, w, 'Ra');
+                                                    const ri = getW(row, w, 'Ri');
+                                                    const dev = ri - ra;
+                                                    return (
+                                                        <tr key={w} className="border-b border-black/[0.04] dark:border-white/[0.04] hover:bg-black/[0.02] dark:hover:bg-white/[0.02]">
+                                                            <td className="py-1.5 px-2 font-bold text-slate-700 dark:text-slate-200">{w}</td>
+                                                            <td className="py-1.5 px-2 text-center font-mono text-sky-400 font-bold">{ra.toFixed(2)}</td>
+                                                            <td className="py-1.5 px-2 text-center font-mono text-amber-400 font-bold">{ri.toFixed(2)}</td>
+                                                            <td className={`py-1.5 px-2 text-center font-mono font-bold ${dev >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{dev >= 0 ? '+' : ''}{dev.toFixed(2)}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )
+                }
+            </div>
+
+            {/* ── 3. MILESTONE ── */}
+            <div className="space-y-4">
+                <SectionHeader title="Milestone" isAdmin={isAdmin} editing={editingMs} onEdit={() => setEditingMs(true)} onCancel={() => { setMsList(project.milestones ?? []); setEditingMs(false); }} onSave={saveMs} saving={savingMs} />
+
+                {msList.length > 0 && (
+                    <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                        <div className="flex justify-between items-center mb-2 text-xs">
+                            <span className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Progress Keseluruhan</span>
+                            <span className="text-slate-900 dark:text-white font-bold">{overallMs.toFixed(0)}%</span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-emerald-500 transition-all duration-500" style={{ width: `${overallMs}%` }} />
+                        </div>
+                    </div>
+                )}
+
+                {editingMs && (
+                    <button onClick={() => setMsList(s => [...s, { title: '', done: false, progress: 0 }])} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                        <Plus className="w-3.5 h-3.5" /> Tambah Milestone
+                    </button>
+                )}
+
+                {msList.length === 0 && !editingMs
+                    ? <EmptyState text="Belum ada milestone." />
+                    : editingMs
+                    ? (
+                        <div className="space-y-3">
+                            {msList.map((m, i) => (
+                                <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
+                                    <div className="flex gap-2 items-center">
+                                        <input placeholder="Judul milestone" value={m.title} onChange={e => { const a = [...msList]; a[i] = { ...a[i], title: e.target.value }; setMsList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...msList]; a[i] = { ...a[i], date: e.target.value }; setMsList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus:border-yellow-500/50" />
+                                        <button onClick={() => setMsList(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-16 shrink-0">Progress</span>
+                                        <input type="range" min={0} max={100} step={1} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="flex-1 accent-yellow-500" />
+                                        <input type="number" min={0} max={100} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus:border-yellow-500/50" />
+                                        <span className="text-sm font-black text-yellow-400 w-6">%</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="space-y-2.5">
+                            {msList.map((m, i) => {
+                                const p = progMs(m);
+                                const complete = p >= 100;
+                                return (
+                                    <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                                        <div className="flex items-center gap-3 mb-2.5">
+                                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${complete ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-black/[0.04] dark:bg-white/5 text-slate-500 border border-black/10 dark:border-white/10'}`}>
+                                                {complete ? <Check className="w-4 h-4" /> : <span className="text-xs font-black">{i + 1}</span>}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className={`text-sm font-bold ${complete ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{m.title || '-'}</div>
+                                                {m.date && <div className="text-[11px] text-slate-500">{formatDate(typeof m.date === 'string' ? m.date : undefined)}</div>}
+                                            </div>
+                                            <span className={`text-sm font-black font-mono shrink-0 ${complete ? 'text-emerald-400' : 'text-yellow-400'}`}>{p}%</span>
+                                        </div>
+                                        <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
+                                            <div className={`h-full rounded-full transition-all duration-500 ${complete ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`} style={{ width: `${p}%` }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )
+                }
+            </div>
+
+            {/* ── 4. SUMBER DAYA ── */}
+            <div className="space-y-4">
+                <SectionHeader title="Sumber Daya" isAdmin={isAdmin} editing={editingSd} onEdit={() => setEditingSd(true)} onCancel={() => { setSumberDaya(project.sumberDaya ?? []); setEditingSd(false); }} onSave={saveSd} saving={savingSd} />
+
+                {editingSd && (
+                    <button onClick={() => setSumberDaya(s => [...s, { namaAlat: '', jumlah: 0, kategori: '', satuan: 'Unit' }])}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                        <Plus className="w-3.5 h-3.5" /> Tambah Sumber Daya
+                    </button>
+                )}
+
+                {sumberDaya.length === 0 && !editingSd
+                    ? <EmptyState text="Belum ada data sumber daya." />
+                    : editingSd
+                    ? (
+                        <div className="space-y-2">
+                            {sumberDaya.map((sd, i) => (
+                                <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                                    <div className="sm:col-span-4">
+                                        <label className="text-[10px] text-slate-500 uppercase font-bold">Nama</label>
+                                        <input placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    </div>
+                                    <div className="sm:col-span-3">
+                                        <label className="text-[10px] text-slate-500 uppercase font-bold">Kategori</label>
+                                        <input list="sd-kategori-op" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <label className="text-[10px] text-slate-500 uppercase font-bold">Jumlah</label>
+                                        <input type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <label className="text-[10px] text-slate-500 uppercase font-bold">Satuan</label>
+                                        <input list="sd-satuan-op" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    </div>
+                                    <div className="sm:col-span-1 flex sm:justify-center">
+                                        <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                </div>
+                            ))}
+                            <datalist id="sd-kategori-op">
+                                <option value="Alat Berat" /><option value="Tenaga Kerja" /><option value="Material" /><option value="Kendaraan" /><option value="Peralatan" />
+                            </datalist>
+                            <datalist id="sd-satuan-op">
+                                <option value="Unit" /><option value="Orang" /><option value="m³" /><option value="Ton" /><option value="Set" /><option value="Buah" />
+                            </datalist>
+                        </div>
+                    ) : (
+                        <div className="space-y-5">
+                            {Object.entries(groupedSd).map(([kategori, items]) => (
+                                <div key={kategori}>
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">{kategori}</h3>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                        {items.map(({ item: sd }, i) => (
+                                            <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 text-center">
+                                                <div className={`text-3xl font-black mb-1 ${sd.jumlah > 0 ? 'text-yellow-400' : 'text-slate-600'}`}>{sd.jumlah}</div>
+                                                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{sd.namaAlat || '-'}</div>
+                                                <div className="text-[10px] text-slate-600 uppercase tracking-wider">{sd.satuan || 'Unit'}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )
+                }
+
+                {/* Monitoring Pengadaan */}
+                <div className="pt-6 mt-2 border-t border-black/5 dark:border-white/5">
+                    <SectionHeader title="Monitoring Pengadaan" isAdmin={isAdmin} editing={editingMon} onEdit={() => setEditingMon(true)} onCancel={() => { setMonitoring(project.monitoringPengadaan ?? []); setEditingMon(false); }} onSave={saveMonitoring} saving={savingMon} />
+                    <p className="text-xs text-slate-500 -mt-2 mb-3">Major item pengadaan beserta persentase progresnya.</p>
+
+                    {editingMon && (
+                        <button onClick={() => setMonitoring(s => [...s, { nama: '', persentase: 0 }])}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold mb-3">
+                            <Plus className="w-3.5 h-3.5" /> Tambah Item
+                        </button>
+                    )}
+
+                    {monitoring.length === 0 && !editingMon
+                        ? <EmptyState text="Belum ada data monitoring pengadaan." />
+                        : editingMon
+                        ? (
+                            <div className="space-y-2">
+                                {monitoring.map((mp, i) => (
+                                    <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                                        <div className="sm:col-span-8">
+                                            <label className="text-[10px] text-slate-500 uppercase font-bold">Nama Item</label>
+                                            <input placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        </div>
+                                        <div className="sm:col-span-3">
+                                            <label className="text-[10px] text-slate-500 uppercase font-bold">Persentase (%)</label>
+                                            <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        </div>
+                                        <div className="sm:col-span-1 flex sm:justify-center">
+                                            <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="space-y-2.5">
+                                {monitoring.map((mp, i) => {
+                                    const p = Math.max(0, Math.min(100, mp.persentase ?? 0));
+                                    const done = p >= 100;
+                                    return (
+                                        <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-2">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 min-w-0 truncate">{mp.nama || '-'}</span>
+                                                <span className={`text-xs font-black font-mono shrink-0 ${done ? 'text-emerald-400' : 'text-yellow-400'}`}>{p}%</span>
+                                            </div>
+                                            <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
+                                                <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`} style={{ width: `${p}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )
+                    }
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Change Management ─────────────────────────────────────────────────────────
 const CM_STATUS: Record<string, { label: string; color: string }> = {
     USULAN:    { label: 'USULAN',    color: 'text-sky-400 bg-sky-500/10 border-sky-500/30' },
@@ -918,10 +1380,9 @@ function computeCompleteness(p: Project) {
         { label: 'Kontrak (nomor & nilai)', done: has(p.contractNumber) || has(p.contractValue), tab: 'contract' },
         { label: 'Ikhtiar (CPI / SPI)', done: has(p.cpi) || has(p.spi), tab: 'ikhtiar' },
         { label: 'Finansial (cash / hutang / piutang)', done: has(p.cashIn) || has(p.cashOut) || has(p.saldoHutang) || has(p.piutang), tab: 'finansial' },
-        { label: 'Hasil Usaha / Kinerja Operasi', done: has(p.hasilUsaha) || has(p.pu) || has(p.bk), tab: 'finansial' },
+        { label: 'Kinerja Operasi (PU / BK / LK)', done: has(p.hasilUsaha) || has(p.pu) || has(p.bk), tab: 'operasi' },
         { label: 'Progres fisik', done: has(p.progressPercent) || has(p.progressRencana), tab: 'progress' },
-        { label: 'Milestone', done: has(p.milestones), tab: 'milestones' },
-        { label: 'Sumber daya & pengadaan', done: has(p.sumberDaya) || has(p.monitoringPengadaan), tab: 'resources' },
+        { label: 'Milestone & Sumber Daya', done: has(p.milestones) || has(p.sumberDaya), tab: 'operasi' },
         { label: 'Galeri / Dokumen', done: has(p.gallery) || has(p.documents), tab: 'gallery' },
     ];
     const doneCount = items.filter(i => i.done).length;
@@ -2130,33 +2591,46 @@ function Lightbox({ items, index, onClose, onNavigate }: {
     const cur = items[index];
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center" onClick={onClose}>
+        <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center" onClick={onClose}>
             {/* Tutup */}
-            <button onClick={onClose} className="absolute top-4 right-4 p-2.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-900 dark:text-white transition-colors z-10" title="Tutup (Esc)">
+            <button onClick={onClose} className="absolute top-4 right-4 p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors z-20" title="Tutup (Esc)">
                 <X className="w-5 h-5" />
             </button>
 
-            {/* Counter — selalu di atas backdrop gelap lightbox */}
-            <div className="absolute top-5 left-5 text-xs font-bold text-white/80 bg-white/10 rounded-full px-3 py-1 z-10">
+            {/* Counter */}
+            <div className="absolute top-5 left-5 text-xs font-bold text-white/80 bg-white/10 rounded-full px-3 py-1 z-20">
                 {index + 1} / {total}
             </div>
 
             {/* Prev */}
             {total > 1 && (
-                <button onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-3 sm:left-6 p-3 rounded-full bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-900 dark:text-white transition-colors z-10" title="Sebelumnya (←)">
+                <button onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-3 sm:left-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20" title="Sebelumnya (←)">
                     <ChevronLeft className="w-6 h-6" />
                 </button>
             )}
 
-            {/* Gambar */}
-            <div className="max-w-[92vw] max-h-[88vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-                <img src={cur.url!} alt={cur.caption || ''} className="max-w-full max-h-[82vh] object-contain rounded-lg shadow-2xl" />
-                {cur.caption && <p className="mt-3 text-sm text-slate-700 dark:text-slate-200 text-center max-w-2xl px-4">{cur.caption}</p>}
+            {/* Gambar — isi area penuh, proporsional */}
+            <div
+                className="relative flex flex-col items-center justify-center"
+                style={{ width: '90vw', height: '90vh' }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <img
+                    src={cur.url!}
+                    alt={cur.caption || ''}
+                    className="w-full h-full object-contain rounded-lg shadow-2xl select-none"
+                    draggable={false}
+                />
+                {cur.caption && (
+                    <p className="absolute bottom-0 left-0 right-0 py-2 px-4 bg-black/60 text-sm text-white text-center rounded-b-lg">
+                        {cur.caption}
+                    </p>
+                )}
             </div>
 
             {/* Next */}
             {total > 1 && (
-                <button onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-3 sm:right-6 p-3 rounded-full bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-900 dark:text-white transition-colors z-10" title="Berikutnya (→)">
+                <button onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-3 sm:right-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20" title="Berikutnya (→)">
                     <ChevronRight className="w-6 h-6" />
                 </button>
             )}

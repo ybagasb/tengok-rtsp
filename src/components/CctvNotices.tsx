@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Info, Lightbulb, AlertTriangle, X as CloseIcon, Bell } from 'lucide-react';
 
@@ -55,14 +55,19 @@ const STAGGER_MS = 900;
 
 // Key sessionStorage untuk menyimpan id notice yang sudah ditutup user (per sesi).
 const DISMISSED_KEY = 'cctv-notices-dismissed';
+// Key sessionStorage untuk menyimpan id notice yang sudah pernah ditampilkan/dilihat (per sesi).
+const SEEN_KEY = 'cctv-notices-seen';
 
 export default function CctvNotices({ sharedMode = false, hidden = false }: CctvNoticesProps) {
     const [config, setConfig] = useState<NoticeConfig | null>(null);
     // Ids currently visible on screen, in display order.
     const [visibleIds, setVisibleIds] = useState<string[]>([]);
+    const visibleIdsRef = useRef<string[]>([]);
+    useEffect(() => {
+        visibleIdsRef.current = visibleIds;
+    }, [visibleIds]);
+
     // Notice yang sudah ditutup user — persisten per sesi browser (sessionStorage)
-    // supaya tidak muncul lagi tiap kembali ke /map, tapi tetap tampil lagi di
-    // sesi baru (mis. setelah tutup tab/browser).
     const [dismissed, setDismissed] = useState<Set<string>>(() => {
         if (typeof window === 'undefined') return new Set();
         try {
@@ -70,11 +75,17 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
             return new Set<string>(raw ? JSON.parse(raw) : []);
         } catch { return new Set(); }
     });
-    const timersRef = useRef<NodeJS.Timeout[]>([]);
 
-    const persistDismissed = useCallback((set: Set<string>) => {
-        try { sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...set])); } catch { /* ignore */ }
-    }, []);
+    // Notice yang sudah pernah ditampilkan — persisten per sesi browser (sessionStorage)
+    const [seen, setSeen] = useState<Set<string>>(() => {
+        if (typeof window === 'undefined') return new Set();
+        try {
+            const raw = sessionStorage.getItem(SEEN_KEY);
+            return new Set<string>(raw ? JSON.parse(raw) : []);
+        } catch { return new Set(); }
+    });
+
+    const timersRef = useRef<NodeJS.Timeout[]>([]);
 
     // Fetch config once on mount.
     useEffect(() => {
@@ -89,57 +100,120 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
         return () => { active = false; };
     }, []);
 
-    const activeNotices = (config?.enabled ? config.notices : []).filter(n => n.enabled);
+    const activeNotices = useMemo(() => {
+        return (config?.enabled ? config.notices : []).filter(n => n.enabled);
+    }, [config]);
 
-    // Reveal notices one-by-one with a stagger once config is loaded.
+    const markSeen = useCallback((id: string) => {
+        setSeen(prev => {
+            if (prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+        });
+        try {
+            const raw = sessionStorage.getItem(SEEN_KEY);
+            const stored = new Set<string>(raw ? JSON.parse(raw) : []);
+            stored.add(id);
+            sessionStorage.setItem(SEEN_KEY, JSON.stringify([...stored]));
+        } catch { /* ignore */ }
+    }, []);
+
+    const dismiss = useCallback((id: string) => {
+        setDismissed(prev => {
+            if (prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+        });
+        try {
+            const raw = sessionStorage.getItem(DISMISSED_KEY);
+            const stored = new Set<string>(raw ? JSON.parse(raw) : []);
+            stored.add(id);
+            sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...stored]));
+        } catch { /* ignore */ }
+    }, []);
+
+    // Reveal notices one-by-one with a stagger once config is loaded & not hidden.
     useEffect(() => {
-        // clear any pending timers on re-run
+        // Clear any pending timers on re-run
         timersRef.current.forEach(clearTimeout);
         timersRef.current = [];
-        setVisibleIds([]);
+
+        if (hidden) {
+            // Saat hidden jadi true (panel kamera terbuka):
+            // Notice yang sedang tampil dianggap selesai (tutup, jangan muncul lagi setelah panel ditutup).
+            const currentlyVisible = visibleIdsRef.current;
+            if (currentlyVisible.length > 0) {
+                setDismissed(prev => {
+                    const next = new Set(prev);
+                    currentlyVisible.forEach(id => next.add(id));
+                    return next;
+                });
+                try {
+                    const raw = sessionStorage.getItem(DISMISSED_KEY);
+                    const stored = new Set<string>(raw ? JSON.parse(raw) : []);
+                    currentlyVisible.forEach(id => stored.add(id));
+                    sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...stored]));
+                } catch { /* ignore */ }
+
+                setVisibleIds([]);
+                visibleIdsRef.current = [];
+            }
+            return;
+        }
 
         if (activeNotices.length === 0) return;
 
-        // Hanya reveal notice yang BELUM pernah ditutup di sesi ini.
-        activeNotices
-            .filter(notice => !dismissed.has(notice.id))
-            .forEach((notice, i) => {
-                const t = setTimeout(() => {
-                    setVisibleIds(prev => (prev.includes(notice.id) ? prev : [...prev, notice.id]));
-                }, i * STAGGER_MS);
-                timersRef.current.push(t);
-            });
+        // Ambil data dismissed & seen terkini dari sessionStorage
+        let currentDismissed = dismissed;
+        let currentSeen = seen;
+        try {
+            const rawD = sessionStorage.getItem(DISMISSED_KEY);
+            if (rawD) currentDismissed = new Set(JSON.parse(rawD));
+            const rawS = sessionStorage.getItem(SEEN_KEY);
+            if (rawS) currentSeen = new Set(JSON.parse(rawS));
+        } catch { /* ignore */ }
+
+        // Notice yang belum sempat tampil (tidak di dismissed dan tidak di seen) boleh muncul seperti biasa
+        const eligible = activeNotices.filter(
+            notice => !currentDismissed.has(notice.id) && !currentSeen.has(notice.id)
+        );
+
+        eligible.forEach((notice, i) => {
+            const t = setTimeout(() => {
+                setVisibleIds(prev => (prev.includes(notice.id) ? prev : [...prev, notice.id]));
+                markSeen(notice.id);
+            }, i * STAGGER_MS);
+            timersRef.current.push(t);
+        });
 
         return () => {
             timersRef.current.forEach(clearTimeout);
             timersRef.current = [];
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [config]);
-
-    const dismiss = useCallback((id: string) => {
-        setDismissed(prev => {
-            const next = new Set(prev).add(id);
-            persistDismissed(next);
-            return next;
-        });
-    }, [persistDismissed]);
+    }, [config, hidden, activeNotices, markSeen]);
 
     const reopenAll = useCallback(() => {
         setDismissed(new Set());
-        persistDismissed(new Set());
-        // Re-run the staggered reveal.
+        setSeen(new Set());
+        try {
+            sessionStorage.removeItem(DISMISSED_KEY);
+            sessionStorage.removeItem(SEEN_KEY);
+        } catch { /* ignore */ }
+
         setVisibleIds([]);
         timersRef.current.forEach(clearTimeout);
         timersRef.current = [];
+
         activeNotices.forEach((notice, i) => {
             const t = setTimeout(() => {
                 setVisibleIds(prev => (prev.includes(notice.id) ? prev : [...prev, notice.id]));
+                markSeen(notice.id);
             }, i * STAGGER_MS);
             timersRef.current.push(t);
         });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeNotices, persistDismissed]);
+    }, [activeNotices, markSeen]);
 
     if (activeNotices.length === 0) return null;
     // Saat panel kamera (sidebar) terbuka, sembunyikan total — kartu & bell —
@@ -147,7 +221,7 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
     if (hidden) return null;
 
     const shown = activeNotices.filter(n => visibleIds.includes(n.id) && !dismissed.has(n.id));
-    const allClosed = activeNotices.every(n => dismissed.has(n.id));
+    const allHandled = activeNotices.every(n => dismissed.has(n.id) || seen.has(n.id));
     const autoDismissSec = config?.autoDismissSec ?? 0;
 
     return (
@@ -169,9 +243,9 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
                 </AnimatePresence>
             </div>
 
-            {/* Re-open button when everything is closed */}
+            {/* Re-open button when everything has been handled / closed and nothing currently shown */}
             <AnimatePresence>
-                {allClosed && (
+                {allHandled && shown.length === 0 && (
                     <motion.button
                         initial={{ opacity: 0, scale: 0.5, y: 10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}

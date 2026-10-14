@@ -16,7 +16,7 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -121,7 +121,6 @@ const FALLBACK_LEVELS: Record<DivisionKey, DivisionCategory[]> = {
 
 export default function CategoriesPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [phaseReady, setPhaseReady] = useState(false);
   const [forceReduced, setForceReduced] = useState(false);
@@ -249,16 +248,16 @@ export default function CategoriesPage() {
     }
   }, [focusDiv, phase]);
 
-  // Timer 1 (6 detik): dimulai SETELAH IntroScene3D ter-mount (sceneMounted === true).
+  // Timer 1 (10 detik): dimulai SETELAH IntroScene3D ter-mount (sceneMounted === true).
   // Bila belum ada onReady saat timer habis, tandai sceneError.
   useEffect(() => {
     if (!sceneMounted || sceneReady || sceneError) return;
     const timer = setTimeout(() => {
       if (!sceneReady) {
-        console.warn("[Intro3D] Safety timeout 6 detik terlewati sebelum onReady terpanggil.");
+        console.warn("[Intro3D] Safety timeout 10 detik terlewati sebelum onReady terpanggil.");
         setSceneError(true);
       }
-    }, 6000);
+    }, 10000);
     return () => clearTimeout(timer);
   }, [sceneMounted, sceneReady, sceneError]);
 
@@ -835,15 +834,15 @@ export default function CategoriesPage() {
           >
             {sceneError ? (
               <div className="flex flex-col items-center gap-4 text-center max-w-md">
-                <div className="p-3.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.25)]">
+                <div className="p-3.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.25)]">
                   <ShieldAlert className="w-8 h-8" />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-red-400 font-['Orbitron',sans-serif]">
-                    Scene 3D gagal dimuat
+                  <span className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-amber-400 font-['Orbitron',sans-serif]">
+                    Scene 3D Belum Siap
                   </span>
-                  <p className="text-[11px] sm:text-xs text-slate-400 font-['Rajdhani',sans-serif] tracking-wider">
-                    Inisialisasi visual 3D mengalami kendala pada perangkat ini. Anda dapat memuat ulang atau langsung masuk ke peta divisi.
+                  <p className="text-[11px] sm:text-xs text-slate-300 font-['Rajdhani',sans-serif] tracking-wider">
+                    Scene 3D belum siap. Muat ulang atau masuk langsung ke peta.
                   </p>
                 </div>
                 <button
