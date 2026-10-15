@@ -10,6 +10,9 @@
 :root {
   --background: #0f172a;
   --foreground: #f8fafc;
+  --div-accent: #eab308;
+  --div-accent-rgb: 234, 179, 8;
+  --div-glow: rgba(234, 179, 8, 0.45);
 }
 :root.light {
   --background: #f1f5f9;
@@ -18,6 +21,27 @@
 :root.dark {
   --background: #0f172a;
   --foreground: #f8fafc;
+}
+
+/* Utilitas Aksen Divisi */
+.div-accent-text {
+  color: color-mix(in srgb, var(--div-accent) 75%, white);
+}
+:where(:root:not(.dark), html:not(.dark), .light) .div-accent-text {
+  /* Proteksi kontras AA di latar terang */
+  color: color-mix(in srgb, var(--div-accent) 70%, black);
+}
+:where(.dark, html.dark) .div-accent-text {
+  /* Proteksi kontras di latar gelap untuk teks kecil */
+  color: color-mix(in srgb, var(--div-accent) 75%, white);
+}
+
+.div-accent-solid {
+  background-color: var(--div-accent);
+}
+
+.div-accent-glow {
+  box-shadow: 0 0 20px var(--div-glow);
 }
 
 body {

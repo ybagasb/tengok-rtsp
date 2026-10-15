@@ -1,4 +1,22 @@
+/**
+ * assign_pics.ts
+ * Mengisi daftar picSubs untuk proyek berdasarkan file konfigurasi lokal.
+ *
+ * Penggunaan:
+ *   npx tsx scripts/assign_pics.ts [path/ke/file.local.json]
+ *   (Default: scripts/data/assign_pics.local.json)
+ */
+
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
+
+interface PicAssignment {
+    id: string;
+    name: string;
+    user: string;
+    subsToAdd: string[];
+}
 
 async function main() {
     const uri = process.env.MONGODB_URI;
@@ -6,6 +24,18 @@ async function main() {
         console.error("MONGODB_URI is not set!");
         process.exit(1);
     }
+
+    const defaultDataPath = path.resolve(process.cwd(), 'scripts', 'data', 'assign_pics.local.json');
+    const dataFilePath = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : defaultDataPath;
+
+    if (!fs.existsSync(dataFilePath)) {
+        console.error(`[Error] File data PIC tidak ditemukan: ${dataFilePath}`);
+        console.error("Buat file tersebut atau berikan path file JSON sebagai argumen CLI.");
+        process.exit(1);
+    }
+
+    const rawData = fs.readFileSync(dataFilePath, 'utf-8');
+    const updates: PicAssignment[] = JSON.parse(rawData);
 
     console.log("Connecting to MongoDB...");
     await mongoose.connect(uri, { serverSelectionTimeoutMS: 15000 });
@@ -20,51 +50,25 @@ async function main() {
     const locColl = db.collection('locations');
     const auditColl = db.collection('auditlogs');
 
-    const updates = [
-        {
-            id: new mongoose.Types.ObjectId("6abe2715f67e2440d75a7d1e"),
-            name: "Bendungan Bulango Ulu",
-            user: "dendi_tri",
-            subsToAdd: ["ebe82bfb-595e-407e-afea-27c7ea94d430"]
-        },
-        {
-            id: new mongoose.Types.ObjectId("6abe2716f67e2440d75a7d5a"),
-            name: "Bencana Sumatera Utara",
-            user: "hafizMT2017, miftakhul_iman",
-            subsToAdd: ["ldap_hafizMT2017", "ldap_miftakhul_iman"]
-        },
-        {
-            id: new mongoose.Types.ObjectId("6abe2716f67e2440d75a7d66"),
-            name: "Bendungan Cabean",
-            user: "febriawan_indra",
-            subsToAdd: ["aa79549f-2c62-42d3-9005-5be61d6efea1"]
-        },
-        {
-            id: new mongoose.Types.ObjectId("6abe2716f67e2440d75a7d63"),
-            name: "Banjir Wulan",
-            user: "desy_mega, rizky_ristanto",
-            subsToAdd: ["6af4b97d-b399-493a-838e-020ca093d6b0", "ldap_rizky_ristanto"]
-        }
-    ];
-
     for (const item of updates) {
-        console.log(`\n--- Updating ${item.name} (${item.id}) ---`);
-        const before = await locColl.findOne({ _id: item.id });
+        const targetId = new mongoose.Types.ObjectId(item.id);
+        console.log(`\n--- Updating ${item.name} (${targetId}) ---`);
+        const before = await locColl.findOne({ _id: targetId });
         console.log(`Before picSubs:`, before?.picSubs);
 
         await locColl.updateOne(
-            { _id: item.id },
+            { _id: targetId },
             { $addToSet: { picSubs: { $each: item.subsToAdd } } }
         );
 
-        const after = await locColl.findOne({ _id: item.id });
+        const after = await locColl.findOne({ _id: targetId });
         console.log(`After picSubs:`, after?.picSubs);
 
         try {
             await auditColl.insertOne({
                 action: 'UPDATE',
                 entity: 'Project',
-                entityId: item.id.toString(),
+                entityId: targetId.toString(),
                 entityName: item.name,
                 by: 'admin',
                 detail: `Menambahkan PIC: ${item.user} (${item.subsToAdd.join(', ')})`,

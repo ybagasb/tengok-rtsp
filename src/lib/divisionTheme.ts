@@ -68,3 +68,44 @@ export function getDivisionTheme(div?: string | null): DivisionTheme | null {
     if (!div) return null;
     return DIVISION_THEME[div as DivisionKey] ?? null;
 }
+
+/**
+ * Konversi warna hex (#rrggbb atau #rgb) ke triplet string "r, g, b"
+ * untuk digunakan dalam ekspresi rgba(var(--div-accent-rgb), <opacity>).
+ */
+export function hexToRgb(hex: string): string {
+    const cleanHex = hex.replace('#', '').trim();
+    const fullHex = cleanHex.length === 3
+        ? cleanHex.split('').map(c => c + c).join('')
+        : cleanHex;
+    const num = parseInt(fullHex, 16);
+    if (isNaN(num) || fullHex.length !== 6) {
+        return '234, 179, 8'; // Fallback brand yellow (rgb)
+    }
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return `${r}, ${g}, ${b}`;
+}
+
+export const BRAND_THEME = {
+    accentHex: '#eab308',
+    accentRgb: '234, 179, 8',
+    glow: 'rgba(234, 179, 8, 0.45)',
+} as const;
+
+export function getDivisionCssVars(div?: string | null): Record<string, string> {
+    const theme = getDivisionTheme(div);
+    if (!theme) {
+        return {
+            '--div-accent': BRAND_THEME.accentHex,
+            '--div-accent-rgb': BRAND_THEME.accentRgb,
+            '--div-glow': BRAND_THEME.glow,
+        };
+    }
+    return {
+        '--div-accent': theme.accentHex,
+        '--div-accent-rgb': hexToRgb(theme.accentHex),
+        '--div-glow': theme.glow,
+    };
+}

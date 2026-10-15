@@ -37,6 +37,7 @@ import BrandLoader from './BrandLoader';
 import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 import { MAP_STYLES, MAP_STYLE_META, type MapStyleId } from '@/lib/mapStyles';
 import { useTheme } from '@/components/ThemeProvider';
+import { getDivisionCssVars } from '@/lib/divisionTheme';
 
 interface LocationData {
     _id: string;
@@ -468,8 +469,11 @@ export default function MapComponent({
 
     if (!category && !division && !sharedMode) return null;
 
+    const effectiveDiv = scopeMode === 'all' ? null : division;
+    const rootStyle = getDivisionCssVars(effectiveDiv) as React.CSSProperties;
+
     return (
-        <div ref={rootRef} className="flex h-screen w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
+        <div ref={rootRef} style={rootStyle} className="flex h-screen w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
             <style>{customStyles}</style>
 
             {/* Loader bermerek selama data lokasi belum selesai dimuat. */}
@@ -528,7 +532,7 @@ export default function MapComponent({
                                         onMouseEnter={() => setHovered(loc)}
                                         onMouseLeave={() => setHovered(null)}
                                     >
-                                        <MapPin3D online={online} count={(loc.cameras || []).length} category={loc.category} />
+                                        <MapPin3D online={online} count={(loc.cameras || []).length} category={loc.category} isSelected={selectedLocation?._id === loc._id} />
                                     </div>
                                 </Marker>
                             );
@@ -582,7 +586,7 @@ export default function MapComponent({
                                 const qs = p.toString();
                                 router.push(qs ? `/multiview?${qs}` : '/multiview');
                             }}
-                            className="p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-yellow-500 hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
+                            className="p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 div-accent-text hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
                             title="Ke Halaman Multi-View"
                         >
                             <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" />
@@ -593,13 +597,13 @@ export default function MapComponent({
                             <button
                                 onClick={() => setScopeMenuOpen(o => !o)}
                                 className={`relative p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border transition-all group shrink-0 hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 ${
-                                    scopeMode !== 'context' ? 'border-yellow-500/40 text-yellow-400' : 'border-black/10 dark:border-white/10 text-slate-900 dark:text-white'
+                                    scopeMode !== 'context' ? 'border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text' : 'border-black/10 dark:border-white/10 text-slate-900 dark:text-white'
                                 }`}
                                 title="Filter proyek yang ditampilkan"
                             >
                                 <Filter className="w-5 h-5 group-hover:scale-110 transition-transform" />
                                 {scopeMode !== 'context' && (
-                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-yellow-500 border-2 border-slate-900" />
+                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full div-accent-solid border-2 border-slate-900" />
                                 )}
                             </button>
                             <AnimatePresence>
@@ -622,7 +626,7 @@ export default function MapComponent({
                                             }}
                                             disabled={!hasCategory}
                                             className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
-                                                scopeMode === 'context' ? 'bg-yellow-500/15 text-yellow-400' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
+                                                scopeMode === 'context' ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
                                             } ${!hasCategory ? 'opacity-40 cursor-not-allowed' : ''}`}
                                         >
                                             <FolderTree className="w-4 h-4 shrink-0" />
@@ -642,7 +646,7 @@ export default function MapComponent({
                                             }}
                                             disabled={!hasDivision}
                                             className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
-                                                scopeMode === 'division' ? 'bg-yellow-500/15 text-yellow-400' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
+                                                scopeMode === 'division' ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
                                             } ${!hasDivision ? 'opacity-40 cursor-not-allowed' : ''}`}
                                         >
                                             <Layers className="w-4 h-4 shrink-0" />
@@ -669,7 +673,7 @@ export default function MapComponent({
                                                 });
                                             }}
                                             className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
-                                                scopeMode === 'all' ? 'bg-yellow-500/15 text-yellow-400' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
+                                                scopeMode === 'all' ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
                                             }`}
                                         >
                                             <Globe className="w-4 h-4 shrink-0" />
@@ -688,8 +692,8 @@ export default function MapComponent({
                 {!sharedMode && (
                     <div ref={searchRef} className={`flex-1 sm:max-w-xl sm:mx-8 relative pointer-events-auto transition-all duration-700 ${selectedLocation ? 'opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
                         <div className="relative group">
-                            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-yellow-500 transition-colors">
-                                {isSearching ? <Loader2 className="w-4 h-4 animate-spin text-yellow-500" /> : <Search className="w-4 h-4" />}
+                            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-[var(--div-accent)] transition-colors">
+                                {isSearching ? <Loader2 className="w-4 h-4 animate-spin div-accent-text" /> : <Search className="w-4 h-4" />}
                             </div>
                             <input
                                 type="text"
@@ -698,7 +702,7 @@ export default function MapComponent({
                                 onFocus={() => setShowSuggestions(true)}
                                 onKeyDown={handleKeyDown}
                                 placeholder={`Cari ${category || (division ? `proyek ${division}` : 'lokasi')}...`}
-                                className="w-full bg-white/85 dark:bg-slate-900/80 backdrop-blur-2xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm py-3 sm:py-4 pl-9 sm:pl-11 pr-10 sm:pr-12 rounded-2xl border border-black/10 dark:border-white/10 focus:border-yellow-500/50 focus:ring-4 focus:ring-yellow-500/10 transition-all outline-none shadow-2xl"
+                                className="w-full bg-white/85 dark:bg-slate-900/80 backdrop-blur-2xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm py-3 sm:py-4 pl-9 sm:pl-11 pr-10 sm:pr-12 rounded-2xl border border-black/10 dark:border-white/10 focus:border-[rgba(var(--div-accent-rgb),0.5)] focus:ring-4 focus:ring-[rgba(var(--div-accent-rgb),0.1)] transition-all outline-none shadow-2xl"
                             />
                             {searchQuery && (
                                 <button
@@ -723,8 +727,8 @@ export default function MapComponent({
                                             onMouseEnter={() => setSelectedIndex(idx)}
                                             className={`w-full px-5 py-3.5 flex items-center gap-4 transition-colors text-left group border-b border-black/5 dark:border-white/5 last:border-0 ${selectedIndex === idx ? 'bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
                                         >
-                                            <div className="p-2 rounded-lg shrink-0 bg-yellow-500/10">
-                                                <MapPin className="w-4 h-4 text-yellow-500" />
+                                            <div className="p-2 rounded-lg shrink-0 bg-[rgba(var(--div-accent-rgb),0.1)]">
+                                                <MapPin className="w-4 h-4 div-accent-text" />
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{item.display_name}</div>
@@ -745,7 +749,7 @@ export default function MapComponent({
 
                 {!sharedMode && (
                     <div className="hidden sm:flex px-4 sm:px-6 py-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-slate-900 dark:text-white font-bold uppercase tracking-wider items-center gap-3 pointer-events-auto text-xs">
-                        <div className="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.8)] animate-pulse" />
+                        <div className="w-2 h-2 rounded-full div-accent-solid shadow-[0_0_12px_var(--div-glow)] animate-pulse" />
                         <span className="truncate max-w-[100px] sm:max-w-none">{
                             scopeMode === 'all' ? 'Semua Proyek'
                                 : scopeMode === 'division' ? (division || 'Satu Divisi')
@@ -766,7 +770,7 @@ export default function MapComponent({
                     <div className="relative">
                         <button
                             onClick={() => setStyleMenuOpen(o => !o)}
-                            className="w-11 h-11 flex items-center justify-center bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-yellow-500 hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
+                            className="w-11 h-11 flex items-center justify-center bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 div-accent-text hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
                             title="Ganti mode peta"
                         >
                             <Layers className="w-5 h-5" />
@@ -784,7 +788,7 @@ export default function MapComponent({
                                         <button
                                             key={s.id}
                                             onClick={() => { setMapStyleId(s.id); setStyleMenuOpen(false); }}
-                                            className={`w-full px-4 py-3 text-left text-xs font-bold transition-colors ${mapStyleId === s.id ? 'bg-yellow-500/15 text-yellow-400' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'}`}
+                                            className={`w-full px-4 py-3 text-left text-xs font-bold transition-colors ${mapStyleId === s.id ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'}`}
                                         >
                                             {s.label}
                                         </button>
@@ -799,7 +803,7 @@ export default function MapComponent({
                         {/* Compass: drag to rotate/tilt (POV); click resets north + level */}
                         <button
                             onPointerDown={handleCompassPointerDown}
-                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all cursor-grab active:cursor-grabbing touch-none"
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all cursor-grab active:cursor-grabbing touch-none"
                             title="Seret untuk memutar/miringkan · klik untuk reset utara"
                         >
                             <Compass ref={compassRef} className="w-5 h-5 pointer-events-none" />
@@ -807,7 +811,7 @@ export default function MapComponent({
                         <div className="h-px bg-white/10" />
                         <button
                             onClick={() => mapRef.current?.zoomIn({ duration: 300 })}
-                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all"
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all"
                             title="Perbesar"
                         >
                             <Plus className="w-5 h-5" />
@@ -815,7 +819,7 @@ export default function MapComponent({
                         <div className="h-px bg-white/10" />
                         <button
                             onClick={() => mapRef.current?.zoomOut({ duration: 300 })}
-                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all"
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all"
                             title="Perkecil"
                         >
                             <Minus className="w-5 h-5" />
@@ -824,7 +828,7 @@ export default function MapComponent({
                         {/* Toggle 3D pitch */}
                         <button
                             onClick={() => mapRef.current?.easeTo({ pitch: (mapRef.current?.getPitch() || 0) > 10 ? 0 : FOCUS_PITCH, duration: 700 })}
-                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all"
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all"
                             title="Tampilan 3D"
                         >
                             <Mountain className="w-5 h-5" />
@@ -834,7 +838,7 @@ export default function MapComponent({
                             Gaya peta (satelit/streets) diatur layer toggle terpisah. */}
                         <button
                             onClick={toggle}
-                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-yellow-500/15 hover:text-yellow-400 active:scale-95 transition-all"
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all"
                             title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
                             aria-label={theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}
                         >
@@ -888,14 +892,14 @@ export default function MapComponent({
 }
 
 // ── Custom pin marker: ikon jenis proyek + warna status + badge jumlah kamera ──
-function MapPin3D({ online, count, category }: { online: boolean; count: number; category?: string }) {
+function MapPin3D({ online, count, category, isSelected }: { online: boolean; count: number; category?: string; isSelected?: boolean }) {
     const color = online ? '#22c55e' : '#ef4444';
     const glow = online ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.55)';
     const Icon = categoryIcon(category);
     return (
         <div className="relative flex flex-col items-center" style={{ filter: `drop-shadow(0 4px 8px ${glow})` }}>
             <div
-                className={`relative w-9 h-9 rounded-full border-[3px] border-white flex items-center justify-center transition-transform group-hover/marker:scale-110 ${online ? 'marker-pulse' : ''}`}
+                className={`relative w-9 h-9 rounded-full border-[3px] border-white flex items-center justify-center transition-transform group-hover/marker:scale-110 ${online ? 'marker-pulse' : ''} ${isSelected ? 'ring-4 ring-[var(--div-accent)] scale-110 shadow-[0_0_15px_var(--div-glow)]' : ''}`}
                 style={{ backgroundColor: color }}
             >
                 <Icon className="w-[18px] h-[18px] text-slate-900 dark:text-white" strokeWidth={2.5} />
@@ -981,8 +985,8 @@ function LocationTooltip({
 const customStyles = `
     .custom-scrollbar::-webkit-scrollbar { width: 5px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.1); }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(234, 179, 8, 0.2); border-radius: 10px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(234, 179, 8, 0.4); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(var(--div-accent-rgb), 0.2); border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(var(--div-accent-rgb), 0.4); }
 
     .marker-pulse { animation: marker-pulse 1.5s ease-in-out infinite; }
     @keyframes marker-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); } 70% { box-shadow: 0 0 0 12px rgba(34,197,94,0); } }

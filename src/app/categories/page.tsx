@@ -180,7 +180,7 @@ export default function CategoriesPage() {
       const params = new URLSearchParams(window.location.search);
       if (params.get("reduced") === "1" || params.get("motion") === "0") {
         setForceReduced(true);
-        console.log("[Intro3D] Mode reduced-motion diaktifkan via parameter URL.");
+        console.debug("[Intro3D] Mode reduced-motion diaktifkan via parameter URL.");
       }
 
       const hasSeenIntro = sessionStorage.getItem(INTRO_KEY) === "true";

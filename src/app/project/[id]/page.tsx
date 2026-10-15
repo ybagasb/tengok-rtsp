@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import BrandLoader from '@/components/BrandLoader';
 import ThemeToggle from '@/components/ThemeToggle';
+import { getDivisionCssVars } from '@/lib/divisionTheme';
 
 type Tab =
     | 'summary'
@@ -267,7 +268,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                     onClick={() => selectTab(t.id)}
                                     className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
                                         active
-                                            ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30'
+                                            ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border border-[rgba(var(--div-accent-rgb),0.3)]'
                                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
                                     }`}
                                 >
@@ -281,8 +282,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </nav>
     );
 
+    const pageStyle = getDivisionCssVars(project.division) as React.CSSProperties;
+
     return (
-        <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
+        <div style={pageStyle} className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
             {/* Header */}
             <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
                 <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex items-center gap-3">
@@ -313,8 +316,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     </div>
                     <ThemeToggle />
                     <button
-                        onClick={() => router.push(`/map?category=${project.category}`)}
-                        className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm font-bold hover:bg-yellow-500/20 transition-colors shrink-0"
+                        onClick={() => {
+                            const divisionParam = project.division ? `&division=${encodeURIComponent(project.division)}` : '';
+                            router.push(`/map?category=${encodeURIComponent(project.category)}${divisionParam}`);
+                        }}
+                        className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text text-sm font-bold hover:bg-[rgba(var(--div-accent-rgb),0.2)] transition-colors shrink-0"
                     >
                         <MapPin className="w-4 h-4" /> Lihat di Peta
                     </button>
@@ -402,7 +408,7 @@ function IndexGauge({ title, hint, value, kind }: { title: string; hint: string;
     return (
         <div className="p-6 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex flex-col items-center text-center">
             <div className="flex items-center gap-2 mb-1">
-                <Target className="w-4 h-4 text-yellow-400" />
+                <Target className="w-4 h-4 div-accent-text" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">{title}</h3>
             </div>
             <p className="text-[11px] text-slate-500 mb-4">{hint}</p>
@@ -642,15 +648,15 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                             <div key={i} className="grid grid-cols-4 gap-2 items-end">
                                 <div>
                                     <label className="text-[10px] text-slate-500 uppercase font-bold">Tahun</label>
-                                    <input type="number" value={pk.tahun} onChange={e => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setForm(f => ({ ...f, progressKeuangan: a })); }} className="w-full mt-1 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    <input type="number" value={pk.tahun} onChange={e => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setForm(f => ({ ...f, progressKeuangan: a })); }} className="w-full mt-1 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                 </div>
                                 <div>
                                     <label className="text-[10px] text-slate-500 uppercase font-bold">Pagu/Rencana (Rp)</label>
-                                    <input type="number" value={pk.rencana} onChange={e => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], rencana: Number(e.target.value) }; setForm(f => ({ ...f, progressKeuangan: a })); }} className="w-full mt-1 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    <input type="number" value={pk.rencana} onChange={e => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], rencana: Number(e.target.value) }; setForm(f => ({ ...f, progressKeuangan: a })); }} className="w-full mt-1 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                 </div>
                                 <div>
                                     <label className="text-[10px] text-slate-500 uppercase font-bold">Realisasi (Rp)</label>
-                                    <input type="number" value={pk.realisasi} onChange={e => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], realisasi: Number(e.target.value) }; setForm(f => ({ ...f, progressKeuangan: a })); }} className="w-full mt-1 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    <input type="number" value={pk.realisasi} onChange={e => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], realisasi: Number(e.target.value) }; setForm(f => ({ ...f, progressKeuangan: a })); }} className="w-full mt-1 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                 </div>
                                 <button onClick={() => setForm(f => ({ ...f, progressKeuangan: f.progressKeuangan.filter((_, j) => j !== i) }))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors">
                                     <Minus className="w-4 h-4" />
@@ -660,7 +666,7 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                     }
                     <div>
                         <label className="text-[10px] text-slate-500 uppercase font-bold">Progress Belum Ditagihkan (Rp)</label>
-                        <input type="number" value={form.tagihanBelumDiproses} onChange={e => setForm(f => ({ ...f, tagihanBelumDiproses: e.target.value }))} className="w-full mt-1 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                        <input type="number" value={form.tagihanBelumDiproses} onChange={e => setForm(f => ({ ...f, tagihanBelumDiproses: e.target.value }))} className="w-full mt-1 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                     </div>
                 </div>
             )}
@@ -723,15 +729,15 @@ function MilestonesTab({ project, isAdmin, onSaved }: { project: Project; isAdmi
                         {list.map((m, i) => (
                             <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
                                 <div className="flex gap-2 items-center">
-                                    <input placeholder="Judul milestone (mis. Pekerjaan Struktur)" value={m.title} onChange={e => { const a = [...list]; a[i] = { ...a[i], title: e.target.value }; setList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
-                                    <input type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...list]; a[i] = { ...a[i], date: e.target.value }; setList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus:border-yellow-500/50" />
+                                    <input placeholder="Judul milestone (mis. Pekerjaan Struktur)" value={m.title} onChange={e => { const a = [...list]; a[i] = { ...a[i], title: e.target.value }; setList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                    <input type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...list]; a[i] = { ...a[i], date: e.target.value }; setList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     <button onClick={() => setList(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-16 shrink-0">Progress</span>
-                                    <input type="range" min={0} max={100} step={1} value={prog(m)} onChange={e => setProgress(i, Number(e.target.value))} className="flex-1 accent-yellow-500" />
-                                    <input type="number" min={0} max={100} value={prog(m)} onChange={e => setProgress(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus:border-yellow-500/50" />
-                                    <span className="text-sm font-black text-yellow-400 w-6">%</span>
+                                    <input type="range" min={0} max={100} step={1} value={prog(m)} onChange={e => setProgress(i, Number(e.target.value))} className="flex-1 accent-[var(--div-accent)]" />
+                                    <input type="number" min={0} max={100} value={prog(m)} onChange={e => setProgress(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                    <span className="text-sm font-black div-accent-text w-6">%</span>
                                 </div>
                             </div>
                         ))}
@@ -947,7 +953,7 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                     {isAdmin && (editingMinggu ? (
                         <div className="flex gap-2">
                             <button onClick={() => { setMingguList(project.progressMinggu ?? []); setEditingMinggu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveMinggu} disabled={savingMinggu} className="px-3 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={saveMinggu} disabled={savingMinggu} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
@@ -964,8 +970,8 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                             {mingguList.map((row, i) => (
                                 <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
                                     <div className="flex items-center gap-3">
-                                        <input placeholder="Bulan (mis. Oktober 2026)" value={row.bulan} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], bulan: e.target.value }; setMingguList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
-                                        <input type="number" placeholder="Tahun" value={row.tahun} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setMingguList(a); }} className="w-24 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input placeholder="Bulan (mis. Oktober 2026)" value={row.bulan} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], bulan: e.target.value }; setMingguList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <input type="number" placeholder="Tahun" value={row.tahun} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setMingguList(a); }} className="w-24 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         <button onClick={() => setMingguList(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
                                     </div>
                                     <div className="grid grid-cols-4 gap-2">
@@ -1103,15 +1109,15 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                             {msList.map((m, i) => (
                                 <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
                                     <div className="flex gap-2 items-center">
-                                        <input placeholder="Judul milestone" value={m.title} onChange={e => { const a = [...msList]; a[i] = { ...a[i], title: e.target.value }; setMsList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
-                                        <input type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...msList]; a[i] = { ...a[i], date: e.target.value }; setMsList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus:border-yellow-500/50" />
+                                        <input placeholder="Judul milestone" value={m.title} onChange={e => { const a = [...msList]; a[i] = { ...a[i], title: e.target.value }; setMsList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <input type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...msList]; a[i] = { ...a[i], date: e.target.value }; setMsList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         <button onClick={() => setMsList(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-16 shrink-0">Progress</span>
-                                        <input type="range" min={0} max={100} step={1} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="flex-1 accent-yellow-500" />
-                                        <input type="number" min={0} max={100} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus:border-yellow-500/50" />
-                                        <span className="text-sm font-black text-yellow-400 w-6">%</span>
+                                        <input type="range" min={0} max={100} step={1} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="flex-1 accent-[var(--div-accent)]" />
+                                        <input type="number" min={0} max={100} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <span className="text-sm font-black div-accent-text w-6">%</span>
                                     </div>
                                 </div>
                             ))}
@@ -1164,19 +1170,19 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                 <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                                     <div className="sm:col-span-4">
                                         <label className="text-[10px] text-slate-500 uppercase font-bold">Nama</label>
-                                        <input placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-3">
                                         <label className="text-[10px] text-slate-500 uppercase font-bold">Kategori</label>
-                                        <input list="sd-kategori-op" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input list="sd-kategori-op" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-2">
                                         <label className="text-[10px] text-slate-500 uppercase font-bold">Jumlah</label>
-                                        <input type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-2">
                                         <label className="text-[10px] text-slate-500 uppercase font-bold">Satuan</label>
-                                        <input list="sd-satuan-op" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input list="sd-satuan-op" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-1 flex sm:justify-center">
                                         <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
@@ -1198,7 +1204,7 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                                         {items.map(({ item: sd }, i) => (
                                             <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 text-center">
-                                                <div className={`text-3xl font-black mb-1 ${sd.jumlah > 0 ? 'text-yellow-400' : 'text-slate-600'}`}>{sd.jumlah}</div>
+                                                <div className={`text-3xl font-black mb-1 ${sd.jumlah > 0 ? 'div-accent-text' : 'text-slate-600'}`}>{sd.jumlah}</div>
                                                 <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{sd.namaAlat || '-'}</div>
                                                 <div className="text-[10px] text-slate-600 uppercase tracking-wider">{sd.satuan || 'Unit'}</div>
                                             </div>
@@ -1231,11 +1237,11 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                     <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                                         <div className="sm:col-span-8">
                                             <label className="text-[10px] text-slate-500 uppercase font-bold">Nama Item</label>
-                                            <input placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                            <input placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         </div>
                                         <div className="sm:col-span-3">
                                             <label className="text-[10px] text-slate-500 uppercase font-bold">Persentase (%)</label>
-                                            <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                            <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         </div>
                                         <div className="sm:col-span-1 flex sm:justify-center">
                                             <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
@@ -1414,7 +1420,7 @@ function CompletenessCard({ project, onGoTab }: { project: Project; onGoTab: (t:
                             <button
                                 key={i}
                                 onClick={() => onGoTab(m.tab)}
-                                className="px-2.5 py-1 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-yellow-500/15 border border-black/10 dark:border-white/10 hover:border-yellow-500/40 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-colors"
+                                className="px-2.5 py-1 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-[rgba(var(--div-accent-rgb),0.15)] border border-black/10 dark:border-white/10 hover:border-[rgba(var(--div-accent-rgb),0.4)] text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-[var(--div-accent)] transition-colors"
                             >
                                 {m.label}
                             </button>
@@ -1474,7 +1480,7 @@ function SummaryTab({ project, status, onlineCams, onGoTab }: { project: Project
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Lingkup Pekerjaan</h3>
                     <div className="flex flex-wrap gap-2">
                         {(project.lingkupPekerjaan || []).map((lp, i) => (
-                            <span key={i} className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-500/10 border border-yellow-500/20 text-yellow-300">{lp}</span>
+                            <span key={i} className="px-3 py-1 rounded-full text-xs font-medium bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] div-accent-text">{lp}</span>
                         ))}
                     </div>
                 </div>
@@ -1508,8 +1514,8 @@ function ProgressFisikCard({ rencana, realisasi, deviasi }: { rencana: number; r
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                        <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                    <div className="w-6 h-6 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] flex items-center justify-center border border-[rgba(var(--div-accent-rgb),0.2)]">
+                        <TrendingUp className="w-3.5 h-3.5 div-accent-text" />
                     </div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Fisik</h3>
                 </div>
@@ -1919,9 +1925,9 @@ function PicPanel({ projectId }: { projectId: string }) {
     return (
         <div className="mt-6 p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
             <div className="flex items-center gap-2 mb-1">
-                <User className="w-4 h-4 text-yellow-500" />
+                <User className="w-4 h-4 div-accent-text" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">PIC Proyek</h3>
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin text-yellow-500 ml-1" />}
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin div-accent-text ml-1" />}
             </div>
             <p className="text-[11px] text-slate-500 mb-4">PIC dapat mengedit data proyek ini. Hanya super-admin yang dapat menetapkan PIC.</p>
 
@@ -1933,7 +1939,7 @@ function PicPanel({ projectId }: { projectId: string }) {
                     <div className="flex flex-wrap gap-2 mb-4">
                         {picSubs.length === 0 && <span className="text-xs text-slate-500">Belum ada PIC. Proyek ini hanya dapat diedit super-admin.</span>}
                         {picSubs.map(sub => (
-                            <span key={sub} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-xs font-bold text-yellow-600 dark:text-yellow-400">
+                            <span key={sub} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] text-xs font-bold div-accent-text">
                                 {nameFor(sub)}
                                 <button
                                     onClick={() => removePic(sub)}
@@ -1954,7 +1960,7 @@ function PicPanel({ projectId }: { projectId: string }) {
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="Cari user SSO untuk ditambahkan sebagai PIC..."
-                            className="w-full px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-yellow-500/50 outline-none"
+                            className="w-full px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-[rgba(var(--div-accent-rgb),0.5)] outline-none"
                         />
                     </div>
 
@@ -1973,7 +1979,7 @@ function PicPanel({ projectId }: { projectId: string }) {
                                     key={u.cognitoSub}
                                     onClick={() => addPic(u)}
                                     disabled={saving || picSubs.includes(u.cognitoSub)}
-                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-yellow-500/10 border border-transparent hover:border-yellow-500/20 transition-colors text-left disabled:opacity-50"
+                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-[rgba(var(--div-accent-rgb),0.1)] border border-transparent hover:border-[rgba(var(--div-accent-rgb),0.2)] transition-colors text-left disabled:opacity-50"
                                 >
                                     <div className="min-w-0">
                                         <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{u.fullName || u.username}</div>
@@ -2065,7 +2071,7 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                     {isAdmin && <UploadButton projectId={project._id} kind="contract" accept=".pdf,.doc,.docx,image/*" label="Unggah" onDone={onSaved} />}
                 </div>
                 {project.contractUrl ? (
-                    <a href={project.contractUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm font-bold hover:bg-yellow-500/20 transition-colors">
+                    <a href={project.contractUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text text-sm font-bold hover:bg-[rgba(var(--div-accent-rgb),0.2)] transition-colors">
                         <Download className="w-4 h-4" /> Lihat / Unduh Kontrak
                     </a>
                 ) : (
@@ -2124,7 +2130,7 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                             </div>
                             <div>
                                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Realisasi: {form.progressPercent.toFixed(2)}%</label>
-                                <input type="range" min={0} max={100} step={0.01} value={form.progressPercent} onChange={e => setForm({ ...form, progressPercent: Number(e.target.value) })} className="w-full mt-2 accent-yellow-500" />
+                                <input type="range" min={0} max={100} step={0.01} value={form.progressPercent} onChange={e => setForm({ ...form, progressPercent: Number(e.target.value) })} className="w-full mt-2 accent-[var(--div-accent)]" />
                             </div>
                         </div>
                         <div className="flex justify-between items-center pt-1 border-t border-black/5 dark:border-white/5">
@@ -2154,14 +2160,14 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                     : editing
                     ? form.lingkupPekerjaan.map((lp, i) => (
                         <div key={i} className="flex gap-2">
-                            <input value={lp} onChange={e => { const a = [...form.lingkupPekerjaan]; a[i] = e.target.value; setForm(f => ({ ...f, lingkupPekerjaan: a })); }} className="flex-1 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                            <input value={lp} onChange={e => { const a = [...form.lingkupPekerjaan]; a[i] = e.target.value; setForm(f => ({ ...f, lingkupPekerjaan: a })); }} className="flex-1 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                             <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: f.lingkupPekerjaan.filter((_, j) => j !== i) }))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Minus className="w-4 h-4" /></button>
                         </div>
                     ))
                     : (
                         <div className="flex flex-wrap gap-2">
                             {(project.lingkupPekerjaan || []).map((lp, i) => (
-                                <span key={i} className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-500/10 border border-yellow-500/20 text-yellow-300">{lp}</span>
+                                <span key={i} className="px-3 py-1 rounded-full text-xs font-medium bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] div-accent-text">{lp}</span>
                             ))}
                         </div>
                     )
@@ -2231,19 +2237,19 @@ function ResourcesTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                             <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                                 <div className="sm:col-span-4">
                                     <label className="text-[10px] text-slate-500 uppercase font-bold">Nama</label>
-                                    <input placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    <input placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                 </div>
                                 <div className="sm:col-span-3">
                                     <label className="text-[10px] text-slate-500 uppercase font-bold">Kategori</label>
-                                    <input list="sd-kategori" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    <input list="sd-kategori" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                 </div>
                                 <div className="sm:col-span-2">
                                     <label className="text-[10px] text-slate-500 uppercase font-bold">Jumlah</label>
-                                    <input type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    <input type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                 </div>
                                 <div className="sm:col-span-2">
                                     <label className="text-[10px] text-slate-500 uppercase font-bold">Satuan</label>
-                                    <input list="sd-satuan" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                    <input list="sd-satuan" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                 </div>
                                 <div className="sm:col-span-1 flex sm:justify-center">
                                     <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
@@ -2274,7 +2280,7 @@ function ResourcesTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                                     {items.map(({ item: sd }, i) => (
                                         <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 text-center">
-                                            <div className={`text-3xl font-black mb-1 ${sd.jumlah > 0 ? 'text-yellow-400' : 'text-slate-600'}`}>{sd.jumlah}</div>
+                                            <div className={`text-3xl font-black mb-1 ${sd.jumlah > 0 ? 'div-accent-text' : 'text-slate-600'}`}>{sd.jumlah}</div>
                                             <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{sd.namaAlat || '-'}</div>
                                             <div className="text-[10px] text-slate-600 uppercase tracking-wider">{sd.satuan || 'Unit'}</div>
                                         </div>
@@ -2307,11 +2313,11 @@ function ResourcesTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                                 <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                                     <div className="sm:col-span-8">
                                         <label className="text-[10px] text-slate-500 uppercase font-bold">Nama Item</label>
-                                        <input placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-3">
                                         <label className="text-[10px] text-slate-500 uppercase font-bold">Persentase (%)</label>
-                                        <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-yellow-500/50" />
+                                        <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-1 flex sm:justify-center">
                                         <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
@@ -2397,7 +2403,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                     {isAdmin && (editingIsu ? (
                         <div className="flex gap-2">
                             <button onClick={() => { setIsuList(project.isuStrategis ?? []); setEditingIsu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveIsu} disabled={saving} className="px-3 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={saveIsu} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
@@ -2445,7 +2451,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                     {isAdmin && (editingKendala ? (
                         <div className="flex gap-2">
                             <button onClick={() => { setKendalaList(project.kendala ?? []); setEditingKendala(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveKendala} disabled={saving} className="px-3 py-2 rounded-xl bg-yellow-500 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={saveKendala} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
@@ -2657,7 +2663,7 @@ function DocumentsTab({ project, isAdmin, onChanged }: { project: Project; isAdm
                 <div className="space-y-2">
                     {(project.documents || []).map(d => (
                         <div key={d.key} className="flex items-center gap-3 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                            <div className="p-2 rounded-lg bg-yellow-500/10 shrink-0"><FileText className="w-5 h-5 text-yellow-500" /></div>
+                            <div className="p-2 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] shrink-0"><FileText className="w-5 h-5 div-accent-text" /></div>
                             <div className="min-w-0 flex-1">
                                 <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{d.name}</div>
                                 <div className="text-[10px] text-slate-500">{formatBytes(d.size)} · {formatDate(d.uploadedAt)}</div>
@@ -2732,7 +2738,7 @@ function SectionHeader({ title, isAdmin, editing, onEdit, onCancel, onSave, savi
             {isAdmin && (editing ? (
                 <div className="flex gap-2">
                     <button onClick={onCancel} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
-                    <button onClick={onSave} disabled={saving} className="px-3 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">
+                    <button onClick={onSave} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan
                     </button>
                 </div>
@@ -2763,7 +2769,7 @@ function Input({ label, value, onChange, type = 'text', hint }: { label: string;
     return (
         <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center">{label}{hint && <InfoTip text={hint} />}</label>
-            <input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full mt-1.5 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-yellow-500/50 outline-none" />
+            <input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full mt-1.5 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-[rgba(var(--div-accent-rgb),0.5)] outline-none" />
         </div>
     );
 }
@@ -2778,7 +2784,7 @@ function InfoTip({ text }: { text: string }) {
                 onClick={() => setOpen(o => !o)}
                 onMouseEnter={() => setOpen(true)}
                 onMouseLeave={() => setOpen(false)}
-                className="w-3.5 h-3.5 rounded-full bg-black/[0.06] dark:bg-white/10 hover:bg-yellow-500/30 text-slate-600 dark:text-slate-300 flex items-center justify-center text-[9px] font-black leading-none transition-colors"
+                className="w-3.5 h-3.5 rounded-full bg-black/[0.06] dark:bg-white/10 hover:bg-[rgba(var(--div-accent-rgb),0.3)] text-slate-600 dark:text-slate-300 flex items-center justify-center text-[9px] font-black leading-none transition-colors"
                 aria-label="Penjelasan"
             >?</button>
             {open && (
@@ -2814,7 +2820,7 @@ function MoneyInput({ label, value, onChange, hint }: { label: string; value: st
                     value={grouped}
                     onChange={e => setDigits(e.target.value)}
                     placeholder="0"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-yellow-500/50 outline-none"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-[rgba(var(--div-accent-rgb),0.5)] outline-none"
                 />
             </div>
             <div className="flex items-center justify-between gap-2 mt-1.5">
@@ -2833,7 +2839,7 @@ function Textarea({ label, value, onChange }: { label: string; value: string; on
     return (
         <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</label>
-            <textarea value={value} onChange={e => onChange(e.target.value)} rows={3} className="w-full mt-1.5 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-yellow-500/50 outline-none resize-y" />
+            <textarea value={value} onChange={e => onChange(e.target.value)} rows={3} className="w-full mt-1.5 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-[rgba(var(--div-accent-rgb),0.5)] outline-none resize-y" />
         </div>
     );
 }
@@ -2841,7 +2847,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
     return (
         <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</label>
-            <select value={value} onChange={e => onChange(e.target.value)} className="w-full mt-1.5 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-yellow-500/50 outline-none">
+            <select value={value} onChange={e => onChange(e.target.value)} className="w-full mt-1.5 px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-[rgba(var(--div-accent-rgb),0.5)] outline-none">
                 {options.map(([v, l]) => <option key={v} value={v} className="bg-white dark:bg-slate-900">{l}</option>)}
             </select>
         </div>
@@ -2877,7 +2883,7 @@ function UploadButton({ projectId, kind, accept, label, onDone }: { projectId: s
     return (
         <>
             <input ref={inputRef} type="file" accept={accept} onChange={handleFile} className="hidden" />
-            <button onClick={() => inputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 text-xs font-bold transition-colors disabled:opacity-60">
+            <button onClick={() => inputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold transition-colors disabled:opacity-60">
                 {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} {label}
             </button>
         </>

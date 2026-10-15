@@ -768,7 +768,7 @@ export default function IntroScene3D({
         if (ph === "explode") {
           t0 = now;
           const g = hqW.userData.g as THREE.Group;
-          console.log(
+          console.debug(
             `[Intro3D] Animasi pecah (explode) dimulai. Jumlah kepingan HQ (children): ${g.children.length} (reducedMotion: ${isRed})`
           );
           explodeDone = false;

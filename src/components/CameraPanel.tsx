@@ -16,6 +16,7 @@ import OptimizedVideoPlayer from './OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
 import { ICameraData } from '@/models/Camera';
 import { ArcGauge, HBarGroup, StackedBar, type GaugeZone } from './PanelCharts';
+import { getDivisionTheme, getDivisionCssVars } from '@/lib/divisionTheme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface IPopulatedCamera extends ICameraData { _id: string; }
@@ -297,12 +298,13 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
     const deviasi   = location.progressDeviasi  ?? (realisasi - rencana);
     const hasProgress = location.progressPercent != null || location.progressRencana != null;
 
-
+    const panelTheme = getDivisionTheme(location.division);
+    const panelStyle = (panelTheme ? getDivisionCssVars(location.division) : undefined) as React.CSSProperties | undefined;
 
     return (
-        <div className="h-full flex flex-col bg-slate-100 dark:bg-[#070a12] text-slate-700 dark:text-slate-200 relative select-none overflow-hidden">
+        <div style={panelStyle} className="h-full flex flex-col bg-slate-100 dark:bg-[#070a12] text-slate-700 dark:text-slate-200 relative select-none overflow-hidden">
             {/* Ambient Background Mesh & Glow */}
-            <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none -mr-20 -mt-20" />
+            <div className="absolute top-0 right-0 w-96 h-96 bg-[rgba(var(--div-accent-rgb),0.1)] rounded-full blur-[100px] pointer-events-none -mr-20 -mt-20" />
             <div className="absolute top-64 left-0 w-80 h-80 bg-blue-600/5 rounded-full blur-[90px] pointer-events-none -ml-20" />
             <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none" />
 
@@ -335,7 +337,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                         <button
                             onClick={() => router.push(`/project/${location._id}`)}
                             title="Halaman Detail Proyek Lengkap"
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-600/30 text-amber-700 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 dark:border-amber-500/30 dark:text-amber-300 text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-amber-500/10"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[rgba(var(--div-accent-rgb),0.15)] hover:bg-[rgba(var(--div-accent-rgb),0.25)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text dark:bg-[rgba(var(--div-accent-rgb),0.1)] dark:hover:bg-[rgba(var(--div-accent-rgb),0.2)] dark:border-[rgba(var(--div-accent-rgb),0.3)] text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-[rgba(var(--div-accent-rgb),0.1)]"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
                             <span className="hidden sm:inline">Detail</span>
@@ -419,7 +421,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-white/90 dark:from-slate-900/90 via-white/60 dark:via-slate-900/60 to-slate-100/90 dark:to-slate-950/90 border border-black/[0.08] dark:border-white/[0.08] shadow-2xl relative backdrop-blur-xl">
                                     <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                                            <div className="w-2 h-2 rounded-full div-accent-solid animate-pulse" />
                                             <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Progress Fisik Proyek</span>
                                         </div>
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${deviasi >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`}>
@@ -488,8 +490,8 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                                            <Video className="w-3.5 h-3.5 text-amber-400" />
+                                        <div className="w-6 h-6 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] flex items-center justify-center border border-[rgba(var(--div-accent-rgb),0.2)]">
+                                            <Video className="w-3.5 h-3.5 div-accent-text" />
                                         </div>
                                         <div>
                                             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Live Surveillance</h3>
@@ -584,14 +586,14 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             className="p-4 space-y-4"
                         >
                             {/* Nilai Kontrak Hero */}
-                            <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-white/80 dark:via-slate-900/90 to-slate-100 dark:to-slate-950 border border-amber-500/20 shadow-xl relative overflow-hidden">
+                            <div className="p-4 rounded-2xl bg-gradient-to-br from-[rgba(var(--div-accent-rgb),0.1)] via-white/80 dark:via-slate-900/90 to-slate-100 dark:to-slate-950 border border-[rgba(var(--div-accent-rgb),0.2)] shadow-xl relative overflow-hidden">
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[10px] font-bold text-amber-400/80 uppercase tracking-widest flex items-center gap-1.5">
-                                        <CircleDollarSign className="w-3.5 h-3.5 text-amber-400" />
+                                    <span className="text-[10px] font-bold div-accent-text opacity-80 uppercase tracking-widest flex items-center gap-1.5">
+                                        <CircleDollarSign className="w-3.5 h-3.5 div-accent-text" />
                                         Total Nilai Kontrak Proyek
                                     </span>
                                     {location.contractNumber && (
-                                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border border-[rgba(var(--div-accent-rgb),0.3)]">
                                             {location.contractNumber}
                                         </span>
                                     )}
@@ -602,7 +604,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
                                     <span>Termasuk PPN 11%</span>
                                     <span className="text-slate-600">·</span>
-                                    <span className="text-amber-400 font-semibold">{fIDRShort(location.contractValue)}</span>
+                                    <span className="div-accent-text font-semibold">{fIDRShort(location.contractValue)}</span>
                                 </div>
                             </div>
 
@@ -710,7 +712,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                         </div>
                                         <div className="p-2 rounded-xl bg-black/[0.03] dark:bg-black/30 border border-white/[0.04]">
                                             <span className="text-[9px] text-slate-500 uppercase font-semibold block">Target Selesai</span>
-                                            <span className="font-bold text-amber-300 mt-0.5 block">{fDate(location.endDate)}</span>
+                                            <span className="font-bold div-accent-text mt-0.5 block">{fDate(location.endDate)}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -721,7 +723,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="space-y-2.5">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                            <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                                            <TrendingUp className="w-3.5 h-3.5 div-accent-text" />
                                             Penyerapan Keuangan per DIPA
                                         </h3>
                                         <span className="text-[10px] text-slate-500 font-mono">Anggaran APBN</span>
@@ -901,7 +903,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                            <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                                            <Wrench className="w-3.5 h-3.5 div-accent-text" />
                                             Lingkup Pekerjaan
                                         </h3>
                                         <span className="text-[10px] text-slate-500">{location.lingkupPekerjaan.length} Kategori</span>
@@ -910,9 +912,9 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                         {location.lingkupPekerjaan.map((item, idx) => (
                                             <div
                                                 key={idx}
-                                                className="p-2.5 rounded-xl bg-white/75 dark:bg-slate-900/70 border border-black/[0.06] dark:border-white/[0.06] hover:border-amber-500/30 transition-colors flex items-center gap-2 group"
+                                                className="p-2.5 rounded-xl bg-white/75 dark:bg-slate-900/70 border border-black/[0.06] dark:border-white/[0.06] hover:border-[rgba(var(--div-accent-rgb),0.3)] transition-colors flex items-center gap-2 group"
                                             >
-                                                <div className="w-5 h-5 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                                <div className="w-5 h-5 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] div-accent-text flex items-center justify-center text-[10px] font-bold shrink-0">
                                                     {idx + 1}
                                                 </div>
                                                 <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 group-hover:text-white leading-tight">
@@ -1192,7 +1194,7 @@ function TabButton({
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/[0.03]'
             }`}
         >
-            <Icon className={`w-3.5 h-3.5 shrink-0 ${active ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`} />
+            <Icon className={`w-3.5 h-3.5 shrink-0 ${active ? 'div-accent-text' : 'text-slate-500 dark:text-slate-400'}`} />
             <span className="text-[10px] sm:text-xs tracking-tight truncate">{label}</span>
             {badge != null && (
                 <span className="text-[8px] font-black px-1.5 py-0.2 rounded-full bg-rose-500 text-white ml-0.5">

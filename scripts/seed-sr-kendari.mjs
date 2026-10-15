@@ -1,12 +1,17 @@
 /**
  * seed-sr-kendari.mjs
  * Isi data proyek SR Kendari di MongoDB dari data PPT SR SULTRA.
- * Jalankan: node scripts/seed-sr-kendari.mjs
+ * Jalankan: MONGODB_URI="<connection-string>" node scripts/seed-sr-kendari.mjs
  */
 
 import { MongoClient } from 'mongodb';
 
-const MONGODB_URI = 'mongodb://admin:Qwerty123.@54.169.114.45:27017/rtsp_tengok?authSource=admin';
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+    console.error('[Error] Variabel lingkungan MONGODB_URI belum disetel.');
+    console.error('Jalankan dengan: MONGODB_URI="mongodb://..." node scripts/seed-sr-kendari.mjs');
+    process.exit(1);
+}
 
 const DATA = {
     penggunaJasa: 'Kementerian PU — Direktorat Jenderal Prasarana Strategis',

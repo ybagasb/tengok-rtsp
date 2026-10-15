@@ -21,6 +21,7 @@ import OptimizedVideoPlayer from '@/components/OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
 import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 import BrandLoader from '@/components/BrandLoader';
+import { getDivisionCssVars } from '@/lib/divisionTheme';
 
 interface Location {
     _id: string;
@@ -261,12 +262,32 @@ function MultiViewContent() {
         return parts.length ? parts.join(' • ') : 'Semua Proyek';
     }, [filterMode, contextDivision, contextCategory]);
 
+    // Effective division for page theming:
+    // URL param "division" (contextDivision) prioritized;
+    // fallback to common division among all selected locations if single division;
+    // otherwise brand default.
+    const effectiveDivision = useMemo(() => {
+        if (contextDivision) return contextDivision;
+        if (selectedLocationIds.length === 0) return null;
+        const selectedDivisions = new Set<string>();
+        for (const id of selectedLocationIds) {
+            const loc = locations.find(l => l._id === id);
+            if (loc?.division) selectedDivisions.add(loc.division);
+        }
+        if (selectedDivisions.size === 1) {
+            return Array.from(selectedDivisions)[0];
+        }
+        return null;
+    }, [contextDivision, selectedLocationIds, locations]);
+
+    const pageStyle = useMemo(() => getDivisionCssVars(effectiveDivision) as React.CSSProperties, [effectiveDivision]);
+
     if (loading) {
         return <BrandLoader label="Memuat Multi-View" />;
     }
 
     return (
-        <div className="h-screen bg-slate-950 flex overflow-hidden">
+        <div style={pageStyle} className="h-screen bg-slate-950 flex overflow-hidden">
             {/* Sidebar selection */}
             <AnimatePresence mode="wait">
                 {isSidebarOpen && (
@@ -320,7 +341,7 @@ function MultiViewContent() {
                                                 disabled={!hasCategory}
                                                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'context'
-                                                        ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-400'
+                                                        ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
                                                         : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
                                                 } ${!hasCategory ? 'opacity-40 cursor-not-allowed' : ''}`}
                                                 title={hasCategory ? 'Hanya kategori yang dibuka' : 'Tidak ada kategori konteks'}
@@ -334,7 +355,7 @@ function MultiViewContent() {
                                                 disabled={!hasDivision}
                                                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'division'
-                                                        ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-400'
+                                                        ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
                                                         : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
                                                 } ${!hasDivision ? 'opacity-40 cursor-not-allowed' : ''}`}
                                                 title={hasDivision ? `Semua kategori di ${contextDivision}` : 'Tidak ada divisi konteks'}
@@ -347,7 +368,7 @@ function MultiViewContent() {
                                                 onClick={() => switchFilterMode('all')}
                                                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'all'
-                                                        ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-400'
+                                                        ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
                                                         : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
                                                 }`}
                                                 title="Semua proyek Brantas Abipraya (lintas divisi)"
@@ -364,13 +385,13 @@ function MultiViewContent() {
                                     </div>
 
                                     <div className="relative group">
-                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-yellow-500 transition-colors" />
+                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[var(--div-accent)] transition-colors" />
                                         <input
                                             type="text"
                                             placeholder="Cari lokasi..."
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full bg-slate-950/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-yellow-500/50 transition-all"
+                                            className="w-full bg-slate-950/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)] transition-all"
                                         />
                                     </div>
                                 </div>
@@ -388,11 +409,11 @@ function MultiViewContent() {
                                                 key={loc._id}
                                                 onClick={() => toggleLocation(loc._id)}
                                                 className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border hover:shadow-lg hover:-translate-y-0.5 active:scale-95 ${isSelected
-                                                    ? 'bg-yellow-500/10 border-yellow-500/30 shadow-yellow-500/5'
+                                                    ? 'bg-[rgba(var(--div-accent-rgb),0.1)] border-[rgba(var(--div-accent-rgb),0.3)] shadow-[rgba(var(--div-accent-rgb),0.05)]'
                                                     : 'bg-white/5 border-transparent hover:bg-white/10'
                                                     }`}
                                             >
-                                                <div className={`shrink-0 ${isSelected ? 'text-yellow-500' : 'text-slate-600'}`}>
+                                                <div className={`shrink-0 ${isSelected ? 'div-accent-text' : 'text-slate-600'}`}>
                                                     {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                                                 </div>
                                                 <div className="text-left min-w-0 flex-1">
@@ -412,7 +433,7 @@ function MultiViewContent() {
                                 <div className="p-6 bg-slate-900/60 border-t border-white/5">
                                     <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
                                         <span className="text-slate-500">Selected</span>
-                                        <span className="text-yellow-500">{selectedLocationIds.length} Locations</span>
+                                        <span className="div-accent-text">{selectedLocationIds.length} Locations</span>
                                     </div>
                                 </div>
                             </div>
@@ -438,8 +459,8 @@ function MultiViewContent() {
                             </button>
                         )}
                         <div className="p-2.5 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex items-center gap-3 sm:gap-4 flex-1 sm:flex-initial">
-                            <div className="p-1.5 sm:p-2 bg-yellow-500/10 rounded-xl">
-                                <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-500" />
+                            <div className="p-1.5 sm:p-2 bg-[rgba(var(--div-accent-rgb),0.1)] rounded-xl">
+                                <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5 div-accent-text" />
                             </div>
                             <div>
                                 <h2 className="text-sm sm:text-lg font-bold text-white tracking-tight uppercase leading-none">Multi-View</h2>
@@ -546,7 +567,7 @@ function MultiViewContent() {
                                 {!isSidebarOpen && (
                                     <button
                                         onClick={() => setIsSidebarOpen(true)}
-                                        className="mt-10 px-8 py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-yellow-500/20 active:scale-95 flex items-center gap-3"
+                                        className="mt-10 px-8 py-4 div-accent-solid hover:brightness-110 text-slate-950 font-bold uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-[rgba(var(--div-accent-rgb),0.2)] active:scale-95 flex items-center gap-3"
                                     >
                                         <PanelLeftOpen className="w-5 h-5" />
                                         Buka Filter Lokasi

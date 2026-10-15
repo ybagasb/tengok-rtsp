@@ -22,3 +22,8 @@ README.md
 *.log
 public/streams
 public/streams/*
+internal-docs/
+*.xlsx
+*.pptx
+*.zip
+.kiro

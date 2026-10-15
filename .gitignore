@@ -58,4 +58,6 @@ docker-compose.yml
 *.zip
 *.rar
 Segmentasi Proyek.pdf
+internal-docs/
+scripts/data/*.local.json
 
