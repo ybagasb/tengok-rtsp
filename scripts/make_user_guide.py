@@ -5,6 +5,10 @@ Menghasilkan PDF Panduan Pengguna (User Guide) Tengok — versi RAMAH PENGGUNA.
 Ditujukan untuk petugas proyek yang mengisi data (BUKAN orang teknis/IT).
 Bahasa dibuat sederhana, langkah demi langkah, tanpa jargon.
 
+Struktur menu di panduan ini mengikuti halaman /project/[id]:
+  Ringkasan · CPI / SPI · Cash & Keuangan · Operasi · Change Management ·
+  Isu & Kendala · Lainnya (Informasi, Lokasi, Kontrak, Progres, Galeri, Dokumen)
+
 Jalankan: python scripts/make_user_guide.py
 Output  : public/Panduan-Input-Detail-Proyek.pdf
 """
@@ -35,6 +39,8 @@ LINE = colors.HexColor('#e2e8f0')
 PIC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1tY8XWli4iPRfTJCNBUiRJbNL8GqXGAbTVCBS1WcIH-Q/edit?usp=sharing'
 GREEN_DK = colors.HexColor('#047857')
 
+EDISI = 'Oktober 2026'
+
 OUT = 'public/Panduan-Input-Detail-Proyek.pdf'
 LOGO = 'public/LOGO_ABIPRAYA.png'
 
@@ -47,7 +53,7 @@ SUB = ParagraphStyle('SUB', parent=styles['Normal'], fontName='Helvetica',
 H2 = ParagraphStyle('H2', parent=styles['Heading2'], fontName='Helvetica-Bold',
                     fontSize=15, textColor=AMBER_DK, spaceBefore=16, spaceAfter=6, leading=19)
 H3 = ParagraphStyle('H3', parent=styles['Heading3'], fontName='Helvetica-Bold',
-                    fontSize=12, textColor=NAVY, spaceBefore=9, spaceAfter=3, leading=16)
+                    fontSize=12, textColor=NAVY, spaceBefore=9, spaceAfter=3, leading=16, keepWithNext=1)
 BODY = ParagraphStyle('BODY', parent=styles['Normal'], fontName='Helvetica',
                       fontSize=10.5, textColor=SLATE, leading=16, spaceAfter=4, alignment=TA_LEFT)
 BODY_C = ParagraphStyle('BODY_C', parent=BODY, alignment=TA_CENTER)
@@ -103,7 +109,7 @@ def field_table(rows, col1='Yang Diisi'):
              Paragraph('<b>Penjelasan Sederhana</b>', ParagraphStyle('th2', parent=BODY, textColor=colors.white))]]
     for f, k in rows:
         data.append([Paragraph(f'<b>{f}</b>', BODY), Paragraph(k, BODY)])
-    t = Table(data, colWidths=[46 * mm, 118 * mm])
+    t = Table(data, colWidths=[46 * mm, 118 * mm], repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), NAVY),
         ('FONTSIZE', (0, 0), (-1, 0), 10),
@@ -196,12 +202,12 @@ def build():
     E.append(Spacer(1, 10 * mm))
     E.append(box(
         'Panduan ini dibuat sesederhana mungkin. Anda tidak perlu paham teknologi '
-        'untuk mengisi data proyek — cukup ikuti langkah-langkah bergambar di dalamnya. '
+        'untuk mengisi data proyek — cukup ikuti langkah-langkahnya. '
         'Isi yang Anda tahu saja; kolom yang belum ada datanya boleh dikosongkan dan '
         'diisi kemudian.',
         'Untuk Siapa Panduan Ini?', BG_BLUE, colors.HexColor('#3b82f6'), colors.HexColor('#1d4ed8')))
     E.append(Spacer(1, 6 * mm))
-    E.append(Paragraph('Edisi ' + '2026' + ' · Dokumen Internal', BODY_C))
+    E.append(Paragraph(f'Edisi {EDISI} · Dokumen Internal', BODY_C))
     E.append(PageBreak())
 
     # ══ 1. INTI YANG PERLU DIINGAT ═══════════════════════════════════════════
@@ -251,26 +257,63 @@ def build():
     E.append(numbered([
         'Buka aplikasi Tengok di browser (Chrome/Edge).',
         'Pilih <b>masuk dengan akun kantor (SSO)</b> dan selesaikan proses login.',
-        'Setelah masuk, pilih <b>Divisi</b> (Divisi 1, 2, atau 3), lalu pilih '
-        '<b>jenis proyek</b> (kategori).',
-        'Akan tampil <b>peta</b>. Klik <b>titik/penanda</b> lokasi proyek Anda.',
-        'Pada panel yang muncul, klik tombol <b>"Detail"</b> di pojok kanan atas.',
+        'Setelah masuk, Anda akan melihat <b>animasi pembuka</b> gedung kantor pusat. '
+        'Tekan <b>Enter</b> atau <b>Spasi</b> untuk memulai, atau <b>Esc</b> untuk '
+        'melewatinya. Animasi ini hanya tampil sekali setiap kali Anda membuka aplikasi.',
+        'Pilih salah satu dari <b>3 Divisi</b> (Divisi 1, 2, atau 3), lalu pilih '
+        '<b>kategori proyek</b> di dalam divisi tersebut. Anda juga bisa memakai '
+        'kotak pencarian kategori atau tombol panah di keyboard.',
+        'Akan tampil <b>peta</b>. Klik <b>titik/penanda</b> lokasi proyek Anda '
+        '(hijau = kamera CCTV mayoritas online, merah = mayoritas offline).',
+        'Pada panel yang muncul, klik tombol <b>"Detail"</b> di pojok kanan atas panel.',
         'Anda sekarang berada di <b>halaman proyek</b>. Di sinilah semua data diisi.',
     ]))
+    E.append(tipbox(
+        'Tombol <b>"Panduan"</b> di pojok atas halaman utama (dan di halaman login) '
+        'selalu membuka panduan ini kembali kapan pun Anda butuh. Pengguna yang kurang '
+        'nyaman dengan animasi bisa memakai tampilan hemat gerak dengan menambahkan '
+        '<b>?reduced=1</b> di akhir alamat halaman kategori.', 'Panduan Selalu Tersedia'))
+    E.append(Spacer(1, 3 * mm))
     E.append(callout(
         'Tombol <b>"Edit"</b> / <b>"Unggah"</b> tidak muncul? Dua kemungkinan: '
         '(1) Anda belum masuk dengan akun kantor (SSO) — keluar lalu masuk lagi lewat SSO; '
         'atau (2) Anda <b>belum terdaftar sebagai PIC</b> proyek itu — lihat bagian '
         '"Kenapa Saya Tidak Bisa Mengedit?" di atas.', 'Kalau Tombol Edit Tidak Ada'))
 
-    # ══ 3. CARA MENGISI (POLA UMUM) ══════════════════════════════════════════
+    # ══ 3. PETA MENU HALAMAN PROYEK ══════════════════════════════════════════
+    E.append(Paragraph('Mengenal Menu di Halaman Proyek', H2))
+    E.append(Paragraph(
+        'Di sisi kiri halaman proyek ada daftar menu. Berikut isi tiap menu '
+        'dan kapan Anda memakainya:', BODY))
+    E.append(field_table([
+        ('Ringkasan', 'Gambaran umum proyek + <b>indikator kelengkapan data</b>. '
+                      'Mulailah dari sini untuk tahu bagian mana yang belum diisi.'),
+        ('CPI / SPI', 'Dua angka nilai kinerja (biaya &amp; jadwal) dari laporan EVA.'),
+        ('Cash &amp; Keuangan', 'Tagihan, kas masuk/keluar, hutang, piutang, CCC, hasil usaha, '
+                                'dan penyerapan anggaran (DIPA).'),
+        ('Operasi', 'Kinerja Operasi (PU/BK/LK), <b>Progress Mingguan</b>, Milestone, '
+                    'Sumber Daya, dan Monitoring Pengadaan.'),
+        ('Change Management', 'Catatan perubahan harga/lingkup, klaim, dan masalah hukum.'),
+        ('Isu &amp; Kendala', 'Isu strategis dan kendala di lapangan beserta penanganannya.'),
+        ('Lainnya', 'Informasi, Lokasi, Kontrak, Progres, Galeri, dan Dokumen.'),
+    ], col1='Menu'))
+    E.append(Spacer(1, 3 * mm))
+
+    E.append(Paragraph('Cara Memakai Indikator Kelengkapan (di Menu Ringkasan)', H3))
+    E.append(Paragraph(
+        'Di bagian atas menu <b>Ringkasan</b> ada kartu <b>"Kelengkapan Data Proyek"</b> '
+        'berisi persen kelengkapan dan daftar bagian yang <b>belum diisi</b>. '
+        'Klik nama bagian tersebut — Anda langsung dibawa ke menu yang harus diisi. '
+        'Hijau = hampir lengkap, kuning = setengah jalan, merah = masih banyak yang kosong.', BODY))
+
+    # ══ 4. CARA MENGISI (POLA UMUM) ══════════════════════════════════════════
     E.append(Paragraph('Langkah 2 — Pola Mengisi (Sama di Semua Bagian)', H2))
     E.append(numbered([
-        'Di sisi kiri ada daftar menu. Pilih bagian yang mau diisi '
-        '(misalnya "Finansial" atau "Milestone").',
-        'Klik tombol <b>"Edit"</b> (pensil) di kanan atas bagian itu.',
-        'Isi kolom yang tersedia. Untuk daftar (seperti tahun anggaran atau '
-        'item pengadaan), gunakan tombol <b>"Tambah"</b> untuk menambah baris, '
+        'Pilih menu di sisi kiri (misalnya "Cash &amp; Keuangan" atau "Operasi").',
+        'Klik tombol <b>"Edit"</b> (pensil) di kanan atas bagian yang ingin diisi. '
+        'Satu menu bisa punya beberapa bagian, masing-masing punya tombol Edit sendiri.',
+        'Isi kolom yang tersedia. Untuk daftar (seperti tahun anggaran, bulan progress '
+        'mingguan, atau item pengadaan), gunakan tombol <b>"Tambah"</b> untuk menambah baris, '
         'dan ikon <b>tempat sampah</b> untuk menghapus baris.',
         'Klik <b>"Simpan"</b>. Muncul tulisan "tersimpan" → berarti berhasil.',
         'Kalau salah/ingin batal, klik <b>"Batal"</b> sebelum menyimpan.',
@@ -279,115 +322,313 @@ def build():
         'Untuk kolom <b>uang</b>, ketik angkanya saja tanpa titik atau koma. '
         'Contoh: untuk Rp 400 juta, ketik <b>400000000</b>. Aplikasi akan '
         'merapikan tampilannya sendiri.', 'Cara Menulis Angka Uang'))
+    E.append(Spacer(1, 2 * mm))
+    E.append(callout(
+        'Setiap bagian punya tombol Simpan sendiri. Jika Anda mengedit dua bagian '
+        'sekaligus dalam satu menu (misalnya Kinerja Operasi dan Milestone), '
+        '<b>simpan satu per satu</b> sebelum pindah ke bagian lain.', 'Simpan Per Bagian'))
 
     E.append(PageBreak())
 
-    # ══ 4. PENJELASAN TIAP BAGIAN ════════════════════════════════════════════
-    E.append(Paragraph('Penjelasan Tiap Bagian', H2))
+    # ══ 5. PENJELASAN TIAP MENU ══════════════════════════════════════════════
+    E.append(Paragraph('Penjelasan Tiap Menu', H2))
     E.append(Paragraph('Berikut arti tiap bagian dengan bahasa sehari-hari. '
                        'Isi yang relevan dengan proyek Anda.', BODY))
 
-    E.append(Paragraph('Informasi Proyek', H3))
-    E.append(Paragraph('Keterangan dasar proyek: siapa pemberi kerja, siapa pengawas, '
-                       'siapa pelaksana, tanggal mulai & selesai, dan nama + nomor HP '
-                       'penanggung jawab (PIC). Isi apa adanya.', BODY))
-
-    E.append(Paragraph('Ikhtiar (CPI / SPI)', H3))
+    # ── CPI / SPI ──
+    E.append(Paragraph('Menu CPI / SPI (Ikhtiar)', H3))
     E.append(Paragraph('Dua angka nilai kinerja proyek. Biasanya didapat dari laporan '
-                       'EVA. Kalau Anda punya angkanya, isi; kalau tidak, kosongkan.', BODY))
+                       'EVA. Kalau Anda punya angkanya, isi; kalau tidak, kosongkan. '
+                       'Setelah disimpan, aplikasi menampilkan status otomatis '
+                       '(Under/Over Budget dan Ahead/Behind Schedule).', BODY))
     E.append(field_table([
-        ('CPI', 'Nilai kinerja biaya. Contoh: 1,02. Angka 1 ke atas = hemat/efisien; '
-                'di bawah 1 = boros. Isi sesuai laporan.'),
-        ('SPI', 'Nilai kinerja waktu. Contoh: 0,98. Angka 1 ke atas = sesuai/lebih cepat; '
-                'di bawah 1 = terlambat. Isi sesuai laporan.'),
+        ('CPI', 'Nilai kinerja biaya. Contoh: 1,02. Angka 1 ke atas = hemat/efisien '
+                '(Under Budget); di bawah 1 = boros (Over Budget).'),
+        ('SPI', 'Nilai kinerja waktu. Contoh: 0,98. Angka 1 ke atas = sesuai/lebih cepat '
+                '(Ahead Schedule); di bawah 1 = terlambat (Behind Schedule).'),
     ], col1='Kolom'))
 
-    E.append(Paragraph('Finansial (Keuangan)', H3))
+    # ── Cash & Keuangan ──
+    E.append(Paragraph('Menu Cash &amp; Keuangan', H3))
     E.append(field_table([
+        ('Tagihan Bruto', 'Total tagihan bruto proyek.'),
         ('Cash In', 'Total uang yang sudah masuk/diterima proyek.'),
         ('Cash Out', 'Total uang yang sudah keluar/dibelanjakan.'),
         ('Saldo Kas', 'Sisa kas. Boleh dikosongkan — dihitung otomatis dari '
                       'Cash In dikurangi Cash Out.'),
         ('Saldo Hutang', 'Total hutang proyek saat ini.'),
-        ('BAD', 'Bagian dari hutang (sesuai laporan cashflow). Isi kalau ada angkanya.'),
+        ('BAD', 'Beban yang Akan Dibayar — bagian dari hutang (sesuai laporan cashflow). '
+                'Isi kalau ada angkanya.'),
         ('Piutang', 'Uang yang masih ditunggu/belum dibayar ke proyek.'),
         ('CCC', 'Lama perputaran kas, dihitung dalam HARI. Contoh: 120. '
                 'Kalau lebih dari 90 hari, aplikasi menandainya merah (perlu perhatian).'),
-        ('Hasil Usaha', 'Pendapatan dan biaya proyek. Keuntungannya dihitung otomatis.'),
-        ('Kinerja Operasi (PU / BK / LK)', 'PU = pendapatan usaha, BK = beban/biaya '
-                                           'konstruksi. LK (laba kotor) dihitung otomatis = PU - BK.'),
-        ('Penyerapan Anggaran (DIPA)', 'Rincian anggaran per tahun: rencana vs realisasi. '
-                                       'Tekan "Tambah Tahun" untuk menambah baris.'),
+        ('Beban Konstruksi', 'Total beban/biaya konstruksi proyek.'),
+        ('Hasil Usaha', 'Isi <b>Pendapatan Usaha</b> dan <b>Biaya/HPP</b>. '
+                        'Laba (atau rugi) dan margin dihitung otomatis.'),
+        ('Progress Keuangan (DIPA)', 'Rincian anggaran per tahun: <b>Pagu/Rencana</b> vs <b>Realisasi</b>. '
+                                     'Tekan "Tambah Tahun" untuk menambah baris, "Hapus tahun ini" untuk menghapus.'),
+        ('Progress Belum Ditagihkan', 'Nilai pekerjaan yang sudah berjalan tetapi belum ditagihkan. '
+                                      'Ada di dalam bagian Progress Keuangan.'),
     ], col1='Kolom'))
+    E.append(Spacer(1, 2 * mm))
     E.append(tipbox('Istilah seperti CPI, SPI, BAD, CCC biasanya ada di laporan bulanan '
                     'proyek. Tinggal salin angkanya ke kolom yang sesuai. Tidak perlu '
                     'menghitung sendiri.', 'Dari Mana Angkanya?'))
 
-    E.append(Paragraph('Milestone (Tahapan Pekerjaan)', H3))
-    E.append(Paragraph('Daftar tahapan besar proyek beserta kemajuannya. Tekan "Tambah", '
-                       'tulis nama tahapan, lalu isi persen kemajuannya (0–100). '
-                       'Kemajuan total dihitung otomatis.', BODY))
+    # ── Operasi ──
+    E.append(Paragraph('Menu Operasi', H3))
+    E.append(Paragraph('Menu ini punya <b>lima bagian</b>, masing-masing dengan tombol Edit sendiri:', BODY))
 
-    E.append(Paragraph('Sumber Daya', H3))
-    E.append(Paragraph('Daftar alat, tenaga kerja, atau material di proyek. Tiap baris: '
-                       'nama, kelompok (Alat Berat / Tenaga Kerja / Material), jumlah, '
-                       'dan satuan (Unit / Orang / m³).', BODY))
-
-    E.append(Paragraph('Monitoring Pengadaan', H3))
-    E.append(Paragraph('Daftar barang/pengadaan penting (major item) beserta persen '
-                       'progresnya. Cukup isi nama barang dan persentasenya. '
-                       'Ada di bagian bawah menu "Sumber Daya".', BODY))
-
-    E.append(Paragraph('Change Management (Perubahan & Legal)', H3))
-    E.append(Paragraph('Catatan perubahan pada proyek (harga, lingkup pekerjaan, klaim, '
-                       'atau masalah hukum). Tiap catatan isi:', BODY))
+    E.append(Paragraph('1) Kinerja Operasi (PU / BK / LK)', H3))
     E.append(field_table([
-        ('Judul', 'Nama singkat perubahannya.'),
-        ('Jenis', 'Pilih salah satu: Perubahan Harga, Perubahan Lingkup, Klaim, '
-                  'Legal Issue, atau Lain-lain.'),
-        ('Deskripsi', 'Cerita singkat: apa yang berubah dan kenapa.'),
-        ('Dampak', 'Akibatnya ke proyek (biaya bertambah? waktu mundur? dll).'),
-        ('Mitigasi', 'Rencana/langkah untuk menangani dampak itu.'),
-        ('Nilai, Tanggal, PIC, Status', 'Lengkapi bila ada. Status: Usulan / Disetujui / Ditolak.'),
+        ('PU', 'Pendapatan Usaha dari sisi operasi proyek.'),
+        ('BK', 'Beban Konstruksi (biaya konstruksi operasi).'),
+        ('LK', 'Laba Kotor — <b>tidak perlu diisi</b>, dihitung otomatis = PU − BK. '
+               'Tampil merah bila rugi.'),
     ], col1='Kolom'))
 
-    E.append(Paragraph('Isu & Kendala', H3))
-    E.append(Paragraph('Masalah yang sedang dihadapi proyek, penyebab, dan rencana '
-                       'penanganannya. Kendala juga bisa dipindahkan menjadi catatan '
-                       '"Change Management" lewat satu tombol.', BODY))
+    E.append(Paragraph('2) Progress Mingguan (W1–W4) · RA / RI', H3))
+    E.append(Paragraph(
+        'Catatan kemajuan fisik <b>per minggu, dikelompokkan per bulan</b>. '
+        '<b>RA</b> = Rencana, <b>RI</b> = Realisasi (dalam persen). '
+        'Cara mengisi:', BODY))
+    E.append(numbered([
+        'Klik <b>"Tambah Bulan"</b> (atau "Isi sekarang" bila masih kosong), lalu klik <b>Edit</b>.',
+        'Tulis nama bulan (contoh: <i>Oktober 2026</i>) dan tahunnya.',
+        'Untuk tiap minggu <b>W1 sampai W4</b>, isi angka <b>RA (%)</b> dan <b>RI (%)</b> '
+        '(0–100, boleh desimal).',
+        'Klik <b>Simpan</b>.',
+    ]))
+    E.append(Paragraph(
+        'Setelah tersimpan, aplikasi menampilkan grafik batang dan tabel per minggu beserta '
+        '<b>deviasi</b> (RI − RA). Hijau = realisasi sama/lebih dari rencana, merah = di bawah rencana.', BODY))
 
-    E.append(Paragraph('Kontrak, Progres, Lokasi', H3))
-    E.append(Paragraph('Nomor & nilai kontrak, kemajuan fisik (rencana vs kenyataan), '
-                       'dan titik lokasi di peta. Isi seperlunya.', BODY))
+    E.append(Paragraph('3) Milestone (Tahapan Pekerjaan)', H3))
+    E.append(Paragraph('Daftar tahapan besar proyek beserta kemajuannya. Tekan "Tambah Milestone", '
+                       'tulis nama tahapan dan tanggal, lalu geser/isi persen kemajuannya (0–100). '
+                       'Tahapan yang mencapai 100% otomatis ditandai selesai. '
+                       'Progress keseluruhan dihitung otomatis dari rata-rata semua tahapan.', BODY))
 
-    E.append(Paragraph('Galeri & Dokumen', H3))
+    E.append(Paragraph('4) Sumber Daya', H3))
+    E.append(Paragraph('Daftar alat, tenaga kerja, atau material di proyek. Tekan '
+                       '"Tambah Sumber Daya". Tiap baris: <b>Nama</b>, <b>Kategori</b> '
+                       '(Alat Berat / Tenaga Kerja / Material / Kendaraan / Peralatan), '
+                       '<b>Jumlah</b>, dan <b>Satuan</b> (Unit / Orang / m³ / Ton / Set / Buah).', BODY))
+
+    E.append(Paragraph('5) Monitoring Pengadaan', H3))
+    E.append(Paragraph('Daftar barang/pengadaan penting (major item) beserta persen '
+                       'progresnya. Tekan "Tambah Item", isi <b>Nama Item</b> dan '
+                       '<b>Persentase</b> (0–100). Ada di bagian paling bawah menu Operasi.', BODY))
+
+    # ── Change Management ──
+    E.append(Paragraph('Menu Change Management', H3))
+    E.append(Paragraph('Catatan perubahan pada proyek (harga, lingkup pekerjaan, klaim, '
+                       'atau masalah hukum). Tekan "Tambah Perubahan", lalu isi:', BODY))
+    E.append(field_table([
+        ('Judul Perubahan', 'Nama singkat perubahannya.'),
+        ('Jenis', 'Pilih salah satu: Perubahan Harga, Perubahan Lingkup, Klaim, '
+                  'Legal Issue, atau Lain-lain.'),
+        ('Deskripsi / Latar Belakang', 'Cerita singkat: apa yang berubah dan kenapa.'),
+        ('Dampak Perubahan', 'Akibatnya ke proyek (biaya bertambah? waktu mundur? mutu?).'),
+        ('Mitigasi', 'Langkah untuk menangani dampak itu.'),
+        ('Nilai, Tanggal, Target Implementasi, PIC', 'Lengkapi bila ada.'),
+        ('Status', 'Pilih: USULAN, DISETUJUI, atau DITOLAK.'),
+    ], col1='Kolom'))
+
+    # ── Isu & Kendala ──
+    E.append(Paragraph('Menu Isu &amp; Kendala', H3))
+    E.append(Paragraph('Menu ini punya dua bagian dengan tombol Edit masing-masing:', BODY))
     E.append(bullets([
-        '<b>Galeri</b>: tekan "Unggah Foto" untuk menambah foto proyek (JPG/PNG).',
-        '<b>Dokumen</b>: tekan "Unggah Dokumen" untuk berkas (PDF, Word, Excel, '
-        'PowerPoint, dll).',
-        'Ukuran tiap berkas maksimal <b>25 MB</b>.',
-        'Saat menghapus, akan ada konfirmasi dulu — jadi aman.',
+        '<b>Isu Strategis</b> — tulis <b>Isu</b> dan <b>Usulan dari Abipraya</b> untuk menanganinya.',
+        '<b>Kendala Operasional &amp; Kontraktual</b> — isi <b>Masalah</b>, <b>Penyebab</b>, '
+        '<b>Tindakan</b>, <b>Harapan Dukungan</b>, <b>Target</b>, <b>PIC</b>, dan '
+        '<b>Status</b> (OPEN / ON PROGRESS / CLOSED).',
+        'Kendala yang perlu pengajuan perubahan bisa dipindahkan ke Change Management '
+        'dengan satu klik tombol <b>"Masukkan ke Change Management"</b> di kartu kendala tersebut. '
+        'Catatan baru muncul dengan status USULAN.',
     ]))
 
-    # ══ 5. KALAU ADA MASALAH ═════════════════════════════════════════════════
+    # ── Lainnya ──
+    E.append(Paragraph('Menu Lainnya', H3))
+    E.append(Paragraph('Berisi enam bagian pendukung:', BODY))
+    E.append(field_table([
+        ('Informasi', 'Pengguna Jasa, Pengawas, Penyedia Jasa, Kontraktor, Status '
+                      '(Perencanaan / Berjalan / Selesai), Tanggal Mulai &amp; Selesai, '
+                      'nama dan kontak PIC, serta Deskripsi proyek.'),
+        ('Lokasi', 'Titik lokasi proyek di peta. Hanya tampilan, tidak perlu diisi.'),
+        ('Kontrak', 'Nomor kontrak dan nilai kontrak. Berkas kontrak diunggah lewat tombol '
+                    '"Unggah" di kartu <b>Berkas Kontrak</b> (PDF/Word/gambar).'),
+        ('Progres', 'Progress fisik: geser <b>Rencana</b> dan <b>Realisasi</b> (deviasi dihitung '
+                    'otomatis). Di sini juga ada <b>Lingkup Pekerjaan</b> — tekan "Tambah" '
+                    'untuk menuliskan tiap lingkup.'),
+        ('Galeri', 'Tekan <b>"Unggah Foto"</b> untuk menambah foto proyek (JPG/PNG). '
+                   'Klik foto untuk melihat ukuran penuh; gunakan panah kiri/kanan untuk '
+                   'berpindah foto dan <b>Esc</b> untuk menutup.'),
+        ('Dokumen', 'Tekan <b>"Unggah Dokumen"</b> untuk berkas (PDF, Word, Excel, '
+                    'PowerPoint, teks, ZIP/RAR, gambar, gambar teknik DWG/DXF, dll).'),
+    ], col1='Bagian'))
+    E.append(Spacer(1, 2 * mm))
+    E.append(bullets([
+        'Ukuran tiap berkas maksimal <b>25 MB</b>.',
+        'Saat menghapus foto atau dokumen, akan ada konfirmasi dulu — jadi aman.',
+        'Progress Keuangan (DIPA) tidak lagi di menu Progres; sekarang ada di menu '
+        '<b>Cash &amp; Keuangan</b>.',
+    ]))
+
+    # ══ 6. MENDAFTARKAN CCTV (RTSP) ══════════════════════════════════════════
+    E.append(Paragraph('Mendaftarkan CCTV Proyek (URL RTSP)', H2))
+    E.append(Paragraph(
+        'Kamera CCTV ditampilkan di Tengok lewat <b>URL RTSP</b>. Pembagian tugasnya sederhana:', BODY))
+    E.append(field_table([
+        ('1. PIC proyek', 'Menyiapkan URL RTSP kamera, lalu <b>memastikan URL itu bisa dibuka dari luar '
+                          'jaringan proyek</b> (dites memakai VLC dan paket data sendiri).'),
+        ('2. PIC → Admin', 'PIC mengisi URL yang sudah lolos tes di <b>spreadsheet pendaftaran</b> '
+                           '(sama dengan spreadsheet pendaftaran PIC).'),
+        ('3. Admin Tengok', 'Mengimpor kamera ke aplikasi dan menautkannya ke proyek.'),
+    ], col1='Siapa'))
+    E.append(Spacer(1, 2 * mm))
+    E.append(callout(
+        'PIC <b>tidak</b> mendaftarkan kamera sendiri di aplikasi. Tugas PIC cukup menyiapkan '
+        'dan menguji URL RTSP, lalu mengisinya di spreadsheet untuk admin.', 'Pembagian Tugas'))
+
+    # ── A. Untuk PIC ──
+    E.append(Paragraph('Menyiapkan URL RTSP', H3))
+    E.append(Paragraph('<b>Langkah 1 — Kumpulkan informasi kamera</b> (tanyakan ke teknisi CCTV proyek):', BODY))
+    E.append(bullets([
+        '<b>Alamat publik</b> kamera/NVR: nama domain (mis. <i>cctv.proyekanda.co.id</i>) '
+        'atau IP publik. <b>Bukan IP lokal proyek</b> (lihat kotak peringatan di bawah).',
+        '<b>Port</b> yang terbuka ke internet (bawaan RTSP biasanya 554; sering diganti, mis. 8554).',
+        '<b>Username dan password</b> kamera/NVR.',
+        '<b>Nomor channel</b> kamera dan jenis stream: <b>main stream</b> (kualitas tinggi) atau '
+        '<b>sub stream</b> (lebih ringan). Untuk Tengok, <b>sub stream lebih disarankan</b> '
+        'karena hemat bandwidth dan lancar saat dibuka banyak kamera sekaligus.',
+    ]))
+
+    E.append(Paragraph('<b>Langkah 2 — Susun URL RTSP</b> dengan format:', BODY))
+    E.append(box(
+        '<font face="Courier" size="10">rtsp://USERNAME:PASSWORD@ALAMAT-PUBLIK:PORT/PATH</font>',
+        'Format URL RTSP', BG_SOFT, SLATE_LIGHT, NAVY))
+    E.append(Spacer(1, 3 * mm))
+    E.append(Paragraph('Contoh berikut memakai alamat <b>contoh</b>. Ganti dengan alamat publik, '
+                       'port, dan kredensial kamera proyek Anda:', BODY))
+    E.append(field_table([
+        ('Hikvision (main stream)',
+         '<font face="Courier" size="8.5">rtsp://admin:PasswordAnda@cctv.proyekanda.co.id:8554/Streaming/Channels/101</font><br/>'
+         'Channel 1, stream utama. Untuk <b>sub stream</b> pakai akhiran <font face="Courier" size="8.5">/102</font>. '
+         'Channel 2 = <font face="Courier" size="8.5">/201</font> (main) atau <font face="Courier" size="8.5">/202</font> (sub).'),
+        ('Dahua (sub stream)',
+         '<font face="Courier" size="8.5">rtsp://admin:PasswordAnda@203.0.113.25:554/cam/realmonitor?channel=1&amp;subtype=1</font><br/>'
+         '<font face="Courier" size="8.5">subtype=0</font> = main stream, <font face="Courier" size="8.5">subtype=1</font> = sub stream. '
+         'Ganti <font face="Courier" size="8.5">channel=</font> sesuai nomor kamera.'),
+        ('Merk lain / umum',
+         '<font face="Courier" size="8.5">rtsp://user:PasswordAnda@cctv.proyekanda.co.id:554/stream1</font><br/>'
+         'Path berbeda-beda tiap merk. Lihat buku manual kamera/NVR atau tanyakan ke teknisi CCTV.'),
+    ], col1='Merk'))
+    E.append(Spacer(1, 3 * mm))
+    E.append(tipbox(
+        'Disarankan memakai password kamera yang hanya berisi <b>huruf dan angka</b>. '
+        'Karakter khusus seperti <b>@ # : / ?</b> bisa merusak URL. Kalau terpaksa dipakai, '
+        'karakter itu harus ditulis dalam bentuk kode, misalnya @ menjadi <b>%40</b> dan '
+        '# menjadi <b>%23</b>. Bila ragu, ganti dulu passwordnya.', 'Soal Password'))
+    E.append(Spacer(1, 3 * mm))
+    E.append(callout(
+        '<b>Alamat lokal TIDAK bisa dipakai.</b> Alamat yang diawali '
+        '<b>192.168.x.x</b>, <b>10.x.x.x</b>, <b>172.16 sampai 172.31.x.x</b>, atau '
+        '<b>127.0.0.1</b> hanya berlaku di dalam jaringan proyek. Server Tengok berada di luar '
+        'jaringan itu, sehingga kamera tidak akan terhubung. Aplikasi bahkan menolak alamat '
+        'lokal saat tes. Kamera harus dapat diakses lewat <b>alamat publik</b> (domain atau '
+        'IP publik). Pengaturannya, misalnya port forwarding di router/modem proyek, dilakukan '
+        'bersama tim IT atau penyedia internet proyek.', 'Penting: Harus Alamat Publik'))
+
+    E.append(Spacer(1, 4 * mm))
+    E.append(Paragraph('<b>Langkah 3 — Tes URL dari luar jaringan proyek dengan VLC</b>', BODY))
+    E.append(Paragraph(
+        'Tes ini memastikan kamera benar-benar bisa diakses dari internet, bukan hanya dari '
+        'Wi-Fi proyek. <b>Gunakan paket data internet Anda sendiri</b>, bukan Wi-Fi proyek/kantor.', BODY))
+    E.append(Paragraph('Lewat HP (paling mudah):', H3))
+    E.append(numbered([
+        'Pasang aplikasi <b>VLC</b> di HP (Android/iPhone).',
+        '<b>Matikan Wi-Fi</b>, pastikan HP memakai <b>paket data seluler</b>.',
+        'Buka VLC → menu <b>Stream</b> (atau <b>Network</b> / <b>Open Network Stream</b>).',
+        'Tempel (paste) URL RTSP lengkap lalu tekan <b>Play</b>.',
+        'Tunggu beberapa detik. Kalau <b>gambar kamera muncul</b>, URL lolos tes.',
+    ]))
+    E.append(Paragraph('Lewat laptop (alternatif):', H3))
+    E.append(numbered([
+        'Sambungkan laptop ke <b>hotspot dari HP</b> (paket data), bukan Wi-Fi proyek/kantor.',
+        'Buka <b>VLC</b> → menu <b>Media → Open Network Stream</b> (Ctrl+N).',
+        'Tempel URL RTSP di kolom <i>Network URL</i>, lalu klik <b>Play</b>.',
+    ]))
+    E.append(field_table([
+        ('Gambar muncul lewat paket data', '<b>Lolos.</b> URL siap dikirim ke admin.'),
+        ('Gagal / layar hitam / error, padahal di Wi-Fi proyek bisa',
+         'Kamera belum terbuka ke internet (port forwarding atau alamat publik belum benar). '
+         'Hubungi tim IT/teknisi proyek, perbaiki, lalu tes ulang.'),
+        ('Gagal juga di Wi-Fi proyek', 'Kemungkinan URL salah (alamat, port, path, username, atau password). '
+                                       'Periksa lagi satu per satu.'),
+        ('Diminta username/password', 'Tulis di URL dengan format <font face="Courier" size="9">username:password@</font> '
+                                      'seperti contoh di atas, atau masukkan saat VLC memintanya.'),
+    ], col1='Hasil Tes'))
+    E.append(Spacer(1, 2 * mm))
+    E.append(callout(
+        'Jangan tes memakai Wi-Fi proyek/kantor. Dari dalam jaringan yang sama, kamera bisa terlihat '
+        'normal padahal dari internet tidak bisa dijangkau, sehingga hasil tesnya menyesatkan.',
+        'Kenapa Harus Paket Data?'))
+
+    E.append(Paragraph('<b>Langkah 4 — Kirim ke admin lewat spreadsheet</b>', BODY))
+    E.append(Paragraph(
+        'Setelah lolos tes, isi data kamera di spreadsheet yang <b>sama dengan pendaftaran PIC</b>: '
+        f'<link href="{PIC_SHEET_URL}" color="#2563eb"><u>Spreadsheet Pendaftaran PIC &amp; CCTV</u></link>. '
+        'Isi untuk <b>setiap kamera</b>:', BODY))
+    E.append(bullets([
+        '<b>Nama proyek</b> (sama persis dengan di Tengok).',
+        '<b>Nama kamera</b> yang jelas, mis. <i>CCTV Gerbang Utama</i> atau <i>CCTV Area Pengecoran</i>.',
+        '<b>URL RTSP lengkap</b> yang sudah lolos tes VLC.',
+    ]))
+    E.append(Paragraph(
+        'Satu kamera = satu baris. Setelah mengisi, admin akan mengimpor kamera tersebut ke Tengok '
+        'dan menautkannya ke proyek Anda.', BODY))
+    E.append(callout(
+        'URL RTSP memuat <b>username dan password</b> kamera. Isi hanya di spreadsheet resmi di atas, '
+        'jangan kirim ke grup chat umum, dan jangan bagikan tautan spreadsheet ke pihak luar. '
+        'Pakai password yang kuat, bukan password bawaan pabrik.', 'Jaga Kerahasiaan'))
+
+    E.append(Paragraph('<b>Langkah 5 — Cek hasilnya</b>', BODY))
+    E.append(Paragraph('Setelah admin memasang kamera, Anda bisa memastikannya sendiri:', BODY))
+    E.append(bullets([
+        'Buka <b>Peta</b>, cari proyek Anda. Marker <b>hijau</b> berarti mayoritas kamera online.',
+        'Klik marker lalu buka kamera di panel untuk memastikan <b>video tampil</b>.',
+        'Jika kamera belum muncul atau tetap offline, ulangi tes VLC dari paket data, lalu kabari admin.',
+    ]))
+
+    # ══ 7. KALAU ADA MASALAH ═════════════════════════════════════════════════
     E.append(Paragraph('Kalau Ada Masalah', H2))
     E.append(field_table([
         ('Tombol Edit tidak muncul / tidak bisa edit', 'Dua sebab: belum login SSO '
-                                     '(keluar & masuk lagi lewat SSO), ATAU belum terdaftar '
+                                     '(keluar &amp; masuk lagi lewat SSO), ATAU belum terdaftar '
                                      'sebagai PIC proyek itu (daftarkan username SSO + nama '
-                                     'proyek ke admin).'),
+                                     'proyek lewat spreadsheet pendaftaran PIC atau ke admin).'),
         ('Sudah PIC tapi tombol tetap tidak aktif', 'Muat ulang halaman. Pastikan Anda '
                                      'login SSO dengan akun yang sama dengan yang didaftarkan.'),
-        ('Gagal mengunggah berkas', 'Pastikan ukuran berkas tidak lebih dari 25 MB.'),
+        ('Muncul pesan gagal saat menyimpan', 'Baca pesan yang tampil: bisa berarti sesi '
+                                     'habis (login ulang), tidak punya hak edit, atau ada isian '
+                                     'yang tidak valid (misalnya persen di luar 0–100). '
+                                     'Perbaiki isian lalu simpan lagi.'),
+        ('Gagal mengunggah berkas', 'Pastikan ukuran berkas tidak lebih dari 25 MB '
+                                    'dan jenis berkasnya sesuai (foto hanya untuk Galeri).'),
         ('Angka uang tampil aneh', 'Tulis angka tanpa titik/koma (contoh: 400000000).'),
         ('Data hilang/tidak tersimpan', 'Pastikan menekan "Simpan" dan menunggu '
-                                        'tulisan "tersimpan" muncul.'),
+                                        'tulisan "tersimpan" muncul. Ingat: tiap bagian punya tombol Simpan sendiri.'),
+        ('Persen kelengkapan belum 100%', 'Buka menu Ringkasan, lihat daftar "Belum diisi", '
+                                          'lalu klik nama bagiannya untuk langsung mengisi.'),
+        ('CCTV berhasil dites VLC tapi di Tengok offline', 'Kabari admin. Pastikan URL yang dikirim sama '
+                                     'persis dengan yang dites, dan kamera masih menyala serta terhubung internet.'),
+        ('Tes VLC gagal dari paket data', 'Kamera belum bisa diakses dari internet. Pastikan memakai alamat '
+                                     'publik (bukan 192.168.x.x / 10.x.x.x) dan port sudah dibuka. Hubungi tim IT proyek.'),
         ('Masih bingung', 'Hubungi admin atau tim IT. Lebih baik bertanya daripada '
                           'salah isi.'),
     ], col1='Masalah'))
-    E.append(Spacer(1, 5 * mm))
-    E.append(hr())
-    E.append(Paragraph('Dokumen panduan internal — PT Brantas Abipraya (Persero). '
+    E.append(Paragraph(f'Dokumen panduan internal — PT Brantas Abipraya (Persero). Edisi {EDISI}. '
                        'Tampilan aplikasi dapat sedikit berbeda seiring pembaruan.', SMALL))
 
     doc.build(E, onFirstPage=on_cover, onLaterPages=on_page)
