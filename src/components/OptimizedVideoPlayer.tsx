@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
-import { Loader2, Play, Maximize2, WifiOff } from 'lucide-react';
+import { Loader2, Play, Maximize2, WifiOff, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { StreamManager } from '@/lib/StreamManager';
 
 interface OptimizedVideoPlayerProps {
@@ -38,42 +38,81 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [retryAttempt, setRetryAttempt] = useState(0);
 
-    // Zoom & Pan State
+    // ── Zoom & Pan (hanya aktif saat layar penuh) ───────────────────────────
+    // Transform: translate(x,y) scale(s) dengan origin di tengah wadah.
+    // Zoom berpusat pada titik kursor/jari (titik di bawahnya tetap diam) dan
+    // geser dibatasi supaya video tidak bisa keluar dari bingkai.
+    const MIN_SCALE = 1;
+    const MAX_SCALE = 8;
+    const BUTTON_ZOOM_STEP = 1.5;
+
     const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
     const transformRef = useRef({ scale: 1, x: 0, y: 0 });
     const isDragging = useRef(false);
     const lastPos = useRef({ x: 0, y: 0 });
     const initialDistance = useRef(0);
     const clickStartPos = useRef({ x: 0, y: 0 });
+    const pinchedRef = useRef(false); // true selama ada sentuhan 2 jari (cegah keluar fullscreen)
 
-    useEffect(() => {
-        transformRef.current = transform;
-    }, [transform]);
+    const commitTransform = useCallback((t: { scale: number; x: number; y: number }) => {
+        transformRef.current = t; // sinkron agar event beruntun memakai nilai terbaru
+        setTransform(t);
+    }, []);
 
-    // Track fullscreen state & Native Pan/Zoom
+    // Batasi geser: separuh kelebihan ukuran hasil zoom di tiap sisi.
+    const clampPan = useCallback((scale: number, x: number, y: number) => {
+        const el = containerRef.current;
+        if (!el || scale <= MIN_SCALE) return { x: 0, y: 0 };
+        const maxX = (el.clientWidth * (scale - 1)) / 2;
+        const maxY = (el.clientHeight * (scale - 1)) / 2;
+        return {
+            x: Math.min(maxX, Math.max(-maxX, x)),
+            y: Math.min(maxY, Math.max(-maxY, y)),
+        };
+    }, []);
+
+    // Zoom ke skala baru dengan titik (px, py) — relatif terhadap TENGAH wadah — tetap diam.
+    const zoomTo = useCallback((nextScale: number, px = 0, py = 0) => {
+        const cur = transformRef.current;
+        const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, nextScale));
+        if (scale === cur.scale) return;
+        const ratio = scale / cur.scale;
+        const pan = clampPan(scale, px - (px - cur.x) * ratio, py - (py - cur.y) * ratio);
+        commitTransform({ scale, ...pan });
+    }, [clampPan, commitTransform]);
+
+    const resetZoom = useCallback(() => commitTransform({ scale: 1, x: 0, y: 0 }), [commitTransform]);
+
+    // Track fullscreen state & native pan/zoom
     useEffect(() => {
         const container = containerRef.current;
         if (!container) return;
 
+        // Koordinat klien -> relatif terhadap tengah wadah.
+        const toCenter = (clientX: number, clientY: number) => {
+            const r = container.getBoundingClientRect();
+            return { px: clientX - (r.left + r.width / 2), py: clientY - (r.top + r.height / 2) };
+        };
+        const isOnControl = (t: EventTarget | null) => t instanceof Element && !!t.closest('button');
+
         const handleFullscreenChange = () => {
             const isFs = !!document.fullscreenElement;
             setIsFullscreen(isFs);
-            if (!isFs) setTransform({ scale: 1, x: 0, y: 0 });
+            if (!isFs) {
+                commitTransform({ scale: 1, x: 0, y: 0 });
+                isDragging.current = false;
+                pinchedRef.current = false;
+            }
         };
-
-        const updateTransform = (t: typeof transform) => setTransform(t);
 
         const handleWheel = (e: WheelEvent) => {
             if (!document.fullscreenElement) return;
             e.preventDefault();
-            const delta = e.deltaY * -0.005;
-            const current = transformRef.current;
-            const newScale = Math.min(Math.max(1, current.scale + delta), 8);
-            updateTransform({
-                scale: newScale,
-                x: newScale === 1 ? 0 : current.x,
-                y: newScale === 1 ? 0 : current.y
-            });
+            // deltaMode 1 = baris (mouse tertentu); samakan ke piksel.
+            const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+            const { px, py } = toCenter(e.clientX, e.clientY);
+            // Perkalian (eksponensial): langkah terasa sama di semua tingkat zoom.
+            zoomTo(transformRef.current.scale * Math.exp(-dy * 0.0015), px, py);
         };
 
         const getDistance = (touches: TouchList) =>
@@ -82,8 +121,10 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
         const handleTouchStart = (e: TouchEvent) => {
             if (!document.fullscreenElement) return;
             if (e.touches.length === 2) {
+                pinchedRef.current = true;
+                isDragging.current = false;
                 initialDistance.current = getDistance(e.touches);
-            } else if (e.touches.length === 1 && transformRef.current.scale > 1) {
+            } else if (e.touches.length === 1 && transformRef.current.scale > 1 && !isOnControl(e.target)) {
                 isDragging.current = true;
                 lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
             }
@@ -96,28 +137,33 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
             if (e.touches.length === 2) {
                 const dist = getDistance(e.touches);
                 if (initialDistance.current > 0) {
-                    const delta = dist - initialDistance.current;
-                    const current = transformRef.current;
-                    const newScale = Math.min(Math.max(1, current.scale + delta * 0.015), 8);
-                    updateTransform({ ...current, scale: newScale, x: newScale === 1 ? 0 : current.x, y: newScale === 1 ? 0 : current.y });
+                    // Pusat pinch = titik tengah dua jari.
+                    const { px, py } = toCenter(
+                        (e.touches[0].clientX + e.touches[1].clientX) / 2,
+                        (e.touches[0].clientY + e.touches[1].clientY) / 2,
+                    );
+                    zoomTo(transformRef.current.scale * (dist / initialDistance.current), px, py);
                 }
                 initialDistance.current = dist;
             } else if (e.touches.length === 1 && isDragging.current && transformRef.current.scale > 1) {
                 const dx = e.touches[0].clientX - lastPos.current.x;
                 const dy = e.touches[0].clientY - lastPos.current.y;
                 lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                const current = transformRef.current;
-                updateTransform({ ...current, x: current.x + dx, y: current.y + dy });
+                const cur = transformRef.current;
+                commitTransform({ ...cur, ...clampPan(cur.scale, cur.x + dx, cur.y + dy) });
             }
         };
 
         const handleTouchEnd = (e: TouchEvent) => {
             if (e.touches.length < 2) initialDistance.current = 0;
-            if (e.touches.length === 0) isDragging.current = false;
+            if (e.touches.length === 0) {
+                isDragging.current = false;
+                pinchedRef.current = false;
+            }
         };
 
         const handleMouseDown = (e: MouseEvent) => {
-            if (!document.fullscreenElement || transformRef.current.scale <= 1) return;
+            if (!document.fullscreenElement || transformRef.current.scale <= 1 || isOnControl(e.target)) return;
             isDragging.current = true;
             lastPos.current = { x: e.clientX, y: e.clientY };
         };
@@ -127,8 +173,8 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
             const dx = e.clientX - lastPos.current.x;
             const dy = e.clientY - lastPos.current.y;
             lastPos.current = { x: e.clientX, y: e.clientY };
-            const current = transformRef.current;
-            updateTransform({ ...current, x: current.x + dx, y: current.y + dy });
+            const cur = transformRef.current;
+            commitTransform({ ...cur, ...clampPan(cur.scale, cur.x + dx, cur.y + dy) });
         };
 
         const handleMouseUp = () => { isDragging.current = false; };
@@ -152,7 +198,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, []);
+    }, [zoomTo, clampPan, commitTransform]);
 
     const stopHeartbeat = useCallback(() => {
         if (heartbeatRef.current) {
@@ -422,6 +468,8 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
     };
 
     const handleVideoPointerUp = (e: React.PointerEvent) => {
+        // Saat sedang zoom atau habis pinch, ketukan tidak boleh menutup layar penuh.
+        if (document.fullscreenElement && (transformRef.current.scale > 1 || pinchedRef.current)) return;
         const dx = e.clientX - clickStartPos.current.x;
         const dy = e.clientY - clickStartPos.current.y;
         if (Math.hypot(dx, dy) < 10) {
@@ -490,7 +538,41 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
 
             {/* Overlay buttons: Fullscreen */}
             {isPlaying && (
-                <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className={`absolute bottom-3 right-3 flex items-center gap-2 transition-opacity ${isFullscreen ? 'opacity-100 z-[60]' : 'opacity-0 group-hover:opacity-100'}`}>
+                    {isFullscreen && (
+                        <div className="flex items-center gap-1 p-1 bg-black/60 rounded-xl backdrop-blur-md border border-white/10 shadow-xl">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); zoomTo(transformRef.current.scale / BUTTON_ZOOM_STEP); }}
+                                disabled={transform.scale <= MIN_SCALE}
+                                className="p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                                title="Perkecil"
+                                aria-label="Perkecil tampilan"
+                            >
+                                <ZoomOut className="w-5 h-5" />
+                            </button>
+                            <span className="min-w-[3rem] text-center text-xs font-bold text-white tabular-nums" aria-live="polite">
+                                {transform.scale.toFixed(1)}×
+                            </span>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); zoomTo(transformRef.current.scale * BUTTON_ZOOM_STEP); }}
+                                disabled={transform.scale >= MAX_SCALE}
+                                className="p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                                title="Perbesar"
+                                aria-label="Perbesar tampilan"
+                            >
+                                <ZoomIn className="w-5 h-5" />
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); resetZoom(); }}
+                                disabled={transform.scale === 1}
+                                className="p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                                title="Reset zoom"
+                                aria-label="Reset zoom"
+                            >
+                                <RotateCcw className="w-5 h-5" />
+                            </button>
+                        </div>
+                    )}
                     <button
                         onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
                         className="p-2 bg-black/60 hover:bg-black/80 rounded-xl text-white backdrop-blur-md transition-all shadow-xl border border-white/10 group/btn"

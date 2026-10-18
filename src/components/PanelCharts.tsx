@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { useTheme } from './ThemeProvider';
 
 /**
@@ -67,6 +69,7 @@ export function ArcGauge({
     label,
     sublabel,
     display,
+    displayFormat,
     tone = 'emerald',
     size = 150,
 }: {
@@ -77,11 +80,38 @@ export function ArcGauge({
     label: string;
     sublabel?: string;
     display: string;      // teks nilai di tengah (mis. "1.02" atau "120 hari")
+    // Bila diberikan, angka di tengah ikut naik bersama jarum (animasi masuk).
+    displayFormat?: (v: number) => string;
     tone?: keyof typeof TONE_HEX; // warna angka tengah
     size?: number;
 }) {
     const { theme } = useTheme();
     const isDark = theme === 'dark';
+
+    // Animasi masuk: jarum (dan angka) bergerak dari `min` ke nilai target.
+    // Menghormati prefers-reduced-motion: langsung ke nilai akhir.
+    const reduce = useReducedMotion();
+    const hasValue = value != null && Number.isFinite(value);
+    const target = hasValue ? Math.max(min, Math.min(max, value as number)) : min;
+    const [anim, setAnim] = useState(min);
+    // Tanpa animasi (hemat gerak / tanpa nilai) -> langsung tampilkan target.
+    const shown = reduce || !hasValue ? target : anim;
+    useEffect(() => {
+        if (reduce || !hasValue) return;
+        let raf = 0;
+        const start = performance.now();
+        const DURATION = 1100;
+        const tick = (now: number) => {
+            const t = Math.min(1, (now - start) / DURATION);
+            const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+            setAnim(min + (target - min) * eased);
+            if (t < 1) raf = requestAnimationFrame(tick);
+            else setAnim(target);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [target, min, reduce, hasValue]);
+
     // Warna jarum/hub/track menyesuaikan tema (SVG tak bisa pakai class dark:).
     const needleColor = isDark ? '#ffffff' : '#0f172a';
     const hubCenter = isDark ? '#0f172a' : '#ffffff';
@@ -98,8 +128,7 @@ export function ArcGauge({
     const clamp = (v: number) => Math.max(min, Math.min(max, v));
     const toAngle = (v: number) => 180 - ((clamp(v) - min) / (max - min)) * 180; // 180°→0°
 
-    const hasValue = value != null && Number.isFinite(value);
-    const needleAngle = hasValue ? toAngle(value as number) : 180;
+    const needleAngle = hasValue ? toAngle(shown) : 180;
 
     // Jarum berbentuk segitiga ramping (pointer): ujung menunjuk nilai,
     // pangkal melebar di dua sisi hub. Dihitung dari sudut jarum ± 90°.
@@ -151,7 +180,7 @@ export function ArcGauge({
             {/* Label + angka DI BAWAH gauge (keluar dari busur, tak menumpuk jarum). */}
             <div className="text-center -mt-1">
                 <div className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 leading-tight">{label.toUpperCase()}</div>
-                <div className="text-2xl font-black leading-none mt-0.5" style={{ color: numHex }}>{display}</div>
+                <div className="text-2xl font-black leading-none mt-0.5" style={{ color: numHex }}>{hasValue && displayFormat ? displayFormat(shown) : display}</div>
                 {sublabel && <div className="text-[9px] text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mt-0.5">{sublabel}</div>}
             </div>
         </div>

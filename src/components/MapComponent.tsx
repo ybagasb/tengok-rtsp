@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Map, { Marker, Popup, type MapRef } from 'react-map-gl/maplibre';
+import Map, { Marker, Popup, Source, Layer, type MapRef } from 'react-map-gl/maplibre';
+import type { FillExtrusionLayerSpecification, FilterSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import axios from 'axios';
 import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Layers, Mountain, Compass, Plus, Minus, Filter, Globe, FolderTree, Sun, Moon,
@@ -106,6 +107,42 @@ const FOCUS_ZOOM = 15;
 const FOCUS_PITCH = 45; // 3D tilt when focusing a location
 const OVERVIEW_PITCH = 0;
 
+// Lebar panel samping (px) — HARUS sama dengan kelas `md:w-[600px] lg:w-[680px]`
+// pada wadah Side Panel dan `md:right-[616px] lg:right-[696px]` pada kontrol peta.
+// Di bawah breakpoint md panel menutup layar penuh, jadi tidak ada padding.
+const PANEL_WIDTH_MD = 600;
+const PANEL_WIDTH_LG = 680;
+const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
+function getPanelWidth(): number {
+    if (typeof window === 'undefined') return 0;
+    const w = window.innerWidth;
+    return w >= 1024 ? PANEL_WIDTH_LG : w >= 768 ? PANEL_WIDTH_MD : 0;
+}
+
+// ── Bangunan 3D (fill-extrusion) ─────────────────────────────────────────────
+// Data bangunan dari tile vektor OpenFreeMap (OpenStreetMap) — tanpa API key,
+// dipakai untuk SEMUA mode peta (termasuk Satelit yang hanya punya raster).
+// Field: render_height, render_min_height, hide_3d. Tinggi tergantung data OSM,
+// jadi bangunan tanpa data tinggi tampil rendah/datar.
+const BUILDINGS_SOURCE_URL = 'https://tiles.openfreemap.org/planet';
+const BUILDING_MIN_ZOOM = 15;
+const BUILDING_FILTER: FilterSpecification = ['!=', ['get', 'hide_3d'], true];
+
+function buildingPaint(style: MapStyleId): FillExtrusionLayerSpecification['paint'] {
+    const [c0, c1, c2] =
+        style === 'light' ? ['#e2e8f0', '#cbd5e1', '#94a3b8']
+        : style === 'dark' ? ['#334155', '#475569', '#64748b']
+        : ['#f1f5f9', '#e2e8f0', '#cbd5e1']; // satelit: terang agar kontras dengan citra
+    return {
+        'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 5], 0, c0, 60, c1, 200, c2],
+        // Tumbuh dari 0 di zoom 15 ke tinggi penuh di zoom 16 (muncul halus saat mendekat).
+        'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], BUILDING_MIN_ZOOM, 0, BUILDING_MIN_ZOOM + 1, ['coalesce', ['get', 'render_height'], 5]],
+        'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], BUILDING_MIN_ZOOM, 0, BUILDING_MIN_ZOOM + 1, ['coalesce', ['get', 'render_min_height'], 0]],
+        'fill-extrusion-opacity': style === 'satellite' ? 0.7 : 0.88,
+        'fill-extrusion-vertical-gradient': true,
+    };
+}
+
 export default function MapComponent({
     category: propCategory,
     division: propDivision,
@@ -150,6 +187,7 @@ export default function MapComponent({
     const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
     const [hovered, setHovered] = useState<LocationData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(false);
     const [mapStyleId, setMapStyleId] = useState<MapStyleId>('satellite');
     const [styleMenuOpen, setStyleMenuOpen] = useState(false);
     const compassRef = useRef<SVGSVGElement | null>(null); // compass needle, rotated via DOM (no re-render)
@@ -164,6 +202,19 @@ export default function MapComponent({
 
     const { realtimeStatuses, setRealtimeStatuses, lastCheckedTimes } = useCameraStatusSSE();
 
+    // Bangunan 3D: default nyala, kecuali mode hemat gerak (?reduced=1 / ?motion=0 /
+    // prefers-reduced-motion). Pengguna tetap bisa menyalakan manual lewat tombol.
+    const [buildings3d, setBuildings3d] = useState(true);
+    const [labelLayerId, setLabelLayerId] = useState<string | undefined>(undefined);
+    useEffect(() => {
+        const reduced =
+            searchParams.get('reduced') === '1' ||
+            searchParams.get('motion') === '0' ||
+            (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if (reduced) setBuildings3d(false);
+    }, [searchParams]);
+
+
     // Parents (e.g. the shared page) pass allowedLocationIds as a fresh array
     // literal on every render. Derive a STABLE string key so the fetch effect
     // below only re-runs when the actual ids change — not on every parent
@@ -176,6 +227,7 @@ export default function MapComponent({
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchFocused, setSearchFocused] = useState(false);
     const [suggestions, setSuggestions] = useState<any[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -193,11 +245,14 @@ export default function MapComponent({
     }, [realtimeStatuses]);
 
     // ── Fly camera helper ────────────────────────────────────────────────────
+    // Peta full-width di belakang panel kaca; `padding.right` menggeser titik
+    // tengah kamera ke area yang terlihat (di kiri panel) supaya marker tidak tertutup.
     const flyTo = useCallback((lng: number, lat: number, opts?: { zoom?: number; pitch?: number }) => {
         const map = mapRef.current;
         if (!map) return;
         map.flyTo({
             center: [lng, lat],
+            padding: { top: 0, bottom: 0, left: 0, right: getPanelWidth() },
             zoom: opts?.zoom ?? FOCUS_ZOOM,
             pitch: opts?.pitch ?? FOCUS_PITCH,
             duration: 1600,
@@ -311,6 +366,7 @@ export default function MapComponent({
 
                 if (!isMounted) return;
                 setLocations(fetched);
+                setFetchError(false);
 
                 if (!hasProbed) {
                     hasProbed = true;
@@ -331,6 +387,7 @@ export default function MapComponent({
             } catch (error) {
                 if (axios.isCancel(error)) return;
                 console.error('Failed to fetch locations', error);
+                if (isMounted) setFetchError(true);
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -359,16 +416,6 @@ export default function MapComponent({
             return locations.find(l => l._id === prev._id) || prev;
         });
     }, [locations]);
-
-    // When the side panel opens/closes the map container width changes. Tell
-    // MapLibre to resize once (next frame) so it adjusts cleanly instead of
-    // jittering while flyTo animates.
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const id = requestAnimationFrame(() => map.resize());
-        return () => cancelAnimationFrame(id);
-    }, [selectedLocation]);
 
     // ── Search (local project filtering) ───────────────────────────────────────
     useEffect(() => {
@@ -420,6 +467,7 @@ export default function MapComponent({
         // agar SEMUA marker kembali terlihat, bukan sekadar menutup panel.
         mapRef.current?.flyTo({
             center: [initialView.longitude, initialView.latitude],
+            padding: NO_PADDING,
             zoom: initialView.zoom,
             pitch: OVERVIEW_PITCH,
             bearing: 0,
@@ -480,10 +528,10 @@ export default function MapComponent({
             {loading && <BrandLoader label={sharedMode ? 'Memuat' : 'Memuat Peta'} />}
 
             {/* ── MAP ─────────────────────────────────────────────────────────── */}
-            {/* No width transition here: animating the map container's width while
-                flyTo runs made MapLibre jitter/jump. The side panel animates on
-                its own; the map just resizes once (see effect below). */}
-            <div className={`absolute inset-0 ${selectedLocation ? 'md:pr-[520px]' : ''}`}>
+            {/* Peta selalu full-width (tidak pernah di-resize) supaya panel kaca di
+                kanan benar-benar memburamkan peta di belakangnya. Marker dijaga
+                tetap terlihat lewat `padding.right` pada flyTo. */}
+            <div className="absolute inset-0">
                 {!loading && (
                     <Map
                         ref={mapRef}
@@ -498,6 +546,15 @@ export default function MapComponent({
                         dragRotate
                         style={{ width: '100%', height: '100%' }}
                         onClick={() => { setStyleMenuOpen(false); }}
+                        onStyleData={(e) => {
+                            // Letakkan bangunan 3D di bawah label pertama dari style aktif.
+                            try {
+                                const layers = e.target.getStyle()?.layers ?? [];
+                                const label = layers.find(l => l.type === 'symbol' && (l as any).layout?.['text-field']);
+                                const id = label?.id;
+                                setLabelLayerId(prev => (prev === id ? prev : id));
+                            } catch { /* style belum siap */ }
+                        }}
                         onLoad={(e) => {
                             // Rotate the compass needle via DOM (ref) on every map
                             // rotate — NOT via React state. Using state here re-rendered
@@ -513,7 +570,22 @@ export default function MapComponent({
                             sync();
                         }}
                     >
-                        {/* Location markers (custom HTML pins) */}
+                        {/* Bangunan 3D — sumber vektor OpenFreeMap, bisa dimatikan lewat kontrol peta */}
+                        {buildings3d && (
+                            <Source id="tengok-buildings" type="vector" url={BUILDINGS_SOURCE_URL}>
+                                <Layer
+                                    id="tengok-3d-buildings"
+                                    type="fill-extrusion"
+                                    source-layer="building"
+                                    minzoom={BUILDING_MIN_ZOOM}
+                                    filter={BUILDING_FILTER}
+                                    beforeId={labelLayerId}
+                                    paint={buildingPaint(mapStyleId)}
+                                />
+                            </Source>
+                        )}
+
+                        {/* Location markers (custom HTML pins) — satu titik per proyek */}
                         {locations.map((loc) => {
                             const online = isMajorityOnline(loc);
                             return (
@@ -532,7 +604,7 @@ export default function MapComponent({
                                         onMouseEnter={() => setHovered(loc)}
                                         onMouseLeave={() => setHovered(null)}
                                     >
-                                        <MapPin3D online={online} count={(loc.cameras || []).length} category={loc.category} isSelected={selectedLocation?._id === loc._id} />
+                                        <MapPin3D online={online} count={(loc.cameras || []).length} category={loc.category} isSelected={selectedLocation?._id === loc._id} progress={loc.progressPercent} />
                                     </div>
                                 </Marker>
                             );
@@ -666,6 +738,7 @@ export default function MapComponent({
                                                 // Zoom back out so every marker is visible.
                                                 mapRef.current?.flyTo({
                                                     center: DEFAULT_CENTER,
+                                                    padding: NO_PADDING,
                                                     zoom: DEFAULT_ZOOM,
                                                     pitch: OVERVIEW_PITCH,
                                                     duration: 1200,
@@ -699,8 +772,10 @@ export default function MapComponent({
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                onFocus={() => setShowSuggestions(true)}
+                                onFocus={() => { setShowSuggestions(true); setSearchFocused(true); }}
+                                onBlur={() => setSearchFocused(false)}
                                 onKeyDown={handleKeyDown}
+                                aria-label="Cari lokasi proyek"
                                 placeholder={`Cari ${category || (division ? `proyek ${division}` : 'lokasi')}...`}
                                 className="w-full bg-white/85 dark:bg-slate-900/80 backdrop-blur-2xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm py-3 sm:py-4 pl-9 sm:pl-11 pr-10 sm:pr-12 rounded-2xl border border-black/10 dark:border-white/10 focus:border-[rgba(var(--div-accent-rgb),0.5)] focus:ring-4 focus:ring-[rgba(var(--div-accent-rgb),0.1)] transition-all outline-none shadow-2xl"
                             />
@@ -709,6 +784,7 @@ export default function MapComponent({
                                     onClick={() => { setSearchQuery(''); setSuggestions([]); setShowSuggestions(false); }}
                                     className="absolute inset-y-0 right-2 flex items-center px-2 group/clear transition-all"
                                     title="Hapus pencarian"
+                                    aria-label="Hapus pencarian"
                                 >
                                     <div className="p-1.5 rounded-full bg-white/5 group-hover/clear:bg-red-500/20 text-slate-500 dark:text-slate-400 group-hover/clear:text-red-400 transition-all border border-black/5 dark:border-white/5">
                                         <CloseIcon className="w-3.5 h-3.5" />
@@ -716,6 +792,12 @@ export default function MapComponent({
                                 </button>
                             )}
                         </div>
+
+                        {searchFocused && searchQuery.length > 0 && searchQuery.length < 3 && (
+                            <div className="absolute top-full mt-3 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-2xl border border-black/10 dark:border-white/10 shadow-2xl px-5 py-3 text-xs font-medium text-slate-600 dark:text-slate-300 z-[600]" role="status">
+                                Ketik minimal 3 huruf untuk mencari proyek.
+                            </div>
+                        )}
 
                         {showSuggestions && searchQuery.length >= 3 && (
                             <div className="absolute top-full mt-3 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-2xl border border-black/10 dark:border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-[600]">
@@ -763,7 +845,7 @@ export default function MapComponent({
             {!sharedMode && (
                 <div className={`absolute z-[500] flex flex-col gap-2 pointer-events-auto transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] bottom-6 sm:bottom-8 ${
                     selectedLocation
-                        ? 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto right-4 md:right-[536px]'
+                        ? 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto right-4 md:right-[616px] lg:right-[696px]'
                         : 'opacity-100 right-4'
                 }`}>
                     {/* Style switcher */}
@@ -772,8 +854,10 @@ export default function MapComponent({
                             onClick={() => setStyleMenuOpen(o => !o)}
                             className="w-11 h-11 flex items-center justify-center bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 div-accent-text hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
                             title="Ganti mode peta"
+                            aria-label="Ganti mode peta"
+                            aria-expanded={styleMenuOpen}
                         >
-                            <Layers className="w-5 h-5" />
+                            <Layers className="w-5 h-5" aria-hidden="true" />
                         </button>
                         <AnimatePresence>
                             {styleMenuOpen && (
@@ -787,7 +871,7 @@ export default function MapComponent({
                                     {MAP_STYLE_META.map(s => (
                                         <button
                                             key={s.id}
-                                            onClick={() => { setMapStyleId(s.id); setStyleMenuOpen(false); }}
+                                            onClick={() => { setLabelLayerId(undefined); setMapStyleId(s.id); setStyleMenuOpen(false); }}
                                             className={`w-full px-4 py-3 text-left text-xs font-bold transition-colors ${mapStyleId === s.id ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'}`}
                                         >
                                             {s.label}
@@ -805,6 +889,7 @@ export default function MapComponent({
                             onPointerDown={handleCompassPointerDown}
                             className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all cursor-grab active:cursor-grabbing touch-none"
                             title="Seret untuk memutar/miringkan · klik untuk reset utara"
+                            aria-label="Kompas: seret untuk memutar atau memiringkan peta, klik untuk reset ke utara"
                         >
                             <Compass ref={compassRef} className="w-5 h-5 pointer-events-none" />
                         </button>
@@ -813,16 +898,18 @@ export default function MapComponent({
                             onClick={() => mapRef.current?.zoomIn({ duration: 300 })}
                             className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all"
                             title="Perbesar"
+                            aria-label="Perbesar peta"
                         >
-                            <Plus className="w-5 h-5" />
+                            <Plus className="w-5 h-5" aria-hidden="true" />
                         </button>
                         <div className="h-px bg-white/10" />
                         <button
                             onClick={() => mapRef.current?.zoomOut({ duration: 300 })}
                             className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all"
                             title="Perkecil"
+                            aria-label="Perkecil peta"
                         >
-                            <Minus className="w-5 h-5" />
+                            <Minus className="w-5 h-5" aria-hidden="true" />
                         </button>
                         <div className="h-px bg-white/10" />
                         {/* Toggle 3D pitch */}
@@ -830,8 +917,20 @@ export default function MapComponent({
                             onClick={() => mapRef.current?.easeTo({ pitch: (mapRef.current?.getPitch() || 0) > 10 ? 0 : FOCUS_PITCH, duration: 700 })}
                             className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all"
                             title="Tampilan 3D"
+                            aria-label="Aktifkan atau matikan tampilan 3D"
                         >
-                            <Mountain className="w-5 h-5" />
+                            <Mountain className="w-5 h-5" aria-hidden="true" />
+                        </button>
+                        <div className="h-px bg-white/10" />
+                        {/* Toggle bangunan 3D (terlihat di zoom dekat) */}
+                        <button
+                            onClick={() => setBuildings3d(b => !b)}
+                            aria-pressed={buildings3d}
+                            className={`w-11 h-11 flex items-center justify-center hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all ${buildings3d ? 'div-accent-text bg-[rgba(var(--div-accent-rgb),0.12)]' : 'text-slate-900 dark:text-white'}`}
+                            title={buildings3d ? 'Matikan bangunan 3D' : 'Nyalakan bangunan 3D (zoom dekat)'}
+                            aria-label={buildings3d ? 'Matikan bangunan 3D' : 'Nyalakan bangunan 3D'}
+                        >
+                            <Building2 className="w-5 h-5" aria-hidden="true" />
                         </button>
                         <div className="h-px bg-white/10" />
                         {/* Toggle tema UI (panel/kontrol/sidebar) — BUKAN gaya peta.
@@ -845,6 +944,22 @@ export default function MapComponent({
                             {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                         </button>
                     </div>
+                </div>
+            )}
+
+            {/* Legenda status marker */}
+            <div className={`absolute left-4 bottom-16 z-[450] pointer-events-none transition-opacity duration-500 ${selectedLocation ? "opacity-0 md:opacity-100" : "opacity-100"}`}>
+                <div className="flex flex-col gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                    <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-green-500" aria-hidden="true" /> Mayoritas CCTV online</span>
+                    <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500" aria-hidden="true" /> Mayoritas CCTV offline</span>
+                </div>
+            </div>
+
+            {/* Galat muat data lokasi */}
+            {fetchError && (
+                <div role="alert" className="absolute top-24 left-1/2 -translate-x-1/2 z-[700] max-w-[90vw] flex items-center gap-3 px-4 py-3 rounded-2xl bg-rose-500/90 text-white text-xs sm:text-sm font-semibold shadow-2xl backdrop-blur-xl">
+                    <span>Gagal memuat data lokasi. Mencoba lagi otomatis.</span>
+                    <button type="button" onClick={() => window.location.reload()} className="shrink-0 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 font-bold transition-colors">Muat ulang</button>
                 </div>
             )}
 
@@ -874,7 +989,7 @@ export default function MapComponent({
             )}
 
             {/* Side Panel */}
-            <div className={`fixed inset-y-0 right-0 z-[1000] w-full md:w-[520px] bg-slate-100/90 dark:bg-slate-950/80 backdrop-blur-3xl border-l border-black/10 dark:border-white/5 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transform transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedLocation ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={`fixed inset-y-0 right-0 z-[1000] w-full md:w-[600px] lg:w-[680px] bg-white/80 dark:bg-slate-950/75 md:bg-white/70 md:dark:bg-slate-950/40 backdrop-blur-2xl backdrop-saturate-150 border-l border-white/40 dark:border-white/10 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] transform transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${selectedLocation ? 'translate-x-0' : 'translate-x-full'}`}>
                 {selectedLocation && (
                     <div className="h-full flex flex-col custom-scrollbar overflow-y-auto">
                         <CameraPanel
@@ -892,16 +1007,31 @@ export default function MapComponent({
 }
 
 // ── Custom pin marker: ikon jenis proyek + warna status + badge jumlah kamera ──
-function MapPin3D({ online, count, category, isSelected }: { online: boolean; count: number; category?: string; isSelected?: boolean }) {
+// Cincin tipis di sekeliling pin = progress fisik proyek (bila ada datanya).
+// Online berdenyut hijau, offline berdenyut merah lebih pelan (perhatian).
+const PIN_RING_R = 22;
+const PIN_RING_C = 2 * Math.PI * PIN_RING_R;
+function MapPin3D({ online, count, category, isSelected, progress }: { online: boolean; count: number; category?: string; isSelected?: boolean; progress?: number }) {
     const color = online ? '#22c55e' : '#ef4444';
     const glow = online ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.55)';
     const Icon = categoryIcon(category);
+    const pct = progress != null && Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : null;
     return (
-        <div className="relative flex flex-col items-center" style={{ filter: `drop-shadow(0 4px 8px ${glow})` }}>
+        <div className="relative flex flex-col items-center transition-transform duration-200 group-hover/marker:-translate-y-0.5" style={{ filter: `drop-shadow(0 4px 8px ${glow})` }}>
             <div
-                className={`relative w-9 h-9 rounded-full border-[3px] border-white flex items-center justify-center transition-transform group-hover/marker:scale-110 ${online ? 'marker-pulse' : ''} ${isSelected ? 'ring-4 ring-[var(--div-accent)] scale-110 shadow-[0_0_15px_var(--div-glow)]' : ''}`}
+                className={`relative w-9 h-9 rounded-full border-[3px] border-white flex items-center justify-center transition-transform group-hover/marker:scale-110 ${online ? 'marker-pulse' : 'marker-pulse-off'} ${isSelected ? 'ring-4 ring-[var(--div-accent)] scale-110 shadow-[0_0_15px_var(--div-glow)]' : ''}`}
                 style={{ backgroundColor: color }}
             >
+                {pct != null && (
+                    <svg className="absolute -left-[10px] -top-[10px] pointer-events-none -rotate-90" width="50" height="50" viewBox="0 0 50 50" aria-hidden="true">
+                        <circle cx="25" cy="25" r={PIN_RING_R} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" />
+                        <circle
+                            cx="25" cy="25" r={PIN_RING_R} fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round"
+                            strokeDasharray={PIN_RING_C} strokeDashoffset={PIN_RING_C * (1 - pct / 100)}
+                            style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
+                        />
+                    </svg>
+                )}
                 <Icon className="w-[18px] h-[18px] text-slate-900 dark:text-white" strokeWidth={2.5} />
                 {/* Badge jumlah kamera */}
                 {count > 0 && (
@@ -990,6 +1120,12 @@ const customStyles = `
 
     .marker-pulse { animation: marker-pulse 1.5s ease-in-out infinite; }
     @keyframes marker-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); } 70% { box-shadow: 0 0 0 12px rgba(34,197,94,0); } }
+    /* Offline: denyut merah lebih pelan agar menarik perhatian tanpa mengganggu */
+    .marker-pulse-off { animation: marker-pulse-off 2.4s ease-in-out infinite; }
+    @keyframes marker-pulse-off { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.45); } 70% { box-shadow: 0 0 0 14px rgba(239,68,68,0); } }
+    @media (prefers-reduced-motion: reduce) {
+        .marker-pulse, .marker-pulse-off { animation: none !important; }
+    }
 
     /* MapLibre popup — strip default chrome so our card shows cleanly */
     .tengok-popup .maplibregl-popup-content { background: transparent !important; padding: 0 !important; box-shadow: none !important; border-radius: 16px; }
