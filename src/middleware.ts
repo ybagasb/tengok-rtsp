@@ -29,6 +29,7 @@ export function middleware(request: NextRequest) {
         pathname.startsWith('/shared') ||       // Shared CCTV links (public, token-verified in page)
         pathname === '/login' ||
         pathname === '/favicon.ico' ||
+        pathname === '/Panduan-Input-Detail-Proyek.pdf' || // Panduan pengguna (tautan di halaman login)
         /\.(svg|png|jpg|jpeg|gif|ico|webp|woff2?|ttf|css|js)$/.test(pathname)
     ) {
         return NextResponse.next();

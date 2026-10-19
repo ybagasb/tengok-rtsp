@@ -49,7 +49,9 @@ function probeStream(streamUrl: string): Promise<{ success: boolean; codec?: str
                     resolve({ success: true, codec: 'Stream OK' });
                 }
             } else {
-                resolve({ success: false, error: stderr.trim() || 'Tidak dapat membaca stream RTSP/HLS' });
+                // stderr ffprobe bisa memuat URL + kredensial RTSP: cukup di log server.
+                if (stderr.trim()) console.error('[test-stream] ffprobe stderr:', stderr.trim());
+                resolve({ success: false, error: 'Tidak dapat membaca stream. Periksa URL, kredensial, dan jaringan kamera.' });
             }
         });
 
@@ -57,7 +59,8 @@ function probeStream(streamUrl: string): Promise<{ success: boolean; codec?: str
             if (isResolved) return;
             isResolved = true;
             clearTimeout(timeout);
-            resolve({ success: false, error: err.message });
+            console.error('[test-stream] spawn error:', err.message);
+            resolve({ success: false, error: 'Gagal menjalankan pengujian stream di server.' });
         });
     });
 }
@@ -86,6 +89,7 @@ export async function POST(req: NextRequest) {
         const result = await probeStream(streamUrl.trim());
         return NextResponse.json(result);
     } catch (error: any) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        console.error('[test-stream] Error:', error?.message);
+        return NextResponse.json({ success: false, error: 'Gagal menguji stream' }, { status: 500 });
     }
 }

@@ -30,15 +30,21 @@ export async function POST(req: NextRequest) {
         );
     }
 
-    const { pin } = await req.json();
-
-    if (!pin) {
+    let pin: unknown;
+    try {
+        ({ pin } = await req.json());
+    } catch {
         return NextResponse.json({ success: false, error: 'Missing credentials' }, { status: 400 });
     }
 
-    // 1. Verify PIN (plaintext compare, dilakukan SETELAH rate-limit check)
+    if (!pin || typeof pin !== 'string') {
+        return NextResponse.json({ success: false, error: 'Missing credentials' }, { status: 400 });
+    }
+
+    // 1. Verify PIN (dilakukan SETELAH rate-limit check). Bila APP_PIN tidak
+    //    diset, tolak semua (jangan pernah meloloskan).
     const appPin = process.env.APP_PIN;
-    if (pin !== appPin) {
+    if (!appPin || pin !== appPin) {
         return NextResponse.json({ success: false, error: 'Invalid PIN' }, { status: 401 });
     }
 

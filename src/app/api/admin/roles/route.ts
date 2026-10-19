@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import AppRole from '@/models/AppRole';
 import { requireSuperAdmin, getAuditActor, isBootstrapAdmin } from '@/lib/apiAuth';
 import { getUsersBySubs } from '@/lib/ssoUsers';
+import SsoIdentity from '@/models/SsoIdentity';
 import { logAudit } from '@/lib/adminAuditLog';
 
 export const dynamic = 'force-dynamic';
@@ -95,6 +96,26 @@ export async function GET(req: NextRequest) {
             }
         } catch (err) {
             console.warn('[Roles GET] Resolve nama dilewati: Postgres tidak tersedia:', (err as { message?: string })?.message);
+        }
+
+        // Fallback: sub yang belum ter-resolve (Postgres mati / user tak ada di direktori)
+        // dicari di SsoIdentity — jejak yang direkam saat user login ke TENGOK.
+        const unresolved = [...bySub.values()].filter((r) => !r.fullName && !r.username).map((r) => r.cognitoSub);
+        if (unresolved.length > 0) {
+            try {
+                const idents = await SsoIdentity.find({ cognitoSub: { $in: unresolved } })
+                    .select('cognitoSub username name')
+                    .lean() as Array<{ cognitoSub: string; username?: string | null; name?: string | null }>;
+                for (const i of idents) {
+                    const row = bySub.get(i.cognitoSub);
+                    if (row) {
+                        row.username = i.username || row.username;
+                        row.fullName = i.name || row.fullName;
+                    }
+                }
+            } catch (err) {
+                console.warn('[Roles GET] Fallback SsoIdentity gagal:', (err as { message?: string })?.message);
+            }
         }
 
         return NextResponse.json({ success: true, data: { admins: [...bySub.values()] } });

@@ -57,7 +57,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     } catch (error: any) {
         console.error('Error updating category:', error);
         return NextResponse.json(
-            { error: error.message || 'Failed to update category' },
+            { error: 'Gagal memperbarui kategori' },
             { status: 500 }
         );
     }
@@ -95,7 +95,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     } catch (error: any) {
         console.error('Error deleting category:', error);
         return NextResponse.json(
-            { error: error.message || 'Failed to delete category' },
+            { error: 'Gagal menghapus kategori' },
             { status: 500 }
         );
     }

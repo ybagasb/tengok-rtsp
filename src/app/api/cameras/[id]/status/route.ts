@@ -55,6 +55,7 @@ export async function PATCH(
 
         return NextResponse.json({ success: true, id, status });
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error('[camera status] Error:', error?.message);
+        return NextResponse.json({ error: 'Gagal memperbarui status kamera' }, { status: 500 });
     }
 }

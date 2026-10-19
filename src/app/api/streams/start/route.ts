@@ -5,9 +5,12 @@ import Camera from '@/models/Camera';
 import { requireAuth } from '@/lib/apiAuth';
 import { createRateLimiter } from '@/lib/rateLimit';
 
-// Rate limiter bersama: maksimum 5 start-stream per IP dalam window 30 detik.
+// Rate limiter bersama: maksimum 40 start-stream per IP dalam window 30 detik.
+// Multiview membuka hingga 12 pemain sekaligus (StreamManager), dan beberapa
+// user di jaringan kantor yang sama berbagi satu IP publik; batas lama (5/30s)
+// membuat sebagian stream kena 429 dan tampil "Kamera Offline".
 // Catatan batasan (per-instance, dsb.) ada di src/lib/rateLimit.ts.
-const streamStartLimiter = createRateLimiter({ max: 5, windowMs: 30_000 });
+const streamStartLimiter = createRateLimiter({ max: 40, windowMs: 30_000 });
 
 export async function POST(req: NextRequest) {
     // Require authentication

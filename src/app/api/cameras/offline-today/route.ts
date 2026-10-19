@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ success: true, data: map });
     } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        console.error('[offline-today] Error:', err?.message);
+        return NextResponse.json({ error: 'Gagal memuat data kamera offline' }, { status: 500 });
     }
 }
