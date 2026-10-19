@@ -10,35 +10,11 @@ export const runtime = 'nodejs';
 
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB per file
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-const DOC_TYPES = [
-    // PDF & Office
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    // Teks & data
-    'text/plain', 'text/csv', 'application/rtf',
-    // Arsip
-    'application/zip', 'application/x-zip-compressed', 'application/x-rar-compressed', 'application/x-7z-compressed',
-    // Gambar (dokumen scan)
-    'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-];
-// Ekstensi yang diizinkan sebagai fallback bila browser mengirim MIME generik
-// (mis. application/octet-stream untuk .dwg, .csv di sebagian OS).
-const DOC_EXT = [
-    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-    'txt', 'csv', 'rtf', 'zip', 'rar', '7z',
-    'dwg', 'dxf', 'jpg', 'jpeg', 'png', 'webp', 'gif',
-];
-
-type Kind = 'gallery' | 'documents' | 'contract';
+type Kind = 'gallery';
 
 /**
  * POST /api/projects/[id]/upload  (admin/SSO only)
- * multipart/form-data: file=<binary>, kind=gallery|documents|contract, caption?=string
+ * multipart/form-data: file=<binary>, kind=gallery, caption?=string
  */
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
     const { id } = await props.params;
@@ -63,7 +39,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (!(file instanceof File)) {
             return NextResponse.json({ success: false, error: 'File tidak ditemukan' }, { status: 400 });
         }
-        if (!['gallery', 'documents', 'contract'].includes(kind)) {
+        if (kind !== 'gallery') {
             return NextResponse.json({ success: false, error: 'Jenis upload tidak valid' }, { status: 400 });
         }
         if (file.size > MAX_BYTES) {
@@ -71,20 +47,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         }
 
         const ext = (file.name.split('.').pop() || '').toLowerCase();
-        if (kind === 'gallery') {
-            if (!IMAGE_TYPES.includes(file.type)) {
-                return NextResponse.json({ success: false, error: `Tipe gambar tidak didukung: ${file.type || ext}` }, { status: 400 });
-            }
-        } else {
-            // documents / contract: terima bila MIME dikenal ATAU ekstensi aman.
-            // Browser sering mengirim MIME kosong / octet-stream untuk .pptx/.dwg,
-            // jadi ekstensi menjadi penentu utama.
-            const okMime = DOC_TYPES.includes(file.type);
-            const okExt = DOC_EXT.includes(ext);
-            if (!okMime && !okExt) {
-                console.warn(`[Upload] Ditolak — name="${file.name}" type="${file.type}" ext="${ext}"`);
-                return NextResponse.json({ success: false, error: `Tipe file tidak didukung: ${file.type || ext || 'tidak dikenal'}` }, { status: 400 });
-            }
+        // Hanya foto galeri yang boleh diunggah (dokumen & berkas kontrak sudah dihapus).
+        if (!IMAGE_TYPES.includes(file.type)) {
+            return NextResponse.json({ success: false, error: `Tipe gambar tidak didukung: ${file.type || ext}` }, { status: 400 });
         }
 
         const project = await Location.findById(id).select('_id name');
@@ -96,18 +61,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const key = buildKey(id, kind, file.name);
         await putObject(key, buffer, file.type);
 
-        const now = new Date();
-        if (kind === 'gallery') {
-            await Location.updateOne({ _id: id }, {
-                $push: { gallery: { key, caption, uploadedAt: now } },
-            });
-        } else if (kind === 'documents') {
-            await Location.updateOne({ _id: id }, {
-                $push: { documents: { name: file.name, key, size: file.size, contentType: file.type, uploadedAt: now } },
-            });
-        } else if (kind === 'contract') {
-            await Location.updateOne({ _id: id }, { $set: { contractFileKey: key } });
-        }
+        await Location.updateOne({ _id: id }, {
+            $push: { gallery: { key, caption, uploadedAt: new Date() } },
+        });
 
         const actor = await getAuditActor(req);
         logAudit({
