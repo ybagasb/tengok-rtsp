@@ -2,9 +2,8 @@ import NextAuth from "next-auth";
 import CognitoProvider from "next-auth/providers/cognito";
 import { cookies } from "next/headers";
 
-// Umur sesi SSO (detik). 8 jam = satu hari kerja; diperpanjang tiap jam saat dipakai.
+// Umur sesi SSO (detik). 8 jam = satu hari kerja, bergulir selama dipakai.
 const SESSION_MAX_AGE = 8 * 60 * 60;
-const SESSION_UPDATE_AGE = 60 * 60;
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
     // Behind nginx reverse proxy (Docker), NextAuth v5 must be told to trust the
@@ -52,11 +51,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     session: {
         strategy: "jwt",
         // Batas tidak aktif: sesi berakhir bila tidak dipakai selama SESSION_MAX_AGE.
-        // Selama dipakai, cookie diperpanjang tiap SESSION_UPDATE_AGE (rolling).
+        // Pada strategi JWT, setiap pemeriksaan sesi (/api/auth/session — dipicu
+        // SessionProvider tiap 5 menit & saat tab difokuskan) menandatangani ulang
+        // JWT dengan umur SESSION_MAX_AGE dari saat itu (rolling). `updateAge` hanya
+        // berlaku untuk strategi database, jadi tidak dipakai di sini.
         // Dulu 1 tahun — terlalu lama karena SSO = akses admin dan JWT tak bisa
         // dicabut dari server (akun yang dinonaktifkan tetap masuk sampai cookie habis).
         maxAge: SESSION_MAX_AGE,
-        updateAge: SESSION_UPDATE_AGE,
     },
     pages: {
         signIn: "/login",
