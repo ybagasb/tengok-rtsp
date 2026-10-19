@@ -178,9 +178,18 @@ export default function CategoriesPage() {
     setMounted(true);
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("reduced") === "1" || params.get("motion") === "0") {
+      // Mode hemat gerak: parameter URL ATAU pengaturan "kurangi gerakan" di sistem operasi.
+      // ?motion=1 memaksa gerak penuh meski OS meminta dikurangi.
+      const osPrefersReduced =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (
+        params.get("reduced") === "1" ||
+        params.get("motion") === "0" ||
+        (osPrefersReduced && params.get("motion") !== "1")
+      ) {
         setForceReduced(true);
-        console.debug("[Intro3D] Mode reduced-motion diaktifkan via parameter URL.");
+        console.debug("[Intro3D] Mode reduced-motion diaktifkan (URL atau preferensi sistem).");
       }
 
       const hasSeenIntro = sessionStorage.getItem(INTRO_KEY) === "true";
@@ -950,6 +959,7 @@ export default function CategoriesPage() {
             download
             className="flex items-center justify-center gap-1.5 text-slate-400 hover:text-yellow-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/5 backdrop-blur border border-white/5 hover:border-yellow-500/30 group"
             title="Unduh Panduan Pengisian Detail Proyek (PDF)"
+            aria-label="Unduh panduan pengisian detail proyek (PDF)"
           >
             <BookOpen className="w-4 h-4 group-hover:scale-110 transition-transform" />
             <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">
@@ -964,6 +974,8 @@ export default function CategoriesPage() {
                 onClick={() => setShowProfile((p) => !p)}
                 className="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-xl bg-white/5 backdrop-blur border border-white/5 hover:border-yellow-500/30 transition-all"
                 title={session.user.name || "Profil"}
+                aria-label={`Menu profil ${session.user.name || ""}`.trim()}
+                aria-expanded={showProfile}
               >
                 {session.user.image ? (
                   <img

@@ -24,6 +24,13 @@ function formatDate(iso: string) {
         d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
 }
 
+// Aktor audit tersimpan lengkap ("Nama <email> (sub:..., ip:...)"). Kartu ringkas
+// cukup menampilkan nama; detail lengkap tetap ada di halaman Audit Log.
+function displayActor(by?: string): string {
+    if (!by) return "-";
+    return by.split(/\s*[<(]/)[0].trim() || by;
+}
+
 export default function AdminOverviewDashboard() {
     const router = useRouter();
 
@@ -64,9 +71,11 @@ export default function AdminOverviewDashboard() {
     const onlineCameras = cameras.filter((c: any) => c.status === 'online');
     const offlineCameras = cameras.filter((c: any) => c.status === 'offline');
     const totalCameras = cameras.length;
-    const availabilityRate = totalCameras > 0 
-        ? Math.round((onlineCameras.length / totalCameras) * 100) 
-        : 100;
+    // Tanpa data kamera (masih memuat / belum ada) jangan tampilkan 100% yang menyesatkan.
+    const hasCameraData = totalCameras > 0;
+    const availabilityRate = hasCameraData
+        ? Math.round((onlineCameras.length / totalCameras) * 100)
+        : 0;
 
     // Assigned vs Unassigned Cameras
     const cameraToLocationMap = useMemo(() => {
@@ -222,13 +231,13 @@ export default function AdminOverviewDashboard() {
                     >
                         <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Kesiapan Sistem (SLA)</span>
-                            <div className={`p-2.5 rounded-2xl ${availabilityRate >= 85 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                            <div className={`p-2.5 rounded-2xl ${!hasCameraData ? 'bg-slate-500/10 text-slate-400' : availabilityRate >= 85 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
                                 <Activity className="w-5 h-5" />
                             </div>
                         </div>
                         <div className="mt-3 flex items-baseline gap-2">
-                            <span className={`text-3xl font-extrabold tracking-tight ${availabilityRate >= 85 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                {availabilityRate}%
+                            <span className={`text-3xl font-extrabold tracking-tight ${!hasCameraData ? 'text-slate-400' : availabilityRate >= 85 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {hasCameraData ? `${availabilityRate}%` : '—'}
                             </span>
                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Availability</span>
                         </div>
@@ -303,7 +312,9 @@ export default function AdminOverviewDashboard() {
                                     <div>
                                         <h3 className="font-bold text-slate-900 dark:text-white text-base">Status Pengawasan Kritis</h3>
                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                            {offlineCameras.length > 0 
+                                            {loadingCameras && !hasCameraData
+                                                ? 'Memuat status kamera...'
+                                                : offlineCameras.length > 0 
                                                 ? `${offlineCameras.length} unit CCTV membutuhkan perhatian teknis segera` 
                                                 : 'Seluruh perangkat CCTV terhubung dan streaming stabil'}
                                         </p>
@@ -318,7 +329,11 @@ export default function AdminOverviewDashboard() {
                             </div>
 
                             <div className="mt-4">
-                                {offlineCameras.length === 0 ? (
+                                {offlineCameras.length === 0 && loadingCameras && !hasCameraData ? (
+                                    <div className="p-6 rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/5 dark:border-white/5 text-center text-xs text-slate-500 dark:text-slate-400" role="status">
+                                        Memuat status kamera...
+                                    </div>
+                                ) : offlineCameras.length === 0 ? (
                                     <div className="p-6 rounded-2xl bg-emerald-500/[0.04] border border-emerald-500/20 text-center space-y-2">
                                         <ShieldCheck className="w-10 h-10 text-emerald-400 mx-auto" />
                                         <p className="text-sm font-bold text-emerald-300">100% Kamera Beroperasi Normal</p>
@@ -499,9 +514,9 @@ export default function AdminOverviewDashboard() {
                                                 <span className="text-slate-500 font-mono">{formatDate(log.timestamp)}</span>
                                             </div>
                                             <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{log.entityName}</p>
-                                            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
-                                                <span className="truncate max-w-[150px]">{log.detail}</span>
-                                                <span className="text-yellow-500/90 font-medium">Oleh: {log.by}</span>
+                                            <div className="flex flex-col gap-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                                <span className="line-clamp-2 break-words">{log.detail}</span>
+                                                <span className="text-yellow-500/90 font-medium truncate" title={log.by}>Oleh: {displayActor(log.by)}</span>
                                             </div>
                                         </div>
                                     ))

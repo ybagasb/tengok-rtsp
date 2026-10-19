@@ -20,6 +20,7 @@ import { PageHeader, FormField, EmptyState, LoadingState, SearchBar, CountBadge,
 import OptimizedVideoPlayer from '@/components/OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
 import { swrFetcher } from '@/lib/swrFetcher';
+import { maskStreamUrl } from '@/lib/maskStreamUrl';
 
 const schema = z.object({
     name: z.string().min(1, "Nama tidak boleh kosong"),
@@ -117,8 +118,9 @@ function LivePreviewModal({
                                 </button>
                             </div>
                             <div className="p-2.5 rounded-xl bg-black/60 border border-black/5 dark:border-white/5 font-mono text-[11px] text-slate-600 dark:text-slate-300 break-all select-all">
-                                {camera.streamUrl || 'URL tidak tersedia'}
+                                {maskStreamUrl(camera.streamUrl) || 'URL tidak tersedia'}
                             </div>
+                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Kata sandi disamarkan. Gunakan "Salin URL" untuk mengambil URL lengkap.</p>
                         </div>
                     </div>
                 </motion.div>
@@ -1049,8 +1051,8 @@ export default function CamerasPage() {
                                                             </div>
 
                                                             {/* Stream URL */}
-                                                            <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mt-1 select-all" title={cam.streamUrl}>
-                                                                {cam.streamUrl || 'URL Kosong'}
+                                                            <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mt-1 select-all" title={maskStreamUrl(cam.streamUrl)}>
+                                                                {maskStreamUrl(cam.streamUrl) || 'URL Kosong'}
                                                             </p>
                                                         </div>
                                                     </div>

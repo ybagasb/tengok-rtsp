@@ -51,6 +51,7 @@ function MultiViewContent() {
 
     const [locations, setLocations] = useState<Location[]>([]);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -89,9 +90,11 @@ function MultiViewContent() {
                 const res = await axios.get(`/api/locations${query ? `?${query}` : ''}`);
                 if (!cancelled && res.data.success) {
                     setLocations(res.data.data);
+                    setFetchError(false);
                 }
             } catch (error) {
                 console.error("Failed to fetch locations", error);
+                if (!cancelled) setFetchError(true);
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -104,6 +107,23 @@ function MultiViewContent() {
             clearInterval(intervalId);
         };
     }, [query]);
+
+    // Di layar kecil panel pilihan menutupi seluruh grid: mulai dalam keadaan tertutup
+    // (user bisa membukanya lewat tombol). Hanya dijalankan sekali saat mount.
+    useEffect(() => {
+        if (window.matchMedia("(max-width: 639px)").matches) setIsSidebarOpen(false);
+    }, []);
+
+    // Esc menutup panel pilihan lokasi (berguna di mobile saat panel menutupi grid).
+    useEffect(() => {
+        if (!isSidebarOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            const el = document.activeElement;
+            if (e.key === "Escape" && !(el instanceof HTMLInputElement)) setIsSidebarOpen(false);
+        };
+        document.addEventListener("keydown", onKey);
+        return () => document.removeEventListener("keydown", onKey);
+    }, [isSidebarOpen]);
 
     // Cegah ZOOM HALAMAN BROWSER (Ctrl+roda mouse / pinch trackpad) di halaman
     // multiview. Halaman ini tidak punya kanvas peta, jadi blok Ctrl+wheel
@@ -126,7 +146,7 @@ function MultiViewContent() {
         };
     }, []);
 
-    const MAX_CAMERAS = 9; // Server load safety limit for multi-view
+    const MAX_CAMERAS = 12; // Batas beban server; selaras dengan StreamManager (12 stream serentak)
 
     // Auto-select locations once they load, so opening multiview from a project
     // immediately shows cameras (capped at the limit). Runs on first load in the
@@ -302,6 +322,7 @@ function MultiViewContent() {
                             onClick={() => setIsSidebarOpen(false)}
                         />
                         <motion.aside
+                            aria-label="Pilih lokasi kamera"
                             initial={{ x: -400, opacity: 0 }}
                             animate={{ x: 0, opacity: 1 }}
                             exit={{ x: -400, opacity: 0 }}
@@ -315,14 +336,16 @@ function MultiViewContent() {
                                         <button
                                             onClick={() => router.back()}
                                             className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors"
+                                            aria-label="Kembali"
                                         >
-                                            <ArrowLeft className="w-5 h-5" />
+                                            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
                                         </button>
-                                        <h2 className="text-lg font-bold text-white tracking-tight uppercase">Selection</h2>
+                                        <h2 className="text-lg font-bold text-white tracking-tight uppercase">Pilih Lokasi</h2>
                                         <button
                                             onClick={() => setIsSidebarOpen(false)}
                                             className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors group"
-                                            title="Close Sidebar"
+                                            title="Tutup panel pilihan"
+                                            aria-label="Tutup panel pilihan lokasi"
                                         >
                                             <PanelLeftClose className="w-5 h-5 group-hover:scale-110 transition-transform" />
                                         </button>
@@ -399,8 +422,8 @@ function MultiViewContent() {
                                 {/* Location List */}
                                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
                                     {filteredLocations.length === 0 ? (
-                                        <div className="py-12 text-center text-slate-600 text-xs font-bold uppercase tracking-wider">
-                                            Tidak ada lokasi
+                                        <div className={`py-12 px-2 text-center text-xs font-bold tracking-wider ${fetchError ? 'text-rose-400' : 'text-slate-400 uppercase'}`} role={fetchError ? 'alert' : undefined}>
+                                            {fetchError ? 'Gagal memuat daftar lokasi. Mencoba lagi otomatis.' : 'Tidak ada lokasi'}
                                         </div>
                                     ) : filteredLocations.map(loc => {
                                         const isSelected = selectedLocationIds.includes(loc._id);
@@ -421,7 +444,7 @@ function MultiViewContent() {
                                                         {loc.name}
                                                     </div>
                                                     <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
-                                                        {loc.cameras.length} CAMERAS • {loc.category}
+                                                        {loc.cameras.length} KAMERA • {loc.category}
                                                     </div>
                                                 </div>
                                             </button>
@@ -432,8 +455,8 @@ function MultiViewContent() {
                                 {/* Sidebar Footer */}
                                 <div className="p-6 bg-slate-900/60 border-t border-white/5">
                                     <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
-                                        <span className="text-slate-500">Selected</span>
-                                        <span className="div-accent-text">{selectedLocationIds.length} Locations</span>
+                                        <span className="text-slate-500">Dipilih</span>
+                                        <span className="div-accent-text">{selectedLocationIds.length} Lokasi</span>
                                     </div>
                                 </div>
                             </div>
@@ -466,9 +489,9 @@ function MultiViewContent() {
                                 <h2 className="text-sm sm:text-lg font-bold text-white tracking-tight uppercase leading-none">Multi-View</h2>
                                 <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
                                     <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider">{activeStreamCount} Active</span>
-                                    <span className="text-[8px] sm:text-[10px] text-slate-600">•</span>
-                                    <span className="text-[8px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-wider truncate max-w-[120px] sm:max-w-[200px]">{scopeLabel}</span>
+                                    <span className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase tracking-wider">{activeStreamCount} Aktif</span>
+                                    <span className="text-[10px] sm:text-xs text-slate-500">•</span>
+                                    <span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider truncate max-w-[120px] sm:max-w-[200px]">{scopeLabel}</span>
                                 </div>
                             </div>
                         </div>
@@ -486,6 +509,11 @@ function MultiViewContent() {
                     <AnimatePresence mode="popLayout">
                         {selectedCameras.length > 0 ? (
                             <>
+                                {fetchError && (
+                                    <div role="alert" className="mb-4 px-5 py-3 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center justify-between gap-3 text-sm">
+                                        <span className="text-rose-300 font-semibold">Gagal memperbarui daftar lokasi. Mencoba lagi otomatis.</span>
+                                    </div>
+                                )}
                                 {/* Warning if cameras were capped */}
                                 {totalSelectedCameras > MAX_CAMERAS && (
                                     <div className="mb-4 px-5 py-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-sm">
@@ -494,7 +522,7 @@ function MultiViewContent() {
                                         </svg>
                                         <span className="text-amber-300 font-semibold">
                                             Menampilkan {MAX_CAMERAS} dari {totalSelectedCameras} kamera.
-                                            <span className="text-amber-400/70 font-normal ml-1">Kurangi pilihan lokasi untuk melihat semua kamera.</span>
+                                            <span className="text-amber-400/80 font-normal ml-1">Kamera di urutan akhir tidak ditampilkan. Kurangi pilihan lokasi untuk melihat semuanya.</span>
                                         </span>
                                     </div>
                                 )}
@@ -526,7 +554,7 @@ function MultiViewContent() {
                                                 <span className="text-[11px] font-bold text-white uppercase tracking-tight truncate leading-tight drop-shadow-md">
                                                     {cam.name}
                                                 </span>
-                                                <span className="text-[9px] font-semibold text-slate-300/80 uppercase tracking-wider truncate">
+                                                <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider truncate">
                                                     {cam.locationName}
                                                 </span>
                                             </div>
@@ -534,7 +562,7 @@ function MultiViewContent() {
                                                 isOnline ? 'bg-emerald-900/50 border-emerald-500/40' : 'bg-rose-900/50 border-rose-500/40'
                                             }`}>
                                                 <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                                                <span className="text-[8px] font-bold text-white uppercase tracking-wider">
+                                                <span className="text-[10px] font-bold text-white uppercase tracking-wider">
                                                     {isOnline ? 'Live' : 'Offline'}
                                                 </span>
                                             </div>
@@ -560,7 +588,7 @@ function MultiViewContent() {
                                 <div className="w-24 h-24 rounded-[2.5rem] bg-slate-900/50 border border-white/5 flex items-center justify-center mb-8 shadow-2xl">
                                     <LayoutGrid className="w-10 h-10 text-slate-600 opacity-50" />
                                 </div>
-                                <h2 className="text-3xl font-bold text-white tracking-tight uppercase mb-4">No Cameras Selected</h2>
+                                <h2 className="text-3xl font-bold text-white tracking-tight uppercase mb-4">Belum Ada Kamera Dipilih</h2>
                                 <p className="text-slate-500 text-sm max-w-md font-medium opacity-70 leading-relaxed">
                                     Pilih lokasi dari panel sebelah kiri untuk mulai memantau beberapa aliran kamera secara bersamaan.
                                 </p>

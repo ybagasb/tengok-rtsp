@@ -50,9 +50,6 @@ const TYPE_STYLES: Record<Notice['type'], { icon: typeof Info; accent: string; i
     },
 };
 
-// Delay between one notice appearing and the next entering the queue (ms).
-const STAGGER_MS = 900;
-
 // Key sessionStorage untuk menyimpan id notice yang sudah ditutup user (per sesi).
 const DISMISSED_KEY = 'cctv-notices-dismissed';
 // Key sessionStorage untuk menyimpan id notice yang sudah pernah ditampilkan/dilihat (per sesi).
@@ -60,7 +57,8 @@ const SEEN_KEY = 'cctv-notices-seen';
 
 export default function CctvNotices({ sharedMode = false, hidden = false }: CctvNoticesProps) {
     const [config, setConfig] = useState<NoticeConfig | null>(null);
-    // Ids currently visible on screen, in display order.
+    // Antrean notice yang boleh tampil. HANYA SATU yang ditampilkan sekali waktu:
+    // yang berikutnya muncul setelah yang sekarang ditutup (manual / auto-dismiss).
     const [visibleIds, setVisibleIds] = useState<string[]>([]);
     const visibleIdsRef = useRef<string[]>([]);
     useEffect(() => {
@@ -142,24 +140,28 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
 
         if (hidden) {
             // Saat hidden jadi true (panel kamera terbuka):
-            // Notice yang sedang tampil dianggap selesai (tutup, jangan muncul lagi setelah panel ditutup).
-            const currentlyVisible = visibleIdsRef.current;
-            if (currentlyVisible.length > 0) {
+            // Notice yang SEDANG tampil (yang pertama di antrean) dianggap selesai
+            // dan tidak muncul lagi setelah panel ditutup. Sisa antrean (belum pernah
+            // tampil) tidak ikut dibuang.
+            let storedDismissed = new Set<string>();
+            try {
+                const raw = sessionStorage.getItem(DISMISSED_KEY);
+                storedDismissed = new Set<string>(raw ? JSON.parse(raw) : []);
+            } catch { /* ignore */ }
+            const currentId = visibleIdsRef.current.find(id => !storedDismissed.has(id));
+            if (currentId) {
                 setDismissed(prev => {
                     const next = new Set(prev);
-                    currentlyVisible.forEach(id => next.add(id));
+                    next.add(currentId);
                     return next;
                 });
                 try {
-                    const raw = sessionStorage.getItem(DISMISSED_KEY);
-                    const stored = new Set<string>(raw ? JSON.parse(raw) : []);
-                    currentlyVisible.forEach(id => stored.add(id));
-                    sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...stored]));
+                    storedDismissed.add(currentId);
+                    sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...storedDismissed]));
                 } catch { /* ignore */ }
-
-                setVisibleIds([]);
-                visibleIdsRef.current = [];
             }
+            setVisibleIds([]);
+            visibleIdsRef.current = [];
             return;
         }
 
@@ -180,19 +182,18 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
             notice => !currentDismissed.has(notice.id) && !currentSeen.has(notice.id)
         );
 
-        eligible.forEach((notice, i) => {
-            const t = setTimeout(() => {
-                setVisibleIds(prev => (prev.includes(notice.id) ? prev : [...prev, notice.id]));
-                markSeen(notice.id);
-            }, i * STAGGER_MS);
-            timersRef.current.push(t);
+        // Masukkan semua yang layak ke antrean sekaligus; tampilannya dibatasi satu per satu.
+        setVisibleIds(prev => {
+            const next = [...prev];
+            for (const n of eligible) if (!next.includes(n.id)) next.push(n.id);
+            return next.length === prev.length ? prev : next;
         });
 
         return () => {
             timersRef.current.forEach(clearTimeout);
             timersRef.current = [];
         };
-    }, [config, hidden, activeNotices, markSeen]);
+    }, [config, hidden, activeNotices]);
 
     const reopenAll = useCallback(() => {
         setDismissed(new Set());
@@ -202,25 +203,25 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
             sessionStorage.removeItem(SEEN_KEY);
         } catch { /* ignore */ }
 
-        setVisibleIds([]);
         timersRef.current.forEach(clearTimeout);
         timersRef.current = [];
+        // Antrean diisi ulang dari awal; yang tampil tetap satu per satu.
+        setVisibleIds(activeNotices.map(n => n.id));
+    }, [activeNotices]);
 
-        activeNotices.forEach((notice, i) => {
-            const t = setTimeout(() => {
-                setVisibleIds(prev => (prev.includes(notice.id) ? prev : [...prev, notice.id]));
-                markSeen(notice.id);
-            }, i * STAGGER_MS);
-            timersRef.current.push(t);
-        });
-    }, [activeNotices, markSeen]);
+    // Notice yang sedang tampil = yang pertama di antrean dan belum ditutup.
+    const currentId = activeNotices.find(n => visibleIds.includes(n.id) && !dismissed.has(n.id))?.id;
+    // Tandai "sudah dilihat" hanya saat benar-benar ditampilkan (bukan saat masuk antrean).
+    useEffect(() => {
+        if (currentId && !hidden) markSeen(currentId);
+    }, [currentId, hidden, markSeen]);
 
     if (activeNotices.length === 0) return null;
     // Saat panel kamera (sidebar) terbuka, sembunyikan total — kartu & bell —
     // agar tidak menimpa panel di semua ukuran layar.
     if (hidden) return null;
 
-    const shown = activeNotices.filter(n => visibleIds.includes(n.id) && !dismissed.has(n.id));
+    const shown = activeNotices.filter(n => n.id === currentId);
     const allHandled = activeNotices.every(n => dismissed.has(n.id) || seen.has(n.id));
     const autoDismissSec = config?.autoDismissSec ?? 0;
 
@@ -231,7 +232,7 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
                     sharedMode ? 'bottom-6 left-4 flex-col-reverse' : 'top-[184px] sm:top-[204px] left-2 sm:left-6 flex-col'
                 }`}
             >
-                <AnimatePresence>
+                <AnimatePresence mode="wait">
                     {shown.map((notice) => (
                         <NoticeCard
                             key={notice.id}

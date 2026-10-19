@@ -30,6 +30,12 @@ interface SsoUser {
     status: string;
 }
 
+// Nama tampil ramah. UUID mentah tidak berguna bagi admin; bila belum dikenali
+// (belum pernah login & tak ada di direktori SSO) tampilkan label netral.
+function adminLabel(a: Pick<AdminRow, 'fullName' | 'username'>): string {
+    return a.fullName || a.username || 'Pengguna belum dikenali (belum pernah login)';
+}
+
 export default function RolesPage() {
     const [loading, setLoading] = useState(true);
     const [forbidden, setForbidden] = useState(false);
@@ -111,7 +117,7 @@ export default function RolesPage() {
     };
 
     const removeAdmin = async (row: AdminRow) => {
-        const name = row.fullName || row.username || row.cognitoSub;
+        const name = adminLabel(row);
         const ok = await confirm(`Cabut hak super-admin dari "${name}"?`, { title: 'Cabut Super-admin' });
         if (!ok) return;
         try {
@@ -244,13 +250,13 @@ export default function RolesPage() {
                                     </div>
                                     <div className="min-w-0">
                                         <div className="text-sm font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
-                                            {a.fullName || a.username || a.cognitoSub}
+                                            {adminLabel(a)}
                                             {a.isBootstrap && (
                                                 <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-sky-500/30 bg-sky-500/10 text-sky-500">Bootstrap</span>
                                             )}
                                         </div>
                                         <div className="text-[11px] text-slate-500 truncate">
-                                            {a.username ? `@${a.username}` : a.cognitoSub}{a.jobTitle ? ` · ${a.jobTitle}` : ''}
+                                            {a.username ? `@${a.username}` : `ID ${a.cognitoSub.slice(0, 8)}…`}{a.jobTitle ? ` · ${a.jobTitle}` : ''}
                                         </div>
                                     </div>
                                 </div>
