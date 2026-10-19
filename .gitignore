@@ -61,3 +61,5 @@ Segmentasi Proyek.pdf
 internal-docs/
 scripts/data/*.local.json
 
+screenshots/
+.auth/
