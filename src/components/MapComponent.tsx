@@ -153,6 +153,14 @@ const FOOTPRINT_MIN_ZOOM = 13;
 const FOOTPRINT_DEFAULT_HEIGHT = 12;
 const FOOTPRINT_LAYER_IDS = ['tengok-footprint-fill', 'tengok-footprint-3d'];
 
+// Campur warna hex dengan putih (amount 0..1) — dipakai untuk menyorot proyek terpilih.
+function lighten(hex: string, amount: number): string {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+    if (!m) return hex;
+    const mix = (c: string) => Math.round(parseInt(c, 16) + (255 - parseInt(c, 16)) * amount);
+    return `rgb(${mix(m[1])}, ${mix(m[2])}, ${mix(m[3])})`;
+}
+
 // Tinggi blok: tumbuh dari 0 (zoom 13) ke penuh (zoom 15). Saat 3D dimatikan,
 // tinggi 0 -> hanya isian datar + garis tepi yang terlihat.
 function footprintExtrusionPaint(show3d: boolean): FillExtrusionLayerSpecification['paint'] {
@@ -162,7 +170,9 @@ function footprintExtrusionPaint(show3d: boolean): FillExtrusionLayerSpecificati
             ? ['interpolate', ['linear'], ['zoom'], FOOTPRINT_MIN_ZOOM, 0, FOOTPRINT_MIN_ZOOM + 2, ['get', 'height']]
             : 0,
         'fill-extrusion-base': 0,
-        'fill-extrusion-opacity': ['case', ['==', ['get', 'selected'], 1], 0.95, 0.82],
+        // NB: fill-extrusion-opacity TIDAK mendukung ekspresi data per fitur (hanya konstanta/zoom).
+        // Penanda proyek terpilih dibuat lewat warna (lebih terang), bukan opasitas.
+        'fill-extrusion-opacity': 0.85,
         'fill-extrusion-vertical-gradient': true,
     };
 }
@@ -257,13 +267,14 @@ export default function MapComponent({
             .map((l) => {
                 const ring = l.footprint!.map((pt) => [pt.lng, pt.lat]);
                 ring.push(ring[0]); // tutup poligon
+                const base = getDivisionTheme(l.division)?.accentHex ?? '#eab308';
+                const isSelected = selectedLocation?._id === l._id;
                 return {
                     type: 'Feature' as const,
                     properties: {
                         id: l._id,
                         height: l.footprintHeight ?? FOOTPRINT_DEFAULT_HEIGHT,
-                        color: getDivisionTheme(l.division)?.accentHex ?? '#eab308',
-                        selected: selectedLocation?._id === l._id ? 1 : 0,
+                        color: isSelected ? lighten(base, 0.4) : base,
                     },
                     geometry: { type: 'Polygon' as const, coordinates: [ring] },
                 };
