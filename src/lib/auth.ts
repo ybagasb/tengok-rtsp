@@ -2,6 +2,10 @@ import NextAuth from "next-auth";
 import CognitoProvider from "next-auth/providers/cognito";
 import { cookies } from "next/headers";
 
+// Umur sesi SSO (detik). 8 jam = satu hari kerja; diperpanjang tiap jam saat dipakai.
+const SESSION_MAX_AGE = 8 * 60 * 60;
+const SESSION_UPDATE_AGE = 60 * 60;
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
     // Behind nginx reverse proxy (Docker), NextAuth v5 must be told to trust the
     // forwarded host/proto headers — otherwise SSO callbacks fail in production.
@@ -47,7 +51,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     ],
     session: {
         strategy: "jwt",
-        maxAge: 365 * 24 * 60 * 60, // 1 year
+        // Batas tidak aktif: sesi berakhir bila tidak dipakai selama SESSION_MAX_AGE.
+        // Selama dipakai, cookie diperpanjang tiap SESSION_UPDATE_AGE (rolling).
+        // Dulu 1 tahun — terlalu lama karena SSO = akses admin dan JWT tak bisa
+        // dicabut dari server (akun yang dinonaktifkan tetap masuk sampai cookie habis).
+        maxAge: SESSION_MAX_AGE,
+        updateAge: SESSION_UPDATE_AGE,
     },
     pages: {
         signIn: "/login",
@@ -134,7 +143,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     httpOnly: false,
                     secure: process.env.NODE_ENV === 'production',
                     sameSite: 'lax',
-                    maxAge: 365 * 24 * 60 * 60, // 1 year
+                    maxAge: SESSION_MAX_AGE, // selaras dengan umur sesi JWT
                     path: '/',
                 });
             } catch {
