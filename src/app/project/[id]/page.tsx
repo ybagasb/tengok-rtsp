@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, use, useId } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,7 +15,16 @@ import {
     Menu, GitBranch, ChevronLeft, ChevronRight, BookOpen
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
+import type { FootprintPoint } from '@/components/FootprintEditor';
 import { getDivisionCssVars } from '@/lib/divisionTheme';
+
+// Leaflet butuh browser (window) -> muat hanya di klien.
+const FootprintEditor = dynamic(() => import('@/components/FootprintEditor'), {
+    ssr: false,
+    loading: () => (
+        <div className="h-[360px] rounded-2xl bg-black/[0.04] dark:bg-white/[0.04] animate-pulse" aria-label="Memuat peta" />
+    ),
+});
 
 type Tab =
     | 'summary'
@@ -58,6 +68,8 @@ interface Project {
     description?: string;
     lat: number;
     lng: number;
+    footprint?: FootprintPoint[];
+    footprintHeight?: number;
     pmName?: string;
     pmPhone?: string;
     // Hierarki organisasi
@@ -448,7 +460,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             {tab === 'changemgmt' && <ChangeManagementTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'issues'     && <IssuesTab project={project} isAdmin={canEdit} onSaved={fetchProject} onToChangeMgmt={() => setTab('changemgmt')} />}
                             {tab === 'info'       && <InfoTab project={project} isAdmin={canEdit} isSuperAdmin={isSuperAdmin} onSaved={fetchProject} />}
-                            {tab === 'location'   && <LocationTab project={project} />}
+                            {tab === 'location'   && <LocationTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'contract'   && <ContractTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'progress'   && <ProgressTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'gallery'    && <GalleryTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
@@ -2068,9 +2080,30 @@ function PicPanel({ projectId }: { projectId: string }) {
 }
 
 // ── Location ─────────────────────────────────────────────────────────────────
-function LocationTab({ project }: { project: Project }) {
+function LocationTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+    const saveFootprint = async (points: FootprintPoint[], height: number | null) => {
+        try {
+            await axios.patch(`/api/projects/${project._id}`, {
+                footprint: points,
+                footprintHeight: height,
+            });
+            toast.success(points.length === 0 ? 'Footprint dihapus' : 'Footprint tersimpan');
+            onSaved();
+        } catch (err) {
+            toast.error(saveErrorMessage(err));
+            throw err; // editor tetap terbuka
+        }
+    };
     return (
         <div className="space-y-4">
+            <FootprintEditor
+                lat={project.lat}
+                lng={project.lng}
+                footprint={project.footprint ?? []}
+                height={project.footprintHeight}
+                canEdit={isAdmin}
+                onSave={saveFootprint}
+            />
             <div className="grid sm:grid-cols-2 gap-4">
                 <Field label="Latitude"  value={String(project.lat)} />
                 <Field label="Longitude" value={String(project.lng)} />

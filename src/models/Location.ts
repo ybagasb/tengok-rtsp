@@ -98,6 +98,12 @@ export interface IMonitoringPengadaan {
     persentase: number;      // Progress pengadaan (0..100)
 }
 
+// Titik sudut footprint bangunan proyek (poligon, tanpa titik penutup).
+export interface IFootprintPoint {
+    lng: number;
+    lat: number;
+}
+
 export type ProjectStatus = 'planning' | 'ongoing' | 'completed';
 export type Divisi = 'DIVISI 1' | 'DIVISI 2' | 'DIVISI 3';
 export type ProjectType = 'JO' | 'NON_JO';
@@ -113,6 +119,10 @@ export interface ILocationData {
     pmName?: string;
     pmPhone?: string;
     cameras: string[] | mongoose.Types.ObjectId[];
+
+    // ── Footprint bangunan proyek (ditampilkan sebagai blok 3D di peta) ───────
+    footprint?: IFootprintPoint[];   // poligon 3..200 titik, urutan sisi
+    footprintHeight?: number;        // tinggi blok 3D (meter)
 
     // ── Kepemilikan (RBAC) ─────────────────────────────────────────────────────
     picSubs?: string[];          // cognito_sub PIC proyek — KONTROL AKSES, bukan teks deskriptif. Bukan EDITABLE_FIELDS.
@@ -200,6 +210,11 @@ export interface ILocation extends Document, Omit<ILocationData, '_id' | 'camera
 }
 
 // ── Sub-schemas ──────────────────────────────────────────────────────────────
+const FootprintPointSchema = new Schema<IFootprintPoint>({
+    lng: { type: Number, required: true, min: -180, max: 180 },
+    lat: { type: Number, required: true, min: -90, max: 90 },
+}, { _id: false });
+
 const MilestoneSchema = new Schema<IMilestone>({
     title: { type: String, required: true },
     done: { type: Boolean, default: false },
@@ -302,6 +317,10 @@ const LocationSchema: Schema = new Schema({
     pmName: { type: String },
     pmPhone: { type: String },
     cameras: [{ type: Schema.Types.ObjectId, ref: 'Camera' }],
+
+    // Footprint bangunan proyek (blok 3D di peta). Dokumen lama dibaca sebagai [].
+    footprint: { type: [FootprintPointSchema], default: [] },
+    footprintHeight: { type: Number, min: 1, max: 300 },
 
     // Kepemilikan (RBAC): daftar cognito_sub PIC. Dokumen lama tanpa field ini
     // dibaca sebagai [] (tanpa migrasi). Tidak ada di EDITABLE_FIELDS.

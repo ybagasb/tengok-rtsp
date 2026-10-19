@@ -38,7 +38,7 @@ import BrandLoader from './BrandLoader';
 import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 import { MAP_STYLES, MAP_STYLE_META, type MapStyleId } from '@/lib/mapStyles';
 import { useTheme } from '@/components/ThemeProvider';
-import { getDivisionCssVars } from '@/lib/divisionTheme';
+import { getDivisionCssVars, getDivisionTheme } from '@/lib/divisionTheme';
 
 interface LocationData {
     _id: string;
@@ -53,6 +53,9 @@ interface LocationData {
     cameras: any[];
     onlineCount: number;
     offlineCount: number;
+    // Footprint bangunan proyek (blok 3D di peta)
+    footprint?: { lat: number; lng: number }[];
+    footprintHeight?: number;
     // Hierarki organisasi
     division?: 'DIVISI 1' | 'DIVISI 2' | 'DIVISI 3';
     projectType?: 'JO' | 'NON_JO';
@@ -143,6 +146,27 @@ function buildingPaint(style: MapStyleId): FillExtrusionLayerSpecification['pain
     };
 }
 
+// ── Footprint bangunan proyek (poligon gambar PIC) ───────────────────────────
+// Berbeda dengan bangunan OSM di atas: ini data milik aplikasi (Location.footprint)
+// sehingga muncul di semua area, termasuk yang belum dipetakan di OpenStreetMap.
+const FOOTPRINT_MIN_ZOOM = 13;
+const FOOTPRINT_DEFAULT_HEIGHT = 12;
+const FOOTPRINT_LAYER_IDS = ['tengok-footprint-fill', 'tengok-footprint-3d'];
+
+// Tinggi blok: tumbuh dari 0 (zoom 13) ke penuh (zoom 15). Saat 3D dimatikan,
+// tinggi 0 -> hanya isian datar + garis tepi yang terlihat.
+function footprintExtrusionPaint(show3d: boolean): FillExtrusionLayerSpecification['paint'] {
+    return {
+        'fill-extrusion-color': ['get', 'color'],
+        'fill-extrusion-height': show3d
+            ? ['interpolate', ['linear'], ['zoom'], FOOTPRINT_MIN_ZOOM, 0, FOOTPRINT_MIN_ZOOM + 2, ['get', 'height']]
+            : 0,
+        'fill-extrusion-base': 0,
+        'fill-extrusion-opacity': ['case', ['==', ['get', 'selected'], 1], 0.95, 0.82],
+        'fill-extrusion-vertical-gradient': true,
+    };
+}
+
 export default function MapComponent({
     category: propCategory,
     division: propDivision,
@@ -224,6 +248,27 @@ export default function MapComponent({
         () => (allowedLocationIds ?? []).join(','),
         [allowedLocationIds]
     );
+
+    // GeoJSON footprint semua proyek yang punya poligon (>= 3 titik). Warna = aksen divisi.
+    const footprintGeoJson = useMemo(() => ({
+        type: 'FeatureCollection' as const,
+        features: locations
+            .filter((l) => (l.footprint?.length ?? 0) >= 3)
+            .map((l) => {
+                const ring = l.footprint!.map((pt) => [pt.lng, pt.lat]);
+                ring.push(ring[0]); // tutup poligon
+                return {
+                    type: 'Feature' as const,
+                    properties: {
+                        id: l._id,
+                        height: l.footprintHeight ?? FOOTPRINT_DEFAULT_HEIGHT,
+                        color: getDivisionTheme(l.division)?.accentHex ?? '#eab308',
+                        selected: selectedLocation?._id === l._id ? 1 : 0,
+                    },
+                    geometry: { type: 'Polygon' as const, coordinates: [ring] },
+                };
+            }),
+    }), [locations, selectedLocation?._id]);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -545,7 +590,16 @@ export default function MapComponent({
                         maxZoom={22}
                         dragRotate
                         style={{ width: '100%', height: '100%' }}
-                        onClick={() => { setStyleMenuOpen(false); }}
+                        interactiveLayerIds={FOOTPRINT_LAYER_IDS}
+                        onClick={(e) => {
+                            setStyleMenuOpen(false);
+                            // Klik blok footprint -> buka panel proyeknya (seperti klik marker).
+                            const id = e.features?.[0]?.properties?.id;
+                            if (id) {
+                                const loc = locations.find((l) => l._id === id);
+                                if (loc) openLocation(loc);
+                            }
+                        }}
                         onStyleData={(e) => {
                             // Letakkan bangunan 3D di bawah label pertama dari style aktif.
                             try {
@@ -581,6 +635,33 @@ export default function MapComponent({
                                     filter={BUILDING_FILTER}
                                     beforeId={labelLayerId}
                                     paint={buildingPaint(mapStyleId)}
+                                />
+                            </Source>
+                        )}
+
+                        {/* Footprint bangunan proyek: isian datar + blok 3D + garis tepi */}
+                        {footprintGeoJson.features.length > 0 && (
+                            <Source id="tengok-footprints" type="geojson" data={footprintGeoJson}>
+                                <Layer
+                                    id="tengok-footprint-fill"
+                                    type="fill"
+                                    minzoom={FOOTPRINT_MIN_ZOOM}
+                                    beforeId={labelLayerId}
+                                    paint={{ 'fill-color': ['get', 'color'], 'fill-opacity': 0.35 }}
+                                />
+                                <Layer
+                                    id="tengok-footprint-3d"
+                                    type="fill-extrusion"
+                                    minzoom={FOOTPRINT_MIN_ZOOM}
+                                    beforeId={labelLayerId}
+                                    paint={footprintExtrusionPaint(buildings3d)}
+                                />
+                                <Layer
+                                    id="tengok-footprint-line"
+                                    type="line"
+                                    minzoom={FOOTPRINT_MIN_ZOOM}
+                                    beforeId={labelLayerId}
+                                    paint={{ 'line-color': ['get', 'color'], 'line-width': 2, 'line-opacity': 0.95 }}
                                 />
                             </Source>
                         )}
@@ -953,6 +1034,15 @@ export default function MapComponent({
                     <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-green-500" aria-hidden="true" /> Mayoritas CCTV online</span>
                     <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500" aria-hidden="true" /> Mayoritas CCTV offline</span>
                 </div>
+            </div>
+
+            {/* Atribusi data peta (OpenStreetMap/OpenFreeMap & Esri) — atribusi bawaan MapLibre disembunyikan */}
+            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-[450] pointer-events-none max-w-[90vw] text-center">
+                <span className="pointer-events-auto text-[9px] sm:text-[10px] font-medium text-white/80 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
+                    Data peta ©{' '}
+                    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">OpenStreetMap</a>
+                    {' '}· Citra © Esri · OpenFreeMap
+                </span>
             </div>
 
             {/* Galat muat data lokasi */}

@@ -32,8 +32,21 @@ const EDITABLE_FIELDS = [
     'changeManagement',
     // Field baru — progress mingguan W1-W4 (RA/RI)
     'progressMinggu',
+    // Footprint bangunan (blok 3D di peta)
+    'footprint', 'footprintHeight',
 ] as const;
 
+
+const MAX_TEXT_LENGTH = 10000;
+
+// Label ramah untuk pesan validasi.
+const FIELD_LABELS: Record<string, string> = {
+    description: 'Deskripsi', kendala: 'Kendala', isuStrategis: 'Isu strategis',
+    lingkupPekerjaan: 'Lingkup pekerjaan', startDate: 'Tanggal mulai', endDate: 'Tanggal selesai',
+    tagihanBruto: 'Tagihan bruto', cashIn: 'Cash in', cashOut: 'Cash out',
+    saldoHutang: 'Saldo hutang', bad: 'BAD', piutang: 'Piutang',
+    bebanKonstruksi: 'Beban konstruksi', pu: 'PU', bk: 'BK',
+};
 
 async function sign(key?: string): Promise<string | null> {
     if (!key || !isStorageConfigured()) return null;
@@ -157,41 +170,117 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             if (field in body) update[field] = body[field];
         }
 
-        // Basic clamps / validation.
+        // Validasi: nilai SALAH ditolak 400 dengan pesan jelas (bukan dibuang
+        // diam-diam). Nilai kosong ('' / null) dianggap "kosongkan field".
+        const invalid: string[] = [];
+        const isBlank = (v: unknown) => v === '' || v === null || v === undefined;
+
+        // Batas panjang untuk field teks bebas.
+        for (const [k, v] of Object.entries(update)) {
+            if (typeof v === 'string' && v.length > MAX_TEXT_LENGTH) {
+                invalid.push(`${FIELD_LABELS[k] ?? k} terlalu panjang (maks ${MAX_TEXT_LENGTH} karakter)`);
+            }
+        }
+
         if ('progressPercent' in update) {
             const p = Number(update.progressPercent);
+            if (!isBlank(update.progressPercent) && !Number.isFinite(p)) invalid.push('Progres fisik harus berupa angka');
             update.progressPercent = Number.isFinite(p) ? Math.max(0, Math.min(100, Math.round(p))) : 0;
         }
         if ('contractValue' in update) {
             const v = Number(update.contractValue);
-            update.contractValue = Number.isFinite(v) && v >= 0 ? v : undefined;
+            if (!isBlank(update.contractValue) && (!Number.isFinite(v) || v < 0)) invalid.push('Nilai kontrak harus angka ≥ 0');
+            update.contractValue = Number.isFinite(v) && v >= 0 && !isBlank(update.contractValue) ? v : undefined;
         }
         if ('status' in update && !['planning', 'ongoing', 'completed'].includes(update.status)) {
-            delete update.status;
+            invalid.push('Status proyek tidak valid');
         }
         if ('division' in update && !['DIVISI 1', 'DIVISI 2', 'DIVISI 3'].includes(update.division)) {
-            delete update.division;
+            invalid.push('Divisi tidak valid');
         }
         if ('projectType' in update && !['JO', 'NON_JO'].includes(update.projectType)) {
-            delete update.projectType;
+            invalid.push('Tipe proyek tidak valid');
         }
-        // CPI/SPI: angka index (umumnya 0..~2). Clamp ke rentang wajar 0..5.
+        // CPI/SPI: angka index (umumnya 0..~2). Wajar 0..5; di luar itu ditolak.
         for (const idx of ['cpi', 'spi'] as const) {
             if (idx in update) {
                 const n = Number(update[idx]);
-                update[idx] = Number.isFinite(n) ? Math.max(0, Math.min(5, n)) : undefined;
+                if (!isBlank(update[idx]) && (!Number.isFinite(n) || n < 0 || n > 5)) {
+                    invalid.push(`${idx.toUpperCase()} harus angka antara 0 dan 5`);
+                }
+                update[idx] = !isBlank(update[idx]) && Number.isFinite(n) ? Math.max(0, Math.min(5, n)) : undefined;
             }
         }
         // Finansial: angka IDR >= 0. (saldoKas & lk boleh negatif — ditangani di bawah.)
         for (const money of ['tagihanBruto', 'cashIn', 'cashOut', 'saldoHutang', 'bad', 'piutang', 'bebanKonstruksi', 'pu', 'bk'] as const) {
             if (money in update) {
                 const n = Number(update[money]);
-                update[money] = Number.isFinite(n) && n >= 0 ? n : undefined;
+                if (!isBlank(update[money]) && (!Number.isFinite(n) || n < 0)) {
+                    invalid.push(`${FIELD_LABELS[money] ?? money} harus angka ≥ 0`);
+                }
+                update[money] = !isBlank(update[money]) && Number.isFinite(n) && n >= 0 ? n : undefined;
             }
         }
         if ('saldoKas' in update) {
             const n = Number(update.saldoKas);
-            update.saldoKas = Number.isFinite(n) ? n : undefined;
+            if (!isBlank(update.saldoKas) && !Number.isFinite(n)) invalid.push('Saldo kas harus berupa angka');
+            update.saldoKas = !isBlank(update.saldoKas) && Number.isFinite(n) ? n : undefined;
+        }
+        // Tanggal: harus valid, dan selesai tidak boleh sebelum mulai.
+        for (const d of ['startDate', 'endDate'] as const) {
+            if (d in update && !isBlank(update[d]) && Number.isNaN(new Date(update[d]).getTime())) {
+                invalid.push(`${FIELD_LABELS[d]} tidak valid`);
+            }
+        }
+        if (!isBlank(update.startDate) && !isBlank(update.endDate)) {
+            const s = new Date(update.startDate).getTime();
+            const e = new Date(update.endDate).getTime();
+            if (Number.isFinite(s) && Number.isFinite(e) && e < s) {
+                invalid.push('Tanggal selesai tidak boleh sebelum tanggal mulai');
+            }
+        }
+
+        // Footprint bangunan: kosong = hapus; selain itu 3..200 titik valid dalam
+        // rentang wajar (bbox <= 0.05 derajat ≈ 5 km) agar data sampah tertolak.
+        if ('footprint' in update) {
+            const fp = update.footprint;
+            if (isBlank(fp) || (Array.isArray(fp) && fp.length === 0)) {
+                update.footprint = [];
+            } else if (!Array.isArray(fp) || fp.length < 3 || fp.length > 200) {
+                invalid.push('Footprint harus berisi 3 sampai 200 titik');
+            } else {
+                const pts = fp.map((q: any) => ({ lng: Number(q?.lng), lat: Number(q?.lat) }));
+                if (pts.some((q) => !Number.isFinite(q.lng) || !Number.isFinite(q.lat) || Math.abs(q.lat) > 90 || Math.abs(q.lng) > 180)) {
+                    invalid.push('Koordinat footprint tidak valid');
+                } else {
+                    const lngs = pts.map((q) => q.lng);
+                    const lats = pts.map((q) => q.lat);
+                    if (Math.max(...lngs) - Math.min(...lngs) > 0.05 || Math.max(...lats) - Math.min(...lats) > 0.05) {
+                        invalid.push('Footprint terlalu luas (maksimal sekitar 5 km)');
+                    } else {
+                        update.footprint = pts.map((q) => ({ lng: Number(q.lng.toFixed(7)), lat: Number(q.lat.toFixed(7)) }));
+                    }
+                }
+            }
+        }
+        if ('footprintHeight' in update) {
+            if (isBlank(update.footprintHeight)) {
+                update.footprintHeight = undefined;
+            } else {
+                const h = Number(update.footprintHeight);
+                if (!Number.isFinite(h) || h < 1 || h > 300) {
+                    invalid.push('Tinggi footprint harus 1 sampai 300 meter');
+                } else {
+                    update.footprintHeight = Math.round(h * 10) / 10;
+                }
+            }
+        }
+
+        if (invalid.length > 0) {
+            return NextResponse.json(
+                { success: false, error: invalid.join('; '), fields: invalid },
+                { status: 400 },
+            );
         }
         // CCC: Cash Conversion Cycle dalam HARI. Bulatkan, clamp 0..3650.
         if ('ccc' in update) {
@@ -247,7 +336,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             entityId: id,
             entityName: loc.name,
             by: actor,
-            detail: `Memperbarui detail proyek: ${loc.name}`,
+            detail: `Memperbarui detail proyek: ${loc.name} (field: ${Object.keys(update).join(', ') || '-'})`,
         });
 
         return NextResponse.json({ success: true, data: loc });
@@ -293,7 +382,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
             entityId: id,
             entityName: id,
             by: actor,
-            detail: `Menghapus ${kind} dari proyek`,
+            detail: `Menghapus ${kind} dari proyek${key ? ` (${key})` : ''}`,
         });
 
         return NextResponse.json({ success: true });
