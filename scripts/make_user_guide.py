@@ -459,7 +459,8 @@ def build():
         ('Informasi', 'Pengguna Jasa, Pengawas, Penyedia Jasa, Kontraktor, Status '
                       '(Perencanaan / Berjalan / Selesai), Tanggal Mulai &amp; Selesai, '
                       'nama dan kontak PIC, serta Deskripsi proyek.'),
-        ('Lokasi', 'Titik lokasi proyek di peta. Hanya tampilan, tidak perlu diisi.'),
+        ('Lokasi', 'Titik lokasi proyek di peta, plus <b>Footprint Bangunan</b> (bentuk bangunan proyek yang tampil sebagai '
+                   'blok 3D di peta). Cara menggambarnya ada di bawah.'),
         ('Kontrak', 'Nomor kontrak dan nilai kontrak. Masa pelaksanaan dihitung otomatis dari tanggal mulai dan selesai di bagian Informasi.'),
         ('Progres', 'Progress fisik: geser <b>Rencana</b> dan <b>Realisasi</b> (deviasi dihitung '
                     'otomatis). Di sini juga ada <b>Lingkup Pekerjaan</b> — tekan "Tambah" '
@@ -469,6 +470,26 @@ def build():
                    'berpindah foto dan <b>Esc</b> untuk menutup.'),
     ], col1='Bagian'))
     E.append(Spacer(1, 2 * mm))
+    E.append(Paragraph('Menggambar Footprint Bangunan (menu Lainnya → Lokasi)', H3))
+    E.append(Paragraph(
+        'Footprint adalah bentuk bangunan proyek yang Anda gambar di atas citra satelit. '
+        'Hasilnya tampil sebagai <b>blok 3D berwarna divisi</b> di peta, dan bangunan itu bisa diklik '
+        'untuk membuka panel proyek. Gambar ini perlu karena banyak bangunan proyek belum ada di peta dunia.', BODY))
+    E.append(numbered([
+        'Buka menu <b>Lainnya → Lokasi</b>, lalu klik <b>"Gambar"</b> (atau <b>"Edit"</b> bila sudah ada).',
+        'Titik <b>hijau</b> di peta adalah lokasi proyek. Perbesar peta (scroll atau tombol +/−) sampai bangunan terlihat jelas.',
+        '<b>Klik di sudut-sudut bangunan</b> secara berurutan mengelilingi bangunan. Setiap klik menambah satu titik. '
+        'Minimal <b>3 titik</b>.',
+        'Salah klik? Klik titik oranye itu untuk menghapusnya, atau pakai <b>"Urungkan titik"</b>. '
+        '<b>"Hapus semua"</b> mengosongkan gambar.',
+        'Isi <b>Tinggi blok</b> dalam meter. Sebagai patokan, 1 lantai kira-kira 3–4 meter (bawaan 12 meter).',
+        'Klik <b>"Simpan"</b>. Buka peta dan zoom dekat ke proyek; blok 3D akan muncul.',
+    ]))
+    E.append(bullets([
+        'Tombol <b>gedung</b> di kontrol peta menyalakan/mematikan tampilan 3D. Bila dimatikan, bangunan tetap '
+        'tampil sebagai bidang datar berwarna.',
+        'Untuk menghapus footprint: <b>Edit → Hapus semua → Simpan</b>.',
+    ]))
     E.append(bullets([
         'Ukuran tiap berkas maksimal <b>25 MB</b>.',
         'Saat menghapus foto, akan ada konfirmasi dulu — jadi aman.',
