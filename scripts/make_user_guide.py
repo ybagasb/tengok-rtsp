@@ -295,7 +295,7 @@ def build():
                     'Sumber Daya, dan Monitoring Pengadaan.'),
         ('Change Management', 'Catatan perubahan harga/lingkup, klaim, dan masalah hukum.'),
         ('Isu &amp; Kendala', 'Isu strategis dan kendala di lapangan beserta penanganannya.'),
-        ('Lainnya', 'Informasi, Lokasi, Kontrak, Progres, Galeri, dan Dokumen.'),
+        ('Lainnya', 'Informasi, Lokasi, Kontrak, Progres, dan Galeri.'),
     ], col1='Menu'))
     E.append(Spacer(1, 3 * mm))
 
@@ -402,6 +402,10 @@ def build():
     E.append(Paragraph(
         'Setelah tersimpan, aplikasi menampilkan grafik batang dan tabel per minggu beserta '
         '<b>deviasi</b> (RI − RA). Hijau = realisasi sama/lebih dari rencana, merah = di bawah rencana.', BODY))
+    E.append(callout(
+        'Di <b>peta</b>, panel samping (tab <b>Operasi</b>) hanya menampilkan RA/RI untuk <b>bulan berjalan</b>. '
+        'Agar tampil, tulis nama bulan dengan benar, misalnya <i>Oktober 2026</i>, dan isi kolom tahunnya. '
+        'Riwayat bulan lain tetap bisa dilihat di halaman proyek → menu Operasi.', 'RA/RI di Peta'))
 
     E.append(Paragraph('3) Milestone (Tahapan Pekerjaan)', H3))
     E.append(Paragraph('Daftar tahapan besar proyek beserta kemajuannya. Tekan "Tambah Milestone", '
@@ -450,27 +454,24 @@ def build():
 
     # ── Lainnya ──
     E.append(Paragraph('Menu Lainnya', H3))
-    E.append(Paragraph('Berisi enam bagian pendukung:', BODY))
+    E.append(Paragraph('Berisi lima bagian pendukung:', BODY))
     E.append(field_table([
         ('Informasi', 'Pengguna Jasa, Pengawas, Penyedia Jasa, Kontraktor, Status '
                       '(Perencanaan / Berjalan / Selesai), Tanggal Mulai &amp; Selesai, '
                       'nama dan kontak PIC, serta Deskripsi proyek.'),
         ('Lokasi', 'Titik lokasi proyek di peta. Hanya tampilan, tidak perlu diisi.'),
-        ('Kontrak', 'Nomor kontrak dan nilai kontrak. Berkas kontrak diunggah lewat tombol '
-                    '"Unggah" di kartu <b>Berkas Kontrak</b> (PDF/Word/gambar).'),
+        ('Kontrak', 'Nomor kontrak dan nilai kontrak. Masa pelaksanaan dihitung otomatis dari tanggal mulai dan selesai di bagian Informasi.'),
         ('Progres', 'Progress fisik: geser <b>Rencana</b> dan <b>Realisasi</b> (deviasi dihitung '
                     'otomatis). Di sini juga ada <b>Lingkup Pekerjaan</b> — tekan "Tambah" '
                     'untuk menuliskan tiap lingkup.'),
         ('Galeri', 'Tekan <b>"Unggah Foto"</b> untuk menambah foto proyek (JPG/PNG). '
                    'Klik foto untuk melihat ukuran penuh; gunakan panah kiri/kanan untuk '
                    'berpindah foto dan <b>Esc</b> untuk menutup.'),
-        ('Dokumen', 'Tekan <b>"Unggah Dokumen"</b> untuk berkas (PDF, Word, Excel, '
-                    'PowerPoint, teks, ZIP/RAR, gambar, gambar teknik DWG/DXF, dll).'),
     ], col1='Bagian'))
     E.append(Spacer(1, 2 * mm))
     E.append(bullets([
         'Ukuran tiap berkas maksimal <b>25 MB</b>.',
-        'Saat menghapus foto atau dokumen, akan ada konfirmasi dulu — jadi aman.',
+        'Saat menghapus foto, akan ada konfirmasi dulu — jadi aman.',
         'Progress Keuangan (DIPA) tidak lagi di menu Progres; sekarang ada di menu '
         '<b>Cash &amp; Keuangan</b>.',
     ]))

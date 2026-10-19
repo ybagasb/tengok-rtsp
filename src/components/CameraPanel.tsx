@@ -66,6 +66,16 @@ export interface IChangeManagement {
     dariKendala?: boolean;
 }
 
+// Progress mingguan (W1–W4): Rencana (RA) & Realisasi (RI) dalam persen.
+export interface IProgressMinggu {
+    bulan: string;
+    tahun: number;
+    w1Ra?: number; w1Ri?: number;
+    w2Ra?: number; w2Ri?: number;
+    w3Ra?: number; w3Ri?: number;
+    w4Ra?: number; w4Ri?: number;
+}
+
 export interface IMonitoringPengadaan {
     nama: string;
     persentase: number;
@@ -131,6 +141,7 @@ export interface IPopulatedLocation {
     isuStrategis?: IIsuStrategis[];
     kendala?: IKendala[];
     monitoringPengadaan?: IMonitoringPengadaan[];
+    progressMinggu?: IProgressMinggu[];
     changeManagement?: IChangeManagement[];
     status?: string;
     updatedAt?: string;
@@ -202,6 +213,97 @@ function Reveal({ i = 0, children }: { i?: number; children: React.ReactNode }) 
         >
             {children}
         </motion.div>
+    );
+}
+
+// Progress mingguan RA/RI (W1–W4) untuk satu bulan: dua batang per minggu
+// (RA = rencana, RI = realisasi) + deviasi. Hemat gerak: tanpa animasi tinggi.
+// Nama bulan (ID + singkatan + EN) untuk mencocokkan teks bebas `bulan`
+// (mis. "Oktober 2026", "Okt 2026") dengan bulan berjalan.
+const MONTH_LABELS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const MONTH_ALIASES: string[][] = [
+    ['januari', 'jan', 'january'], ['februari', 'pebruari', 'feb', 'february'], ['maret', 'mar', 'march'],
+    ['april', 'apr'], ['mei', 'may'], ['juni', 'jun', 'june'], ['juli', 'jul', 'july'],
+    ['agustus', 'agu', 'agt', 'aug', 'august'], ['september', 'sep', 'sept'], ['oktober', 'okt', 'oct', 'october'],
+    ['november', 'nopember', 'nov'], ['desember', 'des', 'dec', 'december'],
+];
+function monthIndexOf(label?: string): number {
+    const text = (label || '').toLowerCase();
+    const words = text.split(/[^a-z]+/).filter(Boolean);
+    for (let i = 0; i < 12; i++) if (MONTH_ALIASES[i].some(a => words.includes(a))) return i;
+    const num = text.match(/\b(0?[1-9]|1[0-2])\s*[\/-]\s*\d{4}\b/); // "10/2026"
+    return num ? Number(num[1]) - 1 : -1;
+}
+// Baris progress mingguan yang sesuai bulan & tahun berjalan (yang terakhir bila ganda).
+function findCurrentMonthRow(rows: IProgressMinggu[], now: Date): IProgressMinggu | undefined {
+    const m = now.getMonth();
+    const y = now.getFullYear();
+    for (let i = rows.length - 1; i >= 0; i--) {
+        const r = rows[i];
+        const yearInText = Number((r.bulan || '').match(/\b(20\d{2})\b/)?.[1]);
+        const year = Number(r.tahun) || yearInText;
+        if (monthIndexOf(r.bulan) === m && year === y) return r;
+    }
+    return undefined;
+}
+
+const WEEK_KEYS = [
+    { w: 'W1', ra: 'w1Ra', ri: 'w1Ri' },
+    { w: 'W2', ra: 'w2Ra', ri: 'w2Ri' },
+    { w: 'W3', ra: 'w3Ra', ri: 'w3Ri' },
+    { w: 'W4', ra: 'w4Ra', ri: 'w4Ri' },
+] as const;
+
+function WeeklyProgressCard({ row }: { row: IProgressMinggu }) {
+    const reduce = useReducedMotion();
+    const clamp = (n?: number) => Math.max(0, Math.min(100, Number.isFinite(n as number) ? (n as number) : 0));
+    return (
+        <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                    <div className="text-xs font-black text-slate-900 dark:text-white truncate">{row.bulan || '-'}</div>
+                    {row.tahun ? <div className="text-[9px] text-slate-500 font-mono">Tahun {row.tahun}</div> : null}
+                </div>
+                <div className="flex items-center gap-2.5 text-[9px] font-bold shrink-0">
+                    <span className="flex items-center gap-1 text-sky-500"><span className="w-2 h-2 rounded-sm bg-sky-400" />RA</span>
+                    <span className="flex items-center gap-1 text-amber-500"><span className="w-2 h-2 rounded-sm bg-amber-400" />RI</span>
+                </div>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+                {WEEK_KEYS.map(({ w, ra: raKey, ri: riKey }) => {
+                    const ra = clamp(row[raKey]);
+                    const ri = clamp(row[riKey]);
+                    const dev = ri - ra;
+                    const ahead = dev >= 0;
+                    return (
+                        <div key={w} className="space-y-1.5">
+                            <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
+                            <div className="h-16 flex items-end justify-center gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.04] border border-black/5 dark:border-white/5 px-1.5 pb-0 overflow-hidden">
+                                <motion.div
+                                    className="w-3 rounded-t-sm bg-sky-400/80"
+                                    initial={{ height: reduce ? `${ra}%` : 0 }}
+                                    animate={{ height: `${ra}%` }}
+                                    transition={{ duration: reduce ? 0 : 0.7, ease: 'easeOut' }}
+                                    aria-hidden="true"
+                                />
+                                <motion.div
+                                    className={`w-3 rounded-t-sm ${ahead ? 'bg-emerald-500/80' : 'bg-rose-500/80'}`}
+                                    initial={{ height: reduce ? `${ri}%` : 0 }}
+                                    animate={{ height: `${ri}%` }}
+                                    transition={{ duration: reduce ? 0 : 0.7, ease: 'easeOut', delay: reduce ? 0 : 0.08 }}
+                                    aria-hidden="true"
+                                />
+                            </div>
+                            <div className="text-center leading-tight">
+                                <div className="text-[9px] font-mono font-bold text-sky-500">{ra.toFixed(1)}%</div>
+                                <div className={`text-[9px] font-mono font-bold ${ahead ? 'text-emerald-500' : 'text-rose-500'}`}>{ri.toFixed(1)}%</div>
+                                <div className={`text-[10px] font-black font-mono ${ahead ? 'text-emerald-500' : 'text-rose-500'}`}>{ahead ? '+' : ''}{dev.toFixed(1)}</div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
     );
 }
 
@@ -878,6 +980,32 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                 { label: rugi ? 'LK · Laba Kotor (Rugi)' : 'LK · Laba Kotor', value: lk, tone: rugi ? 'rose' : 'emerald' },
                                             ]} />
                                         </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Progress Mingguan RA / RI (W1–W4) — hanya bulan berjalan */}
+                            {location.progressMinggu && location.progressMinggu.length > 0 && (() => {
+                                const now = new Date();
+                                const row = findCurrentMonthRow(location.progressMinggu, now);
+                                const nowLabel = `${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`;
+                                return (
+                                    <div className="space-y-2.5">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                                                <Activity className="w-3.5 h-3.5 text-sky-400" />
+                                                Progress Mingguan · RA / RI
+                                            </h3>
+                                            <span className="text-[10px] text-slate-500 font-mono">{nowLabel}</span>
+                                        </div>
+                                        {row ? (
+                                            <WeeklyProgressCard row={row} />
+                                        ) : (
+                                            <div className="p-3 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.05] dark:border-white/[0.05] text-center">
+                                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Belum ada data RA / RI untuk {nowLabel}</p>
+                                                <p className="text-[10px] text-slate-500 mt-0.5">Riwayat bulan lain ada di Detail Proyek → Operasi.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })()}
