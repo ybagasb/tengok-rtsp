@@ -359,8 +359,31 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
     return (
         <div style={pageStyle} className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
+            {/* Grid HUD tipis beraksen divisi (dekorasi, tidak menangkap klik) */}
+            <div
+                aria-hidden
+                className="pointer-events-none fixed inset-0 z-0 opacity-[0.05] dark:opacity-[0.08]"
+                style={{
+                    backgroundImage:
+                        'linear-gradient(rgba(var(--div-accent-rgb),0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--div-accent-rgb),0.8) 1px, transparent 1px)',
+                    backgroundSize: '48px 48px',
+                    maskImage: 'radial-gradient(ellipse 90% 70% at 50% 20%, #000 20%, transparent 100%)',
+                    WebkitMaskImage: 'radial-gradient(ellipse 90% 70% at 50% 20%, #000 20%, transparent 100%)',
+                }}
+            />
+
             {/* Header */}
             <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
+                {/* Garis aksen divisi bercahaya di tepi bawah header */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-px"
+                    style={{
+                        background:
+                            'linear-gradient(90deg, transparent, rgba(var(--div-accent-rgb),0.7), transparent)',
+                        boxShadow: '0 0 12px rgba(var(--div-accent-rgb),0.45)',
+                    }}
+                />
                 <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex items-center gap-3">
                     <button onClick={() => router.back()} aria-label="Kembali" className="p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0">
                         <ArrowLeft className="w-5 h-5" aria-hidden="true" />
@@ -410,7 +433,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 </div>
             </header>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-8 py-6 flex gap-6">
+            <div className="relative z-[1] max-w-7xl mx-auto px-4 sm:px-8 py-6 flex gap-6">
                 {/* Sidebar (desktop) */}
                 <aside className="hidden lg:block w-60 shrink-0">
                     <div className="sticky top-24 p-3 rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-black/5 dark:border-white/5">

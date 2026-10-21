@@ -721,6 +721,33 @@ export default function MapComponent({
                 )}
             </div>
 
+            {/* ── DEKORASI HUD (murni visual, pointer-events-none) ─────────────────
+                Di atas peta (z-[300]) tapi di bawah semua kontrol (z-[400]+),
+                sehingga drag/zoom/klik marker tidak terganggu. */}
+            {/* Vignette: tipis di mobile (agar marker/kontrol tepi tidak redup), lebih
+                kuat di layar lebar, dan jauh lebih lembut di tema terang. */}
+            <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 z-[300] opacity-30 dark:opacity-100 shadow-[inset_0_0_60px_8px_rgba(2,6,23,0.4)] sm:shadow-[inset_0_0_120px_20px_rgba(2,6,23,0.5)] lg:shadow-[inset_0_0_160px_30px_rgba(2,6,23,0.55)]"
+            />
+            {/* Bracket hanya di layar lebar (lg+): di mobile tepinya dipakai kontrol. */}
+            {[
+                'top-1 left-1 border-t-2 border-l-2',
+                'top-1 right-1 border-t-2 border-r-2',
+                'bottom-1 left-1 border-b-2 border-l-2',
+                'bottom-1 right-1 border-b-2 border-r-2',
+            ].map((pos) => (
+                <span
+                    key={pos}
+                    aria-hidden
+                    className={`pointer-events-none absolute z-[300] hidden lg:block w-5 h-5 ${pos}`}
+                    style={{
+                        borderColor: 'rgba(var(--div-accent-rgb),0.6)',
+                        filter: 'drop-shadow(0 0 5px rgba(var(--div-accent-rgb),0.45))',
+                    }}
+                />
+            ))}
+
             {/* ── TOP OVERLAY: nav + search + category ─────────────────────────── */}
             <div className="absolute top-4 sm:top-6 left-2 sm:left-6 right-2 sm:right-6 z-[400] flex items-start justify-between pointer-events-none gap-2 sm:gap-3">
                 {!sharedMode && (

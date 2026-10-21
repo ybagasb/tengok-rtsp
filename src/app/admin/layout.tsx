@@ -101,6 +101,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </motion.div>
 
                 <div className="p-4 border-t border-black/5 dark:border-white/5 relative z-10 space-y-2">
+                    <div className="mx-1 mb-1 flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-500 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-[0.18em]">
+                        <span className="relative flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping motion-reduce:animate-none" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                        </span>
+                        System Online
+                    </div>
                     <div className="px-1"><ThemeToggle className="w-full justify-start" /></div>
                     <button
                         onClick={() => router.push('/categories')}
@@ -214,6 +221,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Grid HUD tipis di atas konten (murni dekorasi, tidak menangkap klik) */}
+            <div
+                aria-hidden
+                className="pointer-events-none fixed inset-0 lg:left-64 z-[1] opacity-[0.05] dark:opacity-[0.07]"
+                style={{
+                    backgroundImage:
+                        'linear-gradient(rgba(234,179,8,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(234,179,8,0.8) 1px, transparent 1px)',
+                    backgroundSize: '48px 48px',
+                    maskImage: 'radial-gradient(ellipse 90% 80% at 50% 30%, #000 20%, transparent 100%)',
+                    WebkitMaskImage: 'radial-gradient(ellipse 90% 80% at 50% 30%, #000 20%, transparent 100%)',
+                }}
+            />
 
             {/* Main Content Area */}
             <div className="flex-1 pb-20 lg:pb-0 w-full overflow-y-auto">

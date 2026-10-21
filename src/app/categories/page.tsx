@@ -912,19 +912,21 @@ export default function CategoriesPage() {
       </AnimatePresence>
 
       {/* Header — z-30, semi-transparan di atas canvas */}
-      <header className="relative z-30 flex items-center justify-between gap-2 px-4 sm:px-10 py-4 sm:py-5 shrink-0 bg-[#070d18]/60 backdrop-blur-md border-b border-white/5">
+      <header className="relative z-30 flex items-center justify-between gap-2 px-3 sm:px-10 py-4 sm:py-5 shrink-0 bg-[#070d18]/60 backdrop-blur-md border-b border-white/5">
         {/* Logo + Title + Status Online */}
-        <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <img
             src="/abipraya_original.svg"
             alt="Brantas Abipraya"
             className="w-8 h-8 sm:w-10 sm:h-10 shrink-0"
           />
           <div className="leading-tight min-w-0">
-            <p className="text-[11px] sm:text-sm font-black uppercase tracking-[0.2em] bg-gradient-to-r from-yellow-400 to-amber-300 bg-clip-text text-transparent truncate">
+            {/* Mobile: tracking dirapatkan + subjudul disembunyikan agar nama tidak terpotong
+                (lima tombol aksi berbagi baris yang sama). */}
+            <p className="text-[10px] sm:text-sm font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] bg-gradient-to-r from-yellow-400 to-amber-300 bg-clip-text text-transparent truncate">
               Brantas Abipraya
             </p>
-            <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400 truncate">
+            <p className="hidden sm:block text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400 truncate">
               Project Management Information System
             </p>
           </div>
@@ -935,12 +937,12 @@ export default function CategoriesPage() {
         </div>
 
         {/* Actions */}
-        <div className="relative flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <div className="relative flex items-center gap-1 sm:gap-3 shrink-0">
           {/* Putar ulang intro 3D (hanya saat fase split/detail) */}
           {phase !== "hq" && (
             <button
               onClick={handleReplayIntro}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all cursor-pointer font-['Orbitron',sans-serif]"
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all cursor-pointer font-['Orbitron',sans-serif]"
               title="Putar ulang intro gedung 3D (reset intro)"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -948,8 +950,9 @@ export default function CategoriesPage() {
             </button>
           )}
 
-          {/* Toggle tema */}
-          <ThemeToggle />
+          {/* Toggle tema — halaman ini selalu berlatar gelap, jadi paksa gaya tombol
+              bergaya gelap (tanpa ini, di tema terang tombolnya hampir tak terlihat). */}
+          <ThemeToggle className="bg-white/5! border-white/10! text-slate-300! hover:text-yellow-400!" />
 
           {/* Panduan pengguna (PDF) */}
           <a
@@ -1132,7 +1135,8 @@ export default function CategoriesPage() {
                   </span>
                 </h1>
                 <p className="text-[10px] sm:text-xs text-slate-300 tracking-wider font-['Rajdhani',sans-serif] font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
-                  Klik model 3D atau kartu untuk masuk
+                  <span className="sm:hidden">Pilih kartu untuk masuk</span>
+                  <span className="hidden sm:inline">Klik model 3D atau kartu untuk masuk</span>
                 </p>
               </div>
             </motion.div>
@@ -1267,7 +1271,7 @@ export default function CategoriesPage() {
                     className="flex items-center gap-2 px-3 py-1.5 mb-3 text-[11px] font-bold tracking-[0.18em] uppercase border border-white/20 text-slate-300 hover:text-white hover:border-white/50 bg-white/5 hover:bg-white/10 transition-all cursor-pointer font-['Orbitron',sans-serif]"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
-                    KEMBALI (ESC)
+                    KEMBALI
                   </button>
 
                   {/* Header: Kode Divisi, Judul & Subtitle proyek */}

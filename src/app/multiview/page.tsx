@@ -23,12 +23,18 @@ import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 import BrandLoader from '@/components/BrandLoader';
 import { getDivisionCssVars } from '@/lib/divisionTheme';
 
+interface MultiViewCamera {
+    _id: string;
+    name: string;
+    status: string;
+}
+
 interface Location {
     _id: string;
     name: string;
     category: string;
     division?: string;
-    cameras: any[];
+    cameras: MultiViewCamera[];
 }
 
 // Scope of locations shown in the sidebar:
@@ -468,6 +474,45 @@ function MultiViewContent() {
 
             {/* Main Content Area */}
             <main className="flex-1 flex flex-col relative overflow-hidden bg-[radial-gradient(circle_at_50%_50%,rgba(15,23,42,1)_0%,rgba(2,6,23,1)_100%)]">
+                {/* ── Dekorasi HUD command-center (murni visual, mengikuti tema divisi) ── */}
+                {/* Grid radar halus beraksen divisi */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 z-0 opacity-[0.1]"
+                    style={{
+                        backgroundImage:
+                            'linear-gradient(rgba(var(--div-accent-rgb),0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--div-accent-rgb),0.5) 1px, transparent 1px)',
+                        backgroundSize: '48px 48px',
+                        maskImage: 'radial-gradient(ellipse 90% 80% at 50% 45%, #000 30%, transparent 100%)',
+                        WebkitMaskImage: 'radial-gradient(ellipse 90% 80% at 50% 45%, #000 30%, transparent 100%)',
+                    }}
+                />
+                {/* Scanline tipis */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 z-0"
+                    style={{
+                        background:
+                            'repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px)',
+                    }}
+                />
+                {/* Corner brackets HUD beraksen divisi */}
+                {[
+                    'top-1 left-1 border-t-2 border-l-2',
+                    'top-1 right-1 border-t-2 border-r-2',
+                    'bottom-1 left-1 border-b-2 border-l-2',
+                    'bottom-1 right-1 border-b-2 border-r-2',
+                ].map((pos) => (
+                    <span
+                        key={pos}
+                        aria-hidden
+                        // Hanya di layar lebar: di mobile header & kartu kamera memenuhi tepi,
+                        // bracket jadi terlihat seperti border ganda.
+                        className={`pointer-events-none absolute hidden lg:block w-5 h-5 z-[1] ${pos}`}
+                        style={{ borderColor: 'rgba(var(--div-accent-rgb),0.55)' }}
+                    />
+                ))}
+
                 {/* Overlay Header */}
                 <header className="absolute top-0 left-0 right-0 z-40 p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between pointer-events-none gap-4">
                     <div className="flex items-center gap-3 sm:gap-4 pointer-events-auto w-full sm:w-auto">
@@ -505,7 +550,7 @@ function MultiViewContent() {
                 </header>
 
                 {/* Grid Content */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 pt-24">
+                <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar p-6 pt-24">
                     <AnimatePresence mode="popLayout">
                         {selectedCameras.length > 0 ? (
                             <>
