@@ -35,6 +35,7 @@ const VIEWPORTS = {
 // auth: 'none' | 'pin' | 'sso'.  fullPage: ambil seluruh tinggi halaman (untuk halaman panjang).
 const PAGES = [
     { name: 'login', url: '/login', auth: 'none' },
+    { name: 'categories-hq', url: '/categories', auth: 'pin' },
     { name: 'categories-split', url: '/categories', auth: 'pin', introSeen: true },
     { name: 'categories-detail-div1', url: '/categories?div=DIVISI%201', auth: 'pin', introSeen: true },
     { name: 'map-div1', url: '/map?division=DIVISI%201', auth: 'pin' },
@@ -63,7 +64,12 @@ async function launch() {
             // coba channel berikutnya
         }
     }
-    throw new Error('Edge/Chrome tidak ditemukan. Pasang salah satunya.');
+    // Fallback: Chromium bawaan Playwright (node node_modules/playwright-core/cli.js install chromium).
+    try {
+        return await chromium.launch({ headless: true, args });
+    } catch {
+        throw new Error('Edge/Chrome/Chromium tidak ditemukan. Pasang salah satunya.');
+    }
 }
 
 async function loginWithPin(context) {
@@ -86,6 +92,9 @@ async function resolveProjectId(browser) {
         // Utamakan proyek yang punya data terisi (nilai kontrak) agar tampilan lebih informatif.
         const withData = list.find((l) => l?.contractValue) || list[0];
         return withData?._id || '';
+    } catch (err) {
+        // Jangan cetak err.message utuh: call log Playwright memuat header Cookie (token sesi).
+        throw new Error(`Gagal mengambil daftar proyek dari ${BASE_URL} (server dev jalan?): ${String(err.message).split('\n')[0]}`);
     } finally {
         await context.close();
     }
@@ -99,7 +108,8 @@ async function main() {
     try {
         const projectId = await resolveProjectId(browser);
         const pages = (only.length ? PAGES.filter((p) => only.includes(p.name)) : PAGES).filter((p) => {
-            if (p.auth === 'pin' && !PIN) { skipped.push(`${p.name} (butuh SCREENSHOT_PIN)`); return false; }
+            // Halaman viewer juga bisa dibuka dengan sesi SSO bila PIN tidak diberikan.
+            if (p.auth === 'pin' && !PIN && !HAS_SSO) { skipped.push(`${p.name} (butuh SCREENSHOT_PIN atau npm run shots:login)`); return false; }
             if (p.auth === 'sso' && !HAS_SSO) { skipped.push(`${p.name} (jalankan npm run shots:login)`); return false; }
             if (p.url.includes('__PROJECT__') && !projectId) { skipped.push(`${p.name} (proyek tidak ditemukan)`); return false; }
             return true;
@@ -113,10 +123,10 @@ async function main() {
                     viewport: { width: vp.width, height: vp.height },
                     ...vp,
                     locale: 'id-ID',
-                    ...(target.auth === 'sso' ? { storageState: SSO_STATE } : {}),
+                    ...(target.auth === 'sso' || (target.auth === 'pin' && !PIN) ? { storageState: SSO_STATE } : {}),
                 });
                 try {
-                    if (target.auth === 'pin') await loginWithPin(context);
+                    if (target.auth === 'pin' && PIN) await loginWithPin(context);
                     if (target.introSeen) {
                         await context.addInitScript(() => {
                             try { sessionStorage.setItem('tengok_intro_seen_v1', 'true'); } catch { /* abaikan */ }
@@ -157,6 +167,7 @@ async function main() {
 }
 
 main().catch((err) => {
-    console.error(err.message);
+    // Hanya baris pertama: call log Playwright bisa memuat header Cookie (token sesi).
+    console.error(String(err.message).split('\n')[0]);
     process.exit(1);
 });

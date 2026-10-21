@@ -27,7 +27,12 @@ async function launch() {
             // coba channel berikutnya
         }
     }
-    throw new Error('Edge/Chrome tidak ditemukan.');
+    // Fallback: Chromium bawaan Playwright (node node_modules/playwright-core/cli.js install chromium).
+    try {
+        return await chromium.launch({ headless: false });
+    } catch {
+        throw new Error('Edge/Chrome/Chromium tidak ditemukan.');
+    }
 }
 
 const browser = await launch();
