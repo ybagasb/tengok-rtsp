@@ -1,0 +1,25 @@
+# Normalisasi line ending lintas OS (Windows/Ubuntu).
+# Di repo (blob git) selalu LF; git menormalkan CRLF -> LF saat membandingkan/commit.
+* text=auto eol=lf
+
+# Skrip shell harus LF di semua OS.
+*.sh text eol=lf
+
+# Skrip Windows tetap CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Berkas biner: jangan disentuh.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text
+*.pdf binary
+*.xlsx binary
+*.pptx binary
+*.zip binary
+*.woff binary
+*.woff2 binary
