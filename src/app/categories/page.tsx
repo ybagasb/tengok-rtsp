@@ -38,6 +38,7 @@ import toast from "react-hot-toast";
 import useSWR from "swr";
 import { usePageTracking } from "@/hooks/usePageTracking";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useTheme } from "@/components/ThemeProvider";
 import { DIVISION_THEME, type DivisionKey } from "@/lib/divisionTheme";
 import type { IntroScene3DProps } from "@/components/intro/IntroScene3D";
 
@@ -175,6 +176,7 @@ export default function CategoriesPage() {
 
   // Inisialisasi fase: cek sessionStorage (intro sekali per sesi) & ?div= dari URL (SSR-safe)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- flag mounted untuk hidrasi SSR-safe; harus di effect
     setMounted(true);
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -217,6 +219,14 @@ export default function CategoriesPage() {
   const isReduced = mounted ? forceReduced : false;
   const { data: session } = useSession();
   usePageTracking("categories");
+  const { theme } = useTheme();
+  const [cardsEntered, setCardsEntered] = useState(false);
+  // Warna teks aksen divisi yang tetap terbaca: digelapkan di tema terang,
+  // dicerahkan di tema gelap (hex mentah kontrasnya rendah, mis. amber/teal di putih).
+  const accentText = (hex: string) =>
+    theme === "light"
+      ? `color-mix(in srgb, ${hex} 58%, #000)`
+      : `color-mix(in srgb, ${hex} 72%, #fff)`;
 
   // Gating UI tombol Management: hanya super-admin.
   const accessFetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -770,6 +780,7 @@ export default function CategoriesPage() {
     if (!pin.every((digit) => digit !== "")) return;
     if (isVerifyingPin) return;
     const enteredPin = pin.join("");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- penanda verifikasi PIN otomatis saat 6 digit terisi; memindahkan ke handler mengubah perilaku
     setIsVerifyingPin(true);
     axios
       .post("/api/auth/verify", { pin: enteredPin })
@@ -786,28 +797,42 @@ export default function CategoriesPage() {
   }, [pin, router, isVerifyingPin]);
 
   return (
-    <div className="relative h-screen overflow-hidden bg-[#070d18] text-white select-none">
+    <div className="relative h-dvh overflow-hidden bg-slate-100 text-slate-900 dark:bg-[#070d18] dark:text-white">
       {/* Scanline overlay & HUD corner brackets (persis prototipe) */}
       <div
-        className="pointer-events-none absolute inset-0 z-10"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-10 select-none"
         style={{
           background:
             "repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px)",
         }}
       />
-      <span className="pointer-events-none absolute top-2.5 left-2.5 w-6 h-6 border-t-2 border-l-2 border-amber-500/70 z-20" />
-      <span className="pointer-events-none absolute top-2.5 right-2.5 w-6 h-6 border-t-2 border-r-2 border-amber-500/70 z-20" />
-      <span className="pointer-events-none absolute bottom-2.5 left-2.5 w-6 h-6 border-b-2 border-l-2 border-amber-500/70 z-20" />
-      <span className="pointer-events-none absolute bottom-2.5 right-2.5 w-6 h-6 border-b-2 border-r-2 border-amber-500/70 z-20" />
+      <span aria-hidden="true" className="pointer-events-none select-none absolute top-2.5 left-2.5 w-6 h-6 border-t-2 border-l-2 border-amber-600/30 dark:border-amber-500/70 z-20" />
+      <span aria-hidden="true" className="pointer-events-none select-none absolute top-2.5 right-2.5 w-6 h-6 border-t-2 border-r-2 border-amber-600/30 dark:border-amber-500/70 z-20" />
+      <span aria-hidden="true" className="pointer-events-none select-none absolute bottom-2.5 left-2.5 w-6 h-6 border-b-2 border-l-2 border-amber-600/30 dark:border-amber-500/70 z-20" />
+      <span aria-hidden="true" className="pointer-events-none select-none absolute bottom-2.5 right-2.5 w-6 h-6 border-b-2 border-r-2 border-amber-600/30 dark:border-amber-500/70 z-20" />
 
       {/* Flash putih singkat saat gedung pecah (persis prototipe) */}
       <div
+        aria-hidden="true"
         className="pointer-events-none fixed inset-0 z-50 bg-white transition-opacity duration-150"
         style={{ opacity: flash ? 0.7 : 0 }}
       />
 
       {/* Canvas Three.js — absolut penuh layar, di belakang semua UI */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 select-none bg-[#e9eef5] dark:bg-[#070d18]">
+        {/* Watermark logo besar beranimasi: di belakang canvas 3D (canvas transparan) */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden pb-[24dvh]"
+        >
+          <div className="watermark-float opacity-[0.13] dark:opacity-[0.22]">
+            <div className="watermark-logo relative w-[min(62vw,62dvh)] sm:w-[min(46vw,54dvh)] aspect-[463/372]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/abipraya_mark.svg" alt="" draggable={false} className="w-full h-full object-contain" />
+            </div>
+          </div>
+        </div>
         {phaseReady && (
           <IntroScene3D
             phase={phase}
@@ -815,6 +840,7 @@ export default function CategoriesPage() {
             hoveredDiv={activeHoveredDiv}
             divisionColors={DIV_COLORS}
             divisionStatus={divisionStatus}
+            theme={theme}
             reducedMotion={isReduced}
             onBuildingClick={onBuildingClick}
             onExplodeComplete={onExplodeComplete}
@@ -837,20 +863,20 @@ export default function CategoriesPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4 }}
-            className={`absolute inset-0 z-[25] flex flex-col items-center justify-center bg-[#070d18]/90 backdrop-blur-sm select-none ${
+            className={`absolute inset-0 z-[25] flex flex-col items-center justify-center bg-white/90 dark:bg-[#070d18]/90 backdrop-blur-sm select-none ${
               sceneError ? "pointer-events-auto px-4" : "pointer-events-none"
             }`}
           >
             {sceneError ? (
               <div className="flex flex-col items-center gap-4 text-center max-w-md">
-                <div className="p-3.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.25)]">
-                  <ShieldAlert className="w-8 h-8" />
+                <div className="p-3.5 rounded-full bg-amber-500/10 border border-amber-600/30 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.25)]">
+                  <ShieldAlert className="w-8 h-8" aria-hidden="true" />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-amber-400 font-['Orbitron',sans-serif]">
+                  <span className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400 font-orbitron">
                     Scene 3D Belum Siap
                   </span>
-                  <p className="text-[11px] sm:text-xs text-slate-300 font-['Rajdhani',sans-serif] tracking-wider">
+                  <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 font-rajdhani tracking-wider">
                     Scene 3D belum siap. Muat ulang atau masuk langsung ke peta.
                   </p>
                 </div>
@@ -860,15 +886,15 @@ export default function CategoriesPage() {
                       window.location.reload();
                     }
                   }}
-                  className="mt-1 flex items-center gap-2 px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-['Orbitron',sans-serif] font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] active:scale-95 cursor-pointer"
+                  className="mt-1 flex items-center gap-2 px-6 py-2.5 min-h-10 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-orbitron font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] active:scale-95 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <RotateCcw className="w-4 h-4" aria-hidden="true" />
                   Muat ulang
                 </button>
 
                 {/* 3 Tombol Akses Peta Langsung bila WebGL tidak tersedia */}
-                <div className="w-full pt-3 mt-1 border-t border-white/10 flex flex-col gap-2">
-                  <p className="text-[10px] uppercase font-bold tracking-widest text-slate-400 font-['Orbitron',sans-serif]">
+                <div className="w-full pt-3 mt-1 border-t border-black/10 dark:border-white/10 flex flex-col gap-2">
+                  <p className="text-[11px] uppercase font-bold tracking-widest text-slate-500 dark:text-slate-400 font-orbitron">
                     Masuk Langsung ke Peta Divisi:
                   </p>
                   <div className="grid grid-cols-3 gap-2 w-full">
@@ -878,7 +904,7 @@ export default function CategoriesPage() {
                         <a
                           key={div}
                           href={`/map?division=${encodeURIComponent(div)}`}
-                          className="px-2.5 py-2 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-white font-['Orbitron',sans-serif] text-[10px] sm:text-xs font-bold uppercase tracking-wider text-center transition-all hover:border-amber-400/50"
+                          className="flex items-center justify-center min-h-10 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/15 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white font-orbitron text-[11px] sm:text-xs font-bold uppercase tracking-wider text-center transition-all hover:border-amber-500/50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                           style={{ borderLeft: `3px solid ${t.accentHex}` }}
                         >
                           {t.short}
@@ -890,11 +916,11 @@ export default function CategoriesPage() {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
-                <span className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-amber-400 font-['Orbitron',sans-serif] drop-shadow-[0_0_14px_rgba(245,158,11,0.5)]">
+                <span className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-amber-700 dark:text-amber-400 font-orbitron dark:drop-shadow-[0_0_14px_rgba(245,158,11,0.5)]">
                   MEMUAT SCENE…
                 </span>
                 {/* Bar tipis beranimasi gaya HUD */}
-                <div className="w-48 sm:w-64 h-[2px] bg-white/10 rounded-full overflow-hidden relative">
+                <div className="w-48 sm:w-64 h-[2px] bg-black/10 dark:bg-white/10 rounded-full overflow-hidden relative">
                   {isReduced ? (
                     <div className="w-full h-full bg-amber-400" />
                   ) : (
@@ -912,27 +938,33 @@ export default function CategoriesPage() {
       </AnimatePresence>
 
       {/* Header — z-30, semi-transparan di atas canvas */}
-      <header className="relative z-30 flex items-center justify-between gap-2 px-3 sm:px-10 py-4 sm:py-5 shrink-0 bg-[#070d18]/60 backdrop-blur-md border-b border-white/5">
+      <header className="relative z-30 flex items-center justify-between gap-2 px-3 sm:px-10 py-4 sm:py-5 shrink-0 bg-white/80 dark:bg-[#070d18]/60 backdrop-blur-md border-b border-black/10 dark:border-white/5">
         {/* Logo + Title + Status Online */}
         <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          {/* Logo biru untuk tema terang, logo putih/kuning untuk tema gelap */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal (SVG), tidak perlu optimasi next/image */}
+          <img
+            src="/abipraya_blue.svg"
+            alt=""
+            aria-hidden="true"
+            className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 object-contain block dark:hidden"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal (SVG), tidak perlu optimasi next/image */}
           <img
             src="/abipraya_original.svg"
-            alt="Brantas Abipraya"
-            className="w-8 h-8 sm:w-10 sm:h-10 shrink-0"
+            alt=""
+            aria-hidden="true"
+            className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 hidden dark:block"
           />
           <div className="leading-tight min-w-0">
             {/* Mobile: tracking dirapatkan + subjudul disembunyikan agar nama tidak terpotong
                 (lima tombol aksi berbagi baris yang sama). */}
-            <p className="text-[10px] sm:text-sm font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] bg-gradient-to-r from-yellow-400 to-amber-300 bg-clip-text text-transparent truncate">
+            <p className="text-[11px] sm:text-sm font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] bg-gradient-to-r from-yellow-700 to-amber-600 dark:from-yellow-400 dark:to-amber-300 bg-clip-text text-transparent truncate">
               Brantas Abipraya
             </p>
-            <p className="hidden sm:block text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400 truncate">
+            <p className="hidden sm:block text-[11px] font-bold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400 truncate">
               Project Management Information System
             </p>
-          </div>
-          <div className="hidden lg:flex items-center gap-2 ml-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold tracking-[0.18em] text-emerald-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#22c55e] animate-pulse" />
-            SISTEM ONLINE
           </div>
         </div>
 
@@ -942,30 +974,30 @@ export default function CategoriesPage() {
           {phase !== "hq" && (
             <button
               onClick={handleReplayIntro}
-              className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all cursor-pointer font-['Orbitron',sans-serif]"
+              className="flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2 min-h-10 min-w-10 rounded-xl bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all cursor-pointer font-orbitron focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
               title="Putar ulang intro gedung 3D (reset intro)"
+              aria-label="Putar ulang intro gedung 3D"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="hidden sm:block">Putar Intro</span>
             </button>
           )}
 
-          {/* Toggle tema — halaman ini selalu berlatar gelap, jadi paksa gaya tombol
-              bergaya gelap (tanpa ini, di tema terang tombolnya hampir tak terlihat). */}
-          <ThemeToggle className="bg-white/5! border-white/10! text-slate-300! hover:text-yellow-400!" />
+          {/* Toggle tema — halaman ini sekarang adaptif terang/gelap. */}
+          <ThemeToggle />
 
           {/* Panduan pengguna (PDF) */}
           <a
-            href="/Panduan-Input-Detail-Proyek.pdf"
+            href="/Panduan-Input-Detail-Proyek.pdf?v=20261024"
             target="_blank"
             rel="noopener noreferrer"
             download
-            className="flex items-center justify-center gap-1.5 text-slate-400 hover:text-yellow-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/5 backdrop-blur border border-white/5 hover:border-yellow-500/30 group"
+            className="flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-yellow-400 transition-all p-2 min-h-10 min-w-10 sm:px-4 sm:py-2.5 rounded-xl bg-white/70 dark:bg-white/5 backdrop-blur border border-black/10 dark:border-white/5 hover:border-yellow-500/30 group focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
             title="Unduh Panduan Pengisian Detail Proyek (PDF)"
             aria-label="Unduh panduan pengisian detail proyek (PDF)"
           >
-            <BookOpen className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">
+            <BookOpen className="w-4 h-4 group-hover:scale-110 transition-transform" aria-hidden="true" />
+            <span className="text-[11px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">
               Panduan
             </span>
           </a>
@@ -975,15 +1007,18 @@ export default function CategoriesPage() {
             <div className="relative">
               <button
                 onClick={() => setShowProfile((p) => !p)}
-                className="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-xl bg-white/5 backdrop-blur border border-white/5 hover:border-yellow-500/30 transition-all"
+                className="flex items-center gap-2 px-2 sm:px-3 py-2 min-h-10 min-w-10 rounded-xl bg-white/70 dark:bg-white/5 backdrop-blur border border-black/10 dark:border-white/5 hover:border-yellow-500/30 transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                 title={session.user.name || "Profil"}
                 aria-label={`Menu profil ${session.user.name || ""}`.trim()}
                 aria-expanded={showProfile}
+                aria-haspopup="menu"
               >
                 {session.user.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- avatar dari URL eksternal (SSO), domain tidak dapat dipastikan untuk next/image
                   <img
                     src={session.user.image}
-                    alt={session.user.name || ""}
+                    alt=""
+                    aria-hidden="true"
                     className="w-7 h-7 rounded-full object-cover ring-2 ring-yellow-500/30"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";
@@ -992,15 +1027,15 @@ export default function CategoriesPage() {
                 ) : (
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-500 to-yellow-700 flex items-center justify-center text-[11px] font-bold text-slate-900 shrink-0">
                     {session.user.name?.charAt(0)?.toUpperCase() || (
-                      <User className="w-3.5 h-3.5" />
+                      <User className="w-3.5 h-3.5" aria-hidden="true" />
                     )}
                   </div>
                 )}
                 <div className="hidden sm:block text-left">
-                  <p className="text-[11px] font-bold text-white leading-tight truncate max-w-[120px]">
+                  <p className="text-[11px] font-bold text-slate-900 dark:text-white leading-tight truncate max-w-[120px]">
                     {session.user.name}
                   </p>
-                  <p className="text-[9px] text-slate-400 leading-tight truncate max-w-[120px]">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight truncate max-w-[120px]">
                     {session.user.email}
                   </p>
                 </div>
@@ -1010,6 +1045,7 @@ export default function CategoriesPage() {
                 {showProfile && (
                   <>
                     <div
+                      aria-hidden="true"
                       className="fixed inset-0 z-40"
                       onClick={() => setShowProfile(false)}
                     />
@@ -1018,13 +1054,17 @@ export default function CategoriesPage() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -8, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-[260px] bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-[100] overflow-hidden"
+                      className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-[260px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl shadow-xl shadow-slate-900/15 dark:shadow-2xl z-[100] overflow-hidden select-text"
+                      role="menu"
+                      aria-label="Menu profil"
                     >
-                      <div className="p-4 border-b border-white/10 flex items-center gap-3">
+                      <div className="p-4 border-b border-black/10 dark:border-white/10 flex items-center gap-3">
                         {session.user.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- avatar dari URL eksternal (SSO), domain tidak dapat dipastikan untuk next/image
                           <img
                             src={session.user.image}
                             alt=""
+                            aria-hidden="true"
                             className="w-10 h-10 rounded-full object-cover ring-2 ring-yellow-500/20 shrink-0"
                           />
                         ) : (
@@ -1033,23 +1073,24 @@ export default function CategoriesPage() {
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-white truncate">
+                          <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
                             {session.user.name}
                           </p>
-                          <p className="text-[10px] text-slate-400 truncate">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                             {session.user.email}
                           </p>
-                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[9px] font-bold text-blue-400 uppercase tracking-wider">
-                            <ShieldAlert className="w-2.5 h-2.5" /> SSO
+                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-600/30 dark:border-blue-500/20 text-[11px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">
+                            <ShieldAlert className="w-2.5 h-2.5" aria-hidden="true" /> SSO
                           </span>
                         </div>
                       </div>
                       <div className="p-2">
                         <button
                           onClick={handleLogout}
-                          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors text-sm font-semibold"
+                          role="menuitem"
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-10 rounded-xl text-rose-700 dark:text-rose-400 hover:bg-rose-500/10 transition-colors text-sm font-semibold cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                         >
-                          <LogOut className="w-4 h-4" />
+                          <LogOut className="w-4 h-4" aria-hidden="true" />
                           Keluar / Logout
                         </button>
                       </div>
@@ -1064,11 +1105,12 @@ export default function CategoriesPage() {
           {session?.user && isSuperAdmin && (
             <button
               onClick={() => setShowPinModal(true)}
-              className="flex items-center justify-center gap-1.5 text-slate-400 hover:text-yellow-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/5 backdrop-blur border border-white/5 hover:border-yellow-500/30 group"
+              className="flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-yellow-400 transition-all p-2 min-h-10 min-w-10 sm:px-4 sm:py-2.5 rounded-xl bg-white/70 dark:bg-white/5 backdrop-blur border border-black/10 dark:border-white/5 hover:border-yellow-500/30 group focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
               title="Management"
+              aria-label="Management"
             >
-              <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
-              <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">
+              <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" aria-hidden="true" />
+              <span className="text-[11px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">
                 Management
               </span>
             </button>
@@ -1078,11 +1120,12 @@ export default function CategoriesPage() {
           {!session?.user && (
             <button
               onClick={handleLogout}
-              className="flex items-center justify-center gap-1.5 text-slate-400 hover:text-red-400 transition-all p-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/5 backdrop-blur border border-white/5 hover:border-red-500/30 group"
+              className="flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-all p-2 min-h-10 min-w-10 sm:px-4 sm:py-2.5 rounded-xl bg-white/70 dark:bg-white/5 backdrop-blur border border-black/10 dark:border-white/5 hover:border-red-500/30 group focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
               title="Logout"
+              aria-label="Logout"
             >
-              <LogOut className="w-4 h-4" />
-              <span className="text-[10px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">
+              <LogOut className="w-4 h-4" aria-hidden="true" />
+              <span className="text-[11px] sm:text-sm font-bold uppercase tracking-wider hidden sm:block">
                 Logout
               </span>
             </button>
@@ -1098,19 +1141,19 @@ export default function CategoriesPage() {
             initial={false}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20, transition: { duration: 0.3 } }}
-            className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center justify-end pb-[9vh] gap-2 pointer-events-auto text-center px-4"
-            style={{ paddingBottom: "calc(9vh + env(safe-area-inset-bottom, 0px))" }}
+            className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center justify-end pb-[9dvh] gap-2 pointer-events-auto text-center px-4"
+            style={{ paddingBottom: "calc(9dvh + env(safe-area-inset-bottom, 0px))" }}
           >
-            <h1 className="text-2xl sm:text-4xl font-black uppercase tracking-[0.14em] text-white drop-shadow-[0_0_24px_rgba(245,158,11,0.5)]">
+            <h1 className="text-2xl sm:text-4xl font-black uppercase tracking-[0.14em] text-slate-900 dark:text-white drop-shadow-[0_1px_6px_rgba(255,255,255,0.9)] dark:drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] dark:drop-shadow-[0_0_24px_rgba(245,158,11,0.5)]">
               KANTOR PUSAT
             </h1>
-            <p className="text-[11px] sm:text-xs font-semibold tracking-[0.2em] text-slate-400">
+            <p className="text-[11px] sm:text-xs font-semibold tracking-[0.2em] text-slate-700 dark:text-slate-300 drop-shadow-[0_1px_4px_rgba(255,255,255,0.9)] dark:drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
               PT BRANTAS ABIPRAYA (PERSERO)
             </p>
             <button
               ref={startButtonRef}
               onClick={onBuildingClick}
-              className="mt-3 px-6 sm:px-8 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-[0.2em] transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:shadow-[0_0_30px_rgba(245,158,11,0.8)] active:scale-95 cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+              className="mt-3 px-6 sm:px-8 py-3 min-h-11 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-[0.2em] transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:shadow-[0_0_30px_rgba(245,158,11,0.8)] active:scale-95 cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
               style={{
                 clipPath: "polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)",
               }}
@@ -1127,14 +1170,14 @@ export default function CategoriesPage() {
               transition={{ delay: 0.2, duration: 0.5 }}
               className="absolute inset-x-0 top-20 sm:top-24 z-10 flex flex-col items-center text-center pointer-events-none px-4"
             >
-              <div className="px-5 py-2 rounded-2xl bg-slate-950/80 backdrop-blur-md border border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
-                <h1 className="text-lg sm:text-2xl font-black uppercase tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+              <div className="px-5 py-2 rounded-2xl bg-white/85 dark:bg-slate-950/80 backdrop-blur-md border border-black/10 dark:border-white/10 shadow-lg shadow-slate-900/10 dark:shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
+                <h1 className="text-lg sm:text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white dark:drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
                   Pilih{" "}
-                  <span className="bg-gradient-to-r from-yellow-400 to-amber-300 bg-clip-text text-transparent">
+                  <span className="bg-gradient-to-r from-amber-600 to-yellow-600 dark:from-yellow-400 dark:to-amber-300 bg-clip-text text-transparent">
                     Divisi
                   </span>
                 </h1>
-                <p className="text-[10px] sm:text-xs text-slate-300 tracking-wider font-['Rajdhani',sans-serif] font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+                <p className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 tracking-wider font-rajdhani font-medium dark:drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
                   <span className="sm:hidden">Pilih kartu untuk masuk</span>
                   <span className="hidden sm:inline">Klik model 3D atau kartu untuk masuk</span>
                 </p>
@@ -1187,10 +1230,13 @@ export default function CategoriesPage() {
                       }}
                       initial={isReduced ? false : { opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: isHov ? -8 : 0 }}
-                      transition={{ delay: 0.3 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                      className="group min-h-[96px] text-left p-3.5 sm:p-4 backdrop-blur-md border border-white/10 transition-all flex flex-col justify-between cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                      transition={{
+                        opacity: { delay: 0.3 + i * 0.1, duration: 0.5 },
+                        y: { type: "spring", stiffness: 520, damping: 34, mass: 0.6, delay: cardsEntered ? 0 : 0.3 + i * 0.1 },
+                      }}
+                      onAnimationComplete={() => { if (i === ORDER.length - 1) setCardsEntered(true); }}
+                      className="group min-h-[96px] text-left p-3.5 sm:p-4 border border-black/10 dark:border-white/10 bg-white/95 dark:bg-[rgba(15,23,42,0.92)] shadow-lg shadow-slate-900/10 dark:shadow-none transition-[box-shadow] duration-200 flex flex-col justify-between cursor-pointer select-text focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                       style={{
-                        background: "rgba(15,23,42,.78)",
                         borderTop: `3px solid ${t.accentHex}`,
                         clipPath: "polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%)",
                         boxShadow: isHov ? `0 0 28px -4px ${t.accentHex}` : undefined,
@@ -1199,37 +1245,38 @@ export default function CategoriesPage() {
                     <div>
                       <div className="flex items-center justify-between">
                         <span
-                          className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] font-mono"
-                          style={{ color: t.accentHex }}
+                          className="text-[11px] md:text-xs font-bold uppercase tracking-[0.2em] font-mono"
+                          style={{ color: accentText(t.accentHex) }}
                         >
                           {t.short}
                         </span>
                         <div
-                          className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity font-mono uppercase"
-                          style={{ color: t.accentHex }}
+                          className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity font-mono uppercase"
+                          style={{ color: accentText(t.accentHex) }}
                         >
-                          MASUK <ArrowRight className="w-3 h-3" />
+                          MASUK <ArrowRight className="w-3 h-3" aria-hidden="true" />
                         </div>
                       </div>
-                      <h3 className="mt-1 text-sm md:text-base font-black uppercase tracking-tight text-white leading-tight">
+                      <h3 className="mt-1 text-sm md:text-base font-black uppercase tracking-tight text-slate-900 dark:text-white leading-tight">
                         {t.title}
                       </h3>
-                      <p className="mt-1 text-xs text-slate-400 leading-snug hidden sm:block line-clamp-2">
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 leading-snug hidden sm:block line-clamp-2">
                         {t.tagline}
                       </p>
                     </div>
 
-                    <div className="mt-3 pt-2 border-t border-white/10 flex flex-col gap-1 text-[10px] sm:text-[11px] text-slate-300 font-mono font-medium">
+                    <div className="mt-3 pt-2 border-t border-black/10 dark:border-white/10 flex flex-col gap-1 text-[11px] text-slate-600 dark:text-slate-300 font-mono font-medium">
                       <div className="flex items-center justify-between">
                         <span>
                           {pCount} proyek · {cCount} kategori
                         </span>
-                        <span className="sm:hidden text-[10px] font-bold" style={{ color: t.accentHex }}>
+                        <span className="sm:hidden text-[11px] font-bold" style={{ color: accentText(t.accentHex) }}>
                           MASUK ▶
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-slate-400">
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                         <span
+                          aria-hidden="true"
                           className={`inline-block w-2 h-2 rounded-full shrink-0 ${tier === "good" && !isReduced ? "animate-pulse" : ""}`}
                           style={{ backgroundColor: tierColor }}
                         />
@@ -1252,9 +1299,10 @@ export default function CategoriesPage() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 30, transition: { duration: 0.25 } }}
                 transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute z-20 bottom-0 sm:bottom-auto top-auto sm:top-20 left-0 sm:left-auto right-0 sm:right-8 w-full sm:w-[440px] max-w-[100vw] sm:max-w-[440px] max-h-[82vh] sm:max-h-[calc(100vh-100px)] flex flex-col p-4 sm:p-6 backdrop-blur-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-t-2xl sm:rounded-2xl"
+                className="absolute z-20 bottom-0 sm:bottom-auto top-auto sm:top-20 left-0 sm:left-auto right-0 sm:right-8 w-full sm:w-[440px] max-w-[100vw] sm:max-w-[440px] max-h-[82dvh] sm:max-h-[calc(100dvh-100px)] flex flex-col p-4 sm:p-6 border border-black/10 dark:border-white/10 bg-white/95 dark:bg-[rgba(15,23,42,0.92)] shadow-xl shadow-slate-900/15 dark:shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-t-2xl sm:rounded-2xl select-text"
+                role="dialog"
+                aria-label={`Level dan kategori ${currentTheme.title}`}
                 style={{
-                  background: "rgba(15,23,42,0.92)",
                   borderLeft: `4px solid ${currentTheme.accentHex}`,
                   boxShadow: `0 0 35px -8px ${currentTheme.accentHex}50`,
                   paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
@@ -1263,14 +1311,14 @@ export default function CategoriesPage() {
                 {/* ── Area Atas Sticky / Fixed ──────────────────────────────── */}
                 <div className="shrink-0">
                   {/* Handle indikator mobile sheet */}
-                  <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 sm:hidden" />
+                  <div aria-hidden="true" className="w-10 h-1 bg-black/20 dark:bg-white/20 rounded-full mx-auto mb-3 sm:hidden" />
 
                   {/* Tombol Back */}
                   <button
                     onClick={handleBackToSplit}
-                    className="flex items-center gap-2 px-3 py-1.5 mb-3 text-[11px] font-bold tracking-[0.18em] uppercase border border-white/20 text-slate-300 hover:text-white hover:border-white/50 bg-white/5 hover:bg-white/10 transition-all cursor-pointer font-['Orbitron',sans-serif]"
+                    className="flex items-center gap-2 px-3 py-1.5 min-h-10 mb-3 text-[11px] font-bold tracking-[0.18em] uppercase border border-black/20 dark:border-white/20 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-black/40 dark:hover:border-white/50 bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer font-orbitron focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                   >
-                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
                     KEMBALI
                   </button>
 
@@ -1278,14 +1326,15 @@ export default function CategoriesPage() {
                   <div className="mb-3">
                     <div className="flex items-center justify-between gap-2">
                       <small
-                        className="font-bold text-[11px] uppercase tracking-[0.22em] font-['Orbitron',sans-serif]"
-                        style={{ color: currentTheme.accentHex }}
+                        className="font-bold text-[11px] uppercase tracking-[0.22em] font-orbitron"
+                        style={{ color: accentText(currentTheme.accentHex) }}
                       >
                         {currentTheme.short}
                       </small>
                       {/* Lencana status CCTV divisi */}
-                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-slate-200">
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/70 dark:bg-white/5 border border-black/10 dark:border-white/10 text-[11px] font-mono text-slate-700 dark:text-slate-200">
                         <span
+                          aria-hidden="true"
                           className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusTier(currentDivData?.cameraTotal, currentDivData?.cameraOnline) === "good" && !isReduced ? "animate-pulse" : ""}`}
                           style={{
                             backgroundColor: statusTierColor(
@@ -1301,12 +1350,12 @@ export default function CategoriesPage() {
                         </span>
                       </div>
                     </div>
-                    <h2 className="mt-0.5 text-lg sm:text-2xl font-black uppercase tracking-tight text-white font-['Orbitron',sans-serif]">
+                    <h2 className="mt-0.5 text-lg sm:text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white font-orbitron">
                       {currentTheme.title}
                     </h2>
-                    <p className="mt-1 text-xs text-slate-300 font-['Rajdhani',sans-serif] flex items-center gap-1.5 font-medium">
-                      <span className="font-mono font-bold text-white">{totalProjects} proyek</span>
-                      <span className="text-slate-500">·</span>
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-rajdhani flex items-center gap-1.5 font-medium">
+                      <span className="font-mono font-bold text-slate-900 dark:text-white">{totalProjects} proyek</span>
+                      <span aria-hidden="true" className="text-slate-400 dark:text-slate-500">·</span>
                       <span>urut dari proyek terbanyak</span>
                     </p>
                   </div>
@@ -1321,20 +1370,19 @@ export default function CategoriesPage() {
                       handleLevelClick(currentDivKey);
                     }}
                     onFocus={() => setFocusRowIndex(0)}
-                    className={`w-full flex items-center justify-between px-4 py-3 mb-3.5 font-['Orbitron',sans-serif] font-black text-xs sm:text-sm tracking-wider uppercase transition-all shadow-lg hover:brightness-110 active:scale-[0.99] cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ${
+                    className={`w-full flex items-center justify-between px-4 py-3 min-h-11 mb-3.5 text-slate-950 dark:text-white dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.35)] font-orbitron font-black text-xs sm:text-sm tracking-wider uppercase transition-all shadow-lg hover:brightness-110 active:scale-[0.99] cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
                       isDivisionsLoading ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                     } ${
                       focusRowIndex === 0 ? "ring-2 ring-white shadow-[0_0_20px_rgba(255,255,255,0.3)]" : ""
                     }`}
                     style={{
                       background: currentTheme.accentHex,
-                      color: "#070d18",
                       clipPath: "polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%)",
                     }}
                   >
                     <span className="flex items-center gap-2">
                       <span>SEMUA PROYEK DIVISI INI</span>
-                      <span className="px-1.5 py-0.5 text-[10px] font-mono bg-black/25 text-black font-bold rounded">
+                      <span className="px-1.5 py-0.5 text-[11px] font-mono bg-black/15 dark:bg-black/25 text-slate-950 dark:text-white font-bold rounded">
                         {totalProjects}
                       </span>
                     </span>
@@ -1344,33 +1392,35 @@ export default function CategoriesPage() {
                   {/* Kolom Pencarian (Tampil bila kategori > 8) */}
                   {sortedItems.length > 8 && (
                     <div className="relative mb-3">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Search aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         ref={searchInputRef}
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Cari kategori... (tekan / untuk fokus)"
-                        className="w-full pl-9 pr-8 py-2 text-xs bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-white/30 transition-all font-['Rajdhani',sans-serif] font-medium focus-visible:ring-2 focus-visible:ring-amber-400"
+                        aria-label="Cari kategori"
+                        className="w-full pl-9 pr-10 py-2 min-h-10 text-xs bg-white/70 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:border-black/30 dark:focus:border-white/30 transition-all font-rajdhani font-medium focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                       />
                       {searchQuery && (
                         <button
                           onClick={() => setSearchQuery("")}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                          className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                           title="Hapus pencarian"
+                          aria-label="Hapus pencarian"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <X className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
                       )}
                     </div>
                   )}
 
                   {/* Bar Header Kategori */}
-                  <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 font-['Orbitron',sans-serif]">
+                  <div className="flex items-center justify-between mb-2 pb-2 border-b border-black/10 dark:border-white/10">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 font-orbitron">
                       {isSearching ? "HASIL PENCARIAN" : "PILIH LEVEL / KATEGORI"}
                     </span>
-                    <span className="text-[10px] font-bold tracking-wider text-slate-400 font-mono">
+                    <span className="text-[11px] font-bold tracking-wider text-slate-500 dark:text-slate-400 font-mono">
                       {isDivisionsLoading ? "…" : `${filteredItems.length} Kategori`}
                     </span>
                   </div>
@@ -1379,25 +1429,25 @@ export default function CategoriesPage() {
                 {/* ── Daftar Kategori (Area Scroll Mandiri) ────────────────── */}
                 <div
                   ref={listRef}
-                  className="flex-1 overflow-y-auto overscroll-contain px-1.5 py-1 space-y-2 min-h-0"
+                  className="flex-1 overflow-y-auto overscroll-contain px-1.5 py-1 space-y-2 min-h-0 select-text"
                 >
                   {isDivisionsLoading ? (
                     <div className="space-y-2 py-1">
                       {[...Array(5)].map((_, i) => (
                         <div
                           key={i}
-                          className="w-full h-12 rounded-lg bg-white/5 border border-white/5 animate-pulse flex items-center px-3.5 gap-3 pointer-events-none"
+                          className="w-full h-12 rounded-lg bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 animate-pulse flex items-center px-3.5 gap-3 pointer-events-none"
                         >
-                          <div className="w-5 h-4 bg-white/10 rounded" />
+                          <div className="w-5 h-4 bg-black/10 dark:bg-white/10 rounded" />
                           <div className="flex-1 space-y-1.5">
-                            <div className="w-3/4 h-3 bg-white/10 rounded" />
-                            <div className="w-1/3 h-2 bg-white/5 rounded" />
+                            <div className="w-3/4 h-3 bg-black/10 dark:bg-white/10 rounded" />
+                            <div className="w-1/3 h-2 bg-black/5 dark:bg-white/5 rounded" />
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : displayedItems.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-slate-400 font-['Rajdhani',sans-serif]">
+                    <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 font-rajdhani">
                       Tidak ada kategori yang cocok dengan &ldquo;{searchQuery}&rdquo;.
                     </div>
                   ) : (
@@ -1416,38 +1466,39 @@ export default function CategoriesPage() {
                           aria-label={`${cat.name}, ${pCount} proyek, ${cat.cameraOnline ?? 0} dari ${cat.cameraTotal ?? 0} CCTV online`}
                           onClick={() => handleLevelClick(currentDivKey, cat.identifier)}
                           onFocus={() => setFocusRowIndex(idx + 1)}
-                          className={`group relative overflow-hidden w-full flex items-center gap-3 px-3.5 py-2.5 sm:py-3 text-left bg-white/[0.04] hover:bg-white/[0.12] border transition-all cursor-pointer rounded-lg scroll-my-1 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ${
+                          className={`group relative overflow-hidden w-full flex items-center gap-3 px-3.5 py-2.5 sm:py-3 min-h-11 text-left bg-white/70 dark:bg-white/[0.04] hover:bg-black/5 dark:hover:bg-white/[0.12] border transition-all cursor-pointer rounded-lg scroll-my-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
                             focusRowIndex === idx + 1
-                              ? "border-amber-400 bg-white/[0.12] ring-1 ring-amber-400/50"
-                              : "border-white/10"
+                              ? "border-amber-500 dark:border-amber-400 bg-black/5 dark:bg-white/[0.12] ring-1 ring-amber-500/50 dark:ring-amber-400/50"
+                              : "border-black/10 dark:border-white/10"
                           }`}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.borderColor = currentTheme.accentHex;
                             e.currentTarget.style.transform = "translateX(-3px)";
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.borderColor = focusRowIndex === idx + 1 ? "#f59e0b" : "rgba(255,255,255,0.1)";
+                            e.currentTarget.style.borderColor = focusRowIndex === idx + 1 ? "#f59e0b" : "";
                             e.currentTarget.style.transform = "none";
                           }}
                         >
                           {/* Nomor urut */}
                           <span
-                            className="font-bold text-xs font-['Orbitron',sans-serif] shrink-0"
-                            style={{ color: currentTheme.accentHex }}
+                            className="font-bold text-xs font-orbitron shrink-0"
+                            style={{ color: accentText(currentTheme.accentHex) }}
                           >
                             {String(idx + 1).padStart(2, "0")}
                           </span>
 
                           {/* Nama & Jumlah Proyek + Chip CCTV */}
                           <div className="flex-1 min-w-0 pr-2">
-                            <p className="text-xs sm:text-sm font-bold text-white group-hover:text-yellow-300 transition-colors truncate font-['Rajdhani',sans-serif]">
+                            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-amber-700 dark:group-hover:text-yellow-300 transition-colors truncate font-rajdhani">
                               {cat.name}
                             </p>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                               <span>{pCount} proyek</span>
                               {(cat.cameraTotal ?? 0) > 0 && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] text-slate-300">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-[11px] text-slate-700 dark:text-slate-300">
                                   <span
+                                    aria-hidden="true"
                                     className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusTier(cat.cameraTotal, cat.cameraOnline) === "good" && !isReduced ? "animate-pulse" : ""}`}
                                     style={{
                                       backgroundColor: statusTierColor(
@@ -1466,15 +1517,16 @@ export default function CategoriesPage() {
 
                           {/* Aksi Masuk */}
                           <span
-                            className="ml-auto flex items-center gap-1 font-bold text-[10px] tracking-[0.15em] shrink-0 font-['Orbitron',sans-serif]"
-                            style={{ color: currentTheme.accentHex }}
+                            className="ml-auto flex items-center gap-1 font-bold text-[11px] tracking-[0.15em] shrink-0 font-orbitron"
+                            style={{ color: accentText(currentTheme.accentHex) }}
                           >
                             MASUK{" "}
-                            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" aria-hidden="true" />
                           </span>
 
                           {/* Bar Tipis Proporsi Proyek di Dasar Baris */}
                           <div
+                            aria-hidden="true"
                             className="absolute bottom-0 left-0 h-[2.5px] transition-all opacity-80 group-hover:opacity-100"
                             style={{
                               width: `${barPercent}%`,
@@ -1490,16 +1542,16 @@ export default function CategoriesPage() {
                   {!isSearching && remainingCount > 0 && (
                     <button
                       onClick={() => setShowAllCategories((prev) => !prev)}
-                      className="w-full py-2.5 px-3 mt-1 text-center text-[10px] sm:text-[11px] font-bold tracking-wider text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors flex items-center justify-center gap-1.5 font-['Orbitron',sans-serif] cursor-pointer"
+                      className="w-full py-2.5 px-3 mt-1 min-h-10 text-center text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 rounded-lg transition-colors flex items-center justify-center gap-1.5 font-orbitron cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     >
                       {showAllCategories ? (
                         <>
-                          TUTUP KATEGORI LAINNYA <ChevronUp className="w-3.5 h-3.5" />
+                          TUTUP KATEGORI LAINNYA <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
                         </>
                       ) : (
                         <>
                           +{remainingCount} KATEGORI LAINNYA{" "}
-                          <ChevronDown className="w-3.5 h-3.5" />
+                          <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
                         </>
                       )}
                     </button>
@@ -1507,8 +1559,8 @@ export default function CategoriesPage() {
                 </div>
 
                 {/* ── Area Bawah / Footer Note ──────────────────────────────── */}
-                <div className="shrink-0 pt-3 border-t border-white/10 mt-3">
-                  <p className="text-[10px] text-slate-400 leading-normal font-['Rajdhani',sans-serif]">
+                <div className="shrink-0 pt-3 border-t border-black/10 dark:border-white/10 mt-3">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal font-rajdhani">
                     Daftar level bersumber dari kategori proyek Tengok. Klik level atau tekan Enter untuk membuka peta &amp; CCTV proyek.
                   </p>
                 </div>
@@ -1521,45 +1573,45 @@ export default function CategoriesPage() {
       {(phase === "hq" || phase === "explode") && (
         <button
           onClick={handleSkipIntro}
-          className="absolute bottom-6 right-6 z-30 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-slate-300 hover:text-white text-[11px] font-['Orbitron',sans-serif] font-bold uppercase tracking-wider backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+          className="absolute bottom-6 right-6 z-30 px-3.5 py-2 min-h-10 rounded-xl bg-white/80 hover:bg-white dark:bg-white/10 dark:hover:bg-white/20 border border-black/10 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[11px] font-orbitron font-bold uppercase tracking-wider backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
           title="Lewati intro gedung ke pilihan divisi (Esc/Enter)"
         >
           <span>LEWATI</span>
-          <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
+          <ArrowRight className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
         </button>
       )}
 
       {/* ── Petunjuk Tombol Keyboard di Bawah Layar (Hanya Desktop / Non-Sentuh) ── */}
       <div className="pointer-events-none fixed bottom-3 inset-x-0 z-20 hidden md:flex [@media(hover:none)]:hidden items-center justify-center">
-        <div className="px-3.5 py-1.5 rounded-full bg-slate-950/75 border border-white/10 backdrop-blur-md text-[10px] text-slate-400 font-mono tracking-wider flex items-center gap-2 shadow-xl">
+        <div className="px-3.5 py-1.5 rounded-full bg-white/90 dark:bg-slate-950/75 border border-black/10 dark:border-white/10 backdrop-blur-md text-[11px] text-slate-600 dark:text-slate-400 font-mono tracking-wider flex items-center gap-2 shadow-xl shadow-slate-900/15 dark:shadow-xl">
           {phase === "hq" && (
             <>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Space</kbd> / <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Enter</kbd> mulai</span>
-              <span className="text-slate-600">·</span>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Esc</kbd> lewati</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Space</kbd> / <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Enter</kbd> mulai</span>
+              <span aria-hidden="true" className="text-slate-400 dark:text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Esc</kbd> lewati</span>
             </>
           )}
           {phase === "explode" && (
-            <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Enter</kbd> / <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Esc</kbd> lewati</span>
+            <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Enter</kbd> / <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Esc</kbd> lewati</span>
           )}
           {phase === "split" && (
             <>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">←</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">→</kbd> pilih</span>
-              <span className="text-slate-600">·</span>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">1</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">2</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">3</kbd> pintasan</span>
-              <span className="text-slate-600">·</span>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Enter</kbd> masuk</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">←</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">→</kbd> pilih</span>
+              <span aria-hidden="true" className="text-slate-400 dark:text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">1</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">2</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">3</kbd> pintasan</span>
+              <span aria-hidden="true" className="text-slate-400 dark:text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Enter</kbd> masuk</span>
             </>
           )}
           {phase === "detail" && (
             <>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">↑</kbd> <kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">↓</kbd> pilih</span>
-              <span className="text-slate-600">·</span>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">/</kbd> cari</span>
-              <span className="text-slate-600">·</span>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Enter</kbd> masuk</span>
-              <span className="text-slate-600">·</span>
-              <span><kbd className="px-1 py-0.5 rounded bg-white/10 text-white font-bold">Esc</kbd> kembali</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">↑</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">↓</kbd> pilih</span>
+              <span aria-hidden="true" className="text-slate-400 dark:text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">/</kbd> cari</span>
+              <span aria-hidden="true" className="text-slate-400 dark:text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Enter</kbd> masuk</span>
+              <span aria-hidden="true" className="text-slate-400 dark:text-slate-600">·</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Esc</kbd> kembali</span>
             </>
           )}
         </div>
@@ -1577,34 +1629,39 @@ export default function CategoriesPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-10"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Akses Admin"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-10"
           >
             <div
-              className="absolute inset-0 bg-slate-950/80 backdrop-blur-2xl"
+              aria-hidden="true"
+              className="absolute inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-2xl"
               onClick={() => setShowPinModal(false)}
             />
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-xl bg-slate-900/60 backdrop-blur-3xl border border-white/10 rounded-[3rem] p-8 sm:p-12 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)]"
+              className="relative w-full max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white/95 dark:bg-slate-900/60 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-[3rem] p-6 sm:p-12 shadow-xl shadow-slate-900/15 dark:shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)]"
             >
               <button
                 onClick={() => setShowPinModal(false)}
-                className="absolute top-6 sm:top-10 right-6 sm:right-10 p-3 rounded-2xl bg-white/5 text-slate-400 hover:text-white transition-colors"
+                aria-label="Tutup"
+                className="absolute top-4 sm:top-10 right-4 sm:right-10 p-3 min-h-11 min-w-11 flex items-center justify-center rounded-2xl bg-black/5 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
               >
-                <X className="w-5 h-5 sm:w-6 sm:h-6" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
               </button>
 
               <div className="flex flex-col items-center text-center">
                 <div className="p-6 sm:p-8 rounded-[2.5rem] bg-yellow-500/10 mb-8 sm:mb-10 shadow-2xl shadow-yellow-500/5">
-                  <ShieldAlert className="w-10 h-10 sm:w-12 sm:h-12 text-yellow-500 stroke-[2.5]" />
+                  <ShieldAlert aria-hidden="true" className="w-10 h-10 sm:w-12 sm:h-12 text-yellow-700 dark:text-yellow-500 stroke-[2.5]" />
                 </div>
 
-                <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight uppercase mb-3 px-4">
+                <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white tracking-tight uppercase mb-3 px-4">
                   Admin Access
                 </h2>
-                <p className="text-slate-400 text-xs sm:text-sm font-bold uppercase tracking-wider opacity-60 mb-10 sm:mb-12">
+                <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm font-bold uppercase tracking-wider dark:opacity-60 mb-10 sm:mb-12">
                   Masukkan PIN management rahasia
                 </p>
 
@@ -1619,12 +1676,13 @@ export default function CategoriesPage() {
                       value={digit}
                       onChange={(e) => handlePinChange(index, e.target.value)}
                       onKeyDown={(e) => handleKeyDown(index, e)}
-                      className="w-10 h-14 sm:w-16 sm:h-20 bg-slate-950/50 border-2 border-white/10 rounded-2xl sm:rounded-3xl text-center text-2xl sm:text-4xl font-bold text-white focus:border-yellow-500/50 focus:outline-none transition-all shadow-2xl"
+                      aria-label={`Digit PIN ${index + 1}`}
+                      className="w-10 h-14 sm:w-16 sm:h-20 bg-slate-100 dark:bg-slate-950/50 border-2 border-black/10 dark:border-white/10 rounded-2xl sm:rounded-3xl text-center text-2xl sm:text-4xl font-bold text-slate-900 dark:text-white focus:border-yellow-600/70 dark:focus:border-yellow-500/50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none transition-all shadow-xl shadow-slate-900/10 dark:shadow-2xl"
                     />
                   ))}
                 </div>
 
-                <p className="text-slate-500 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
+                <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wider">
                   Unauthorized access is strictly prohibited
                 </p>
               </div>
