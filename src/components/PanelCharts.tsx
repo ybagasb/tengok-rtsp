@@ -304,8 +304,11 @@ export function StackedBar({
 // ── Kurva S ──────────────────────────────────────────────────────────────────
 // Tiga seri kumulatif Jan–Des (persen terhadap nilai kontrak): RA RKAP, RA
 // Eksternal (garis putus), dan RI/realisasi internal (garis tebal, berhenti di
-// bulan terakhir yang dilaporkan). Hover/sentuh atau panah kiri/kanan memilih bulan.
+// bulan terakhir yang dilaporkan). Di bawah grafik: legenda berisi nilai % | Rp
+// bulan terpilih, penanda PU terhadap RKAP, dan tabel nilai Rp miliar per bulan.
+// Hover/sentuh/klik kolom, atau panah kiri/kanan, memilih bulan.
 const fPct = (v?: number) => (v == null ? '-' : `${v.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`);
+const fMil1 = (v: number) => (v / 1e9).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 export function SCurveChart({ data }: { data: KurvaSData }) {
     const { theme } = useTheme();
@@ -352,11 +355,25 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
         } else if (e.key === 'Escape') setHover(null);
     };
 
+    const rp = (pct?: number) => (pct == null ? undefined : (pct / 100) * data.basis);
     const rkap = data.rkap[idx];
     const eks = data.eksternal[idx];
     const ri = data.ri[idx];
     const dev = ri != null && rkap != null ? ri - rkap : undefined;
-    const readout = `${BULAN_SINGKAT[idx]} ${data.tahun}: RKAP ${fPct(rkap)}, Eksternal ${fPct(eks)}, Realisasi ${fPct(ri)}`;
+    const puPct = data.pu != null && data.puRkap ? (data.pu / data.puRkap) * 100 : undefined;
+    const valueText = (pct?: number) => (pct == null ? '-' : `${fPct(pct)} | Rp${fMil1(rp(pct) as number)} M`);
+    const readout = `${BULAN_SINGKAT[idx]} ${data.tahun}: RKAP ${valueText(rkap)}, Eksternal ${valueText(eks)}, Realisasi ${valueText(ri)}`;
+
+    const rows = [
+        { label: 'RA RKAP', color: cRkap, vals: data.rkap },
+        { label: 'RA Extern', color: cEks, vals: data.eksternal },
+        { label: 'RI', color: cRi, vals: data.ri },
+    ];
+    const legend = [
+        { label: 'Rencana (RKAP)', value: rkap, swatch: <i className="w-4 border-t-2 border-dashed" style={{ borderColor: cRkap }} aria-hidden="true" /> },
+        { label: 'Eksternal', value: eks, swatch: <i className="w-4 border-t-2 border-dotted" style={{ borderColor: cEks }} aria-hidden="true" /> },
+        { label: 'Internal (RI)', value: ri, swatch: <i className="w-4 border-t-[3px]" style={{ borderColor: cRi }} aria-hidden="true" /> },
+    ];
 
     return (
         <div
@@ -367,56 +384,84 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
             onBlur={() => setHover(null)}
             className="rounded-xl focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"
         >
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" aria-hidden="true">
-                {ticks.map(t => (
-                    <g key={t}>
-                        <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke={grid} strokeWidth="1" />
-                        <text x={L - 4} y={y(t) + 3} textAnchor="end" fontSize="8" fill={txt}>{Math.round(t)}</text>
-                    </g>
-                ))}
-                {BULAN_SINGKAT.map((b, i) => (
-                    i % 2 === 0 ? <text key={b} x={x(i)} y={H - 7} textAnchor="middle" fontSize="8" fill={txt}>{b}</text> : null
-                ))}
-                {/* penanda bulan terpilih */}
-                <line x1={x(idx)} x2={x(idx)} y1={T} y2={H - B} stroke={txt} strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
-                <path d={path(data.rkap)} fill="none" stroke={cRkap} strokeWidth="1.8" strokeDasharray="5 3" strokeLinejoin="round" />
-                <path d={path(data.eksternal)} fill="none" stroke={cEks} strokeWidth="1.8" strokeDasharray="2 3" strokeLinejoin="round" />
-                <path d={path(data.ri)} fill="none" style={{ stroke: cRi }} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
-                {data.ri.map((v, i) => (typeof v === 'number' ? <circle key={i} cx={x(i)} cy={y(v)} r={i === idx ? 4 : 2.2} style={{ fill: cRi }} /> : null))}
-                {typeof rkap === 'number' && <circle cx={x(idx)} cy={y(rkap)} r="3.2" fill={cRkap} />}
-                {typeof eks === 'number' && <circle cx={x(idx)} cy={y(eks)} r="3.2" fill={cEks} />}
-                {/* area interaksi */}
-                <rect x={L} y={T} width={W - L - R} height={H - T - B} fill="transparent" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)} style={{ touchAction: 'pan-y' }} />
-            </svg>
-
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
-                <span className="inline-flex items-center gap-1"><i className="w-4 border-t-2 border-dashed" style={{ borderColor: cRkap }} aria-hidden="true" /> RA RKAP</span>
-                <span className="inline-flex items-center gap-1"><i className="w-4 border-t-2 border-dotted" style={{ borderColor: cEks }} aria-hidden="true" /> RA Eksternal</span>
-                <span className="inline-flex items-center gap-1"><i className="w-4 border-t-[3px]" style={{ borderColor: cRi }} aria-hidden="true" /> RI (Realisasi)</span>
+            <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                    Progres % · Nilai Rp miliar · {data.basisFromContract ? `Basis kontrak Rp${fMil1(data.basis)} M` : 'Basis nilai terbesar pada seri'}
+                </p>
+                {data.pu != null && data.puRkap ? (
+                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-[rgba(var(--div-accent-rgb),0.35)] bg-[rgba(var(--div-accent-rgb),0.1)] text-slate-800 dark:text-slate-100">
+                        PU: Rp{fMil1(data.pu)} M | {(puPct as number).toLocaleString('id-ID', { maximumFractionDigits: 1 })}% dari RKAP Rp{fMil1(data.puRkap)} M
+                    </span>
+                ) : null}
             </div>
 
-            <div className="grid grid-cols-4 gap-1.5 mt-2" aria-live="polite" aria-label={readout}>
-                <div className="p-2 rounded-lg bg-black/[0.03] dark:bg-white/[0.04] text-center">
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase">{BULAN_SINGKAT[idx]}</div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">{data.tahun}</div>
-                </div>
-                <div className="p-2 rounded-lg bg-black/[0.03] dark:bg-white/[0.04] text-center">
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">RKAP</div>
-                    <div className="text-xs font-black text-slate-900 dark:text-white">{fPct(rkap)}</div>
-                </div>
-                <div className="p-2 rounded-lg bg-black/[0.03] dark:bg-white/[0.04] text-center">
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">Eksternal</div>
-                    <div className="text-xs font-black text-slate-900 dark:text-white">{fPct(eks)}</div>
-                </div>
-                <div className="p-2 rounded-lg bg-black/[0.03] dark:bg-white/[0.04] text-center">
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">Realisasi</div>
-                    <div className="text-xs font-black text-slate-900 dark:text-white">{fPct(ri)}</div>
-                    {dev !== undefined && (
-                        <div className={`text-[11px] font-bold ${dev >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {dev >= 0 ? '+' : ''}{dev.toLocaleString('id-ID', { maximumFractionDigits: 1 })}
-                        </div>
-                    )}
-                </div>
+            <div className="max-w-[560px] mx-auto">
+                <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" aria-hidden="true">
+                    {ticks.map(t => (
+                        <g key={t}>
+                            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke={grid} strokeWidth="1" />
+                            <text x={L - 4} y={y(t) + 3} textAnchor="end" fontSize="8" fill={txt}>{Math.round(t)}</text>
+                        </g>
+                    ))}
+                    {BULAN_SINGKAT.map((b, i) => (
+                        i % 2 === 0 ? <text key={b} x={x(i)} y={H - 7} textAnchor="middle" fontSize="8" fill={txt}>{b}</text> : null
+                    ))}
+                    {/* penanda bulan terpilih */}
+                    <line x1={x(idx)} x2={x(idx)} y1={T} y2={H - B} stroke={txt} strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
+                    <path d={path(data.rkap)} fill="none" stroke={cRkap} strokeWidth="1.8" strokeDasharray="5 3" strokeLinejoin="round" />
+                    <path d={path(data.eksternal)} fill="none" stroke={cEks} strokeWidth="1.8" strokeDasharray="2 3" strokeLinejoin="round" />
+                    <path d={path(data.ri)} fill="none" style={{ stroke: cRi }} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+                    {data.ri.map((v, i) => (typeof v === 'number' ? <circle key={i} cx={x(i)} cy={y(v)} r={i === idx ? 4 : 2.2} style={{ fill: cRi }} /> : null))}
+                    {typeof rkap === 'number' && <circle cx={x(idx)} cy={y(rkap)} r="3.2" fill={cRkap} />}
+                    {typeof eks === 'number' && <circle cx={x(idx)} cy={y(eks)} r="3.2" fill={cEks} />}
+                    {/* area interaksi */}
+                    <rect x={L} y={T} width={W - L - R} height={H - T - B} fill="transparent" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)} style={{ touchAction: 'pan-y' }} />
+                </svg>
+            </div>
+
+            {/* Legenda dengan nilai bulan terpilih: "x% | Rp y M" */}
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-700 dark:text-slate-200 font-semibold" aria-live="polite" aria-label={readout}>
+                <span className="px-2 py-0.5 rounded-md bg-black/[0.05] dark:bg-white/[0.08] text-slate-600 dark:text-slate-300 font-bold">
+                    {BULAN_SINGKAT[idx]} {data.tahun}
+                </span>
+                {legend.map(l => (
+                    <span key={l.label} className="inline-flex items-center gap-1.5">
+                        {l.swatch} {l.label}: <span className="font-black text-slate-900 dark:text-white">{valueText(l.value)}</span>
+                    </span>
+                ))}
+                {dev !== undefined && (
+                    <span className={`font-bold ${dev >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                        Deviasi {dev >= 0 ? '+' : ''}{dev.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%
+                    </span>
+                )}
+            </div>
+
+            {/* Tabel nilai per bulan (Rp miliar) */}
+            <div className="mt-2 overflow-x-auto rounded-xl border border-black/[0.06] dark:border-white/[0.06]">
+                <table className="w-full text-[11px] font-mono" aria-label={`Nilai Kurva S ${data.tahun} per bulan, dalam Rp miliar`}>
+                    <thead>
+                        <tr className="bg-black/[0.03] dark:bg-white/[0.04] text-slate-600 dark:text-slate-400">
+                            <th scope="col" className="sticky left-0 bg-slate-100 dark:bg-slate-900 text-left font-sans font-bold px-2 py-1.5 whitespace-nowrap">Rp miliar</th>
+                            {BULAN_SINGKAT.map((b, i) => (
+                                <th key={b} scope="col" onClick={() => setHover(i)} className={`px-1.5 py-1.5 text-right font-sans font-bold cursor-pointer ${i === idx ? 'text-slate-900 dark:text-white' : ''}`}>{b}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map(r => (
+                            <tr key={r.label} className="border-t border-black/[0.06] dark:border-white/[0.06]">
+                                <th scope="row" className="sticky left-0 bg-slate-100 dark:bg-slate-900 text-left font-sans font-bold px-2 py-1.5 whitespace-nowrap text-slate-700 dark:text-slate-200">
+                                    <i className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: r.color }} aria-hidden="true" />{r.label}
+                                </th>
+                                {r.vals.map((v, i) => (
+                                    <td key={i} onClick={() => setHover(i)} className={`px-1.5 py-1.5 text-right whitespace-nowrap cursor-pointer text-slate-800 dark:text-slate-100 ${i === idx ? 'bg-black/[0.06] dark:bg-white/[0.09] font-black' : ''}`}>
+                                        {typeof v === 'number' ? fMil1(rp(v) as number) : '-'}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
@@ -477,7 +522,7 @@ export function CashflowChart({ points, tahun }: { points: CashflowPoint[]; tahu
             <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
                 <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: cIn }} aria-hidden="true" /> Cash In</span>
                 <span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: cOut }} aria-hidden="true" /> Cash Out</span>
-                <span className="ml-auto text-slate-500 dark:text-slate-400 font-medium">Rp miliar</span>
+                <span className="ml-auto text-slate-600 dark:text-slate-400 font-medium">Rp miliar</span>
             </div>
             <table className="sr-only">
                 <caption>Arus kas bulanan {tahun}</caption>
@@ -509,13 +554,13 @@ export function HasilUsahaTable({ bulanIni, sdBulanIni, rencana }: {
         ...(rencana ? [{ id: 'rc', head: 'Rencana', data: rencana }] : []),
     ];
     const tone = (k: keyof HasilUsahaPeriode, v?: number) =>
-        v != null && v < 0 && (k === 'ebitda' || k === 'labaBersih') ? 'text-rose-500' : 'text-slate-900 dark:text-white';
+        v != null && v < 0 && (k === 'ebitda' || k === 'labaBersih') ? 'text-rose-700 dark:text-rose-400' : 'text-slate-900 dark:text-white';
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
                 <caption className="sr-only">Hasil usaha: bulan ini, sampai bulan ini, dan rencana</caption>
                 <thead>
-                    <tr className="text-slate-500 dark:text-slate-400">
+                    <tr className="text-slate-600 dark:text-slate-400">
                         <th scope="col" className="text-left font-bold uppercase tracking-wider pb-1.5 pr-2" />
                         {cols.map(c => <th key={c.id} scope="col" className="text-right font-bold uppercase tracking-wider pb-1.5 pl-2 whitespace-nowrap">{c.head}</th>)}
                     </tr>
@@ -533,7 +578,7 @@ export function HasilUsahaTable({ bulanIni, sdBulanIni, rencana }: {
                                     <td key={c.id} className={`text-right font-mono font-black py-1.5 pl-2 whitespace-nowrap ${tone(r.key, v)}`}>
                                         {fRpShort(v)}
                                         {(hp != null || showAch) && (
-                                            <span className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                            <span className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
                                                 {hp != null && `${hp.toLocaleString('id-ID', { maximumFractionDigits: 1 })}% PU`}
                                                 {showAch && r.key !== 'hpp' && `${((v / planV) * 100).toLocaleString('id-ID', { maximumFractionDigits: 1 })}% rencana`}
                                             </span>

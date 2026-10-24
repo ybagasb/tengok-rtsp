@@ -36,7 +36,12 @@ const BACKUP = path.join(process.cwd(), '.auth', 'kendari-laporan-backup.json');
 const LEGACY_FIELDS = [
     'cpi', 'spi', 'tagihanBruto', 'hasilUsaha', 'pu', 'bk', 'lk', 'cashIn', 'cashOut', 'saldoKas',
     'progressPercent', 'progressRencana', 'progressDeviasi',
+    'saldoHutang', 'bad', 'piutang', 'ccc',
 ] as const;
+// Nilai asli SR Kendari (CASHFLOW AGT 2026 / PPT SR Sultra) yang HARUS tetap manual:
+// BK berbeda dari HPP (dasar berbeda) dan progres fisik bukan turunan Kurva S (Kurva S berbasis PU).
+const BK_MANUAL = 372_556_100_000;
+const PROGRESS_FISIK_ASLI = 99;
 const NEW_FIELDS = ['laporanBulanan', 'rencanaKurvaS', 'cashInAwal', 'cashOutAwal'] as const;
 
 // ── Angka tetap dari data SR Kendari (Agustus 2026) ──────────────────────────
@@ -55,11 +60,16 @@ const PAGU_TOTAL = 330_000_000_000;
 // ── Bentuk kurva (persen kumulatif dari nilai kontrak), Jan..Des 2026 ─────────
 const PLAN_RKAP_PCT = [14, 28, 44, 60, 74, 85, 94, 100, 100, 100, 100, 100];
 const PLAN_EKS_PCT = [12, 25, 40, 55, 69, 81, 91, 98, 100, 100, 100, 100];
-const RI_PCT = [12.8, 26.1, 41.5, 56.9, 71.2, 83.0, 92.4, 99.27];   // Jan..Agt
+const RI_PCT = [12.8, 26.1, 41.5, 56.9, 71.2, 83.0, 92.4, 99.27];   // bentuk kurva realisasi (membentuk pendapatan s.d & BCWP)
 const N = RI_PCT.length;
 const HPP_JITTER = [0.012, -0.006, 0.009, -0.004, 0.007, -0.003, 0.004, 0];
 const TAGIHAN = [31, 28, 36, 40, 33, 42, 45, 49].map(v => v * 1e9);
 const TARGET_TAGIHAN = [35, 30, 40, 45, 40, 45, 50, 55].map(v => v * 1e9);
+// Posisi keuangan akhir periode. Agustus = nilai asli; bulan lain DUMMY (tren naik).
+const HUTANG = [60, 68, 75, 82, 88, 92, 95, 97.78361].map(v => Math.round(v * 1e9));
+const BAD = [30, 32, 35, 37, 39, 40, 41, 42.99324].map(v => Math.round(v * 1e9));
+const PIUTANG = [14, 15, 17, 18, 19, 20, 21, 21.47374].map(v => Math.round(v * 1e9));
+const CCC = [95, 100, 105, 110, 115, 118, 119, 120];
 const PAKET_REAL = [4, 10, 17, 26, 35, 44, 52, 57];
 const PAGU_FRAC = [0.05, 0.14, 0.26, 0.41, 0.57, 0.72, 0.86, 0.95];
 const CASH_IN_W = [0.09, 0.11, 0.13, 0.15, 0.14, 0.15, 0.12, 0.11];
@@ -106,13 +116,13 @@ function build(contractValue: number) {
                 bcwp: r0(BAC * RI_PCT[i] / 100),
                 acwp: hppSd[i],
             },
-            ri: r0(cv * RI_PCT[i] / 100),
             huBulanIni: { pendapatan: puM[i], hpp: hppM[i], ebitda: ebitdaM[i], labaBersih: labaM[i] },
             huSdBulanIni: { pendapatan: puSd[i], hpp: hppSd[i], ebitda: ebitdaSd[i], labaBersih: labaSd[i] },
             cashIn: cashIn[i],
             cashOut: cashOut[i],
             tagihanBruto: i === N - 1 ? TAGIHAN_AGT : TAGIHAN[i],
             targetTagihan: TARGET_TAGIHAN[i],
+            posisi: { saldoHutang: HUTANG[i], bad: BAD[i], piutang: PIUTANG[i], ccc: CCC[i] },
             pengadaan: {
                 paketTotal: PAKET_TOTAL,
                 paketRealisasi: PAKET_REAL[i],
@@ -125,16 +135,16 @@ function build(contractValue: number) {
         laporan.push({ ...res.value, updatedAt: new Date().toISOString() });
     }
 
-    // Rencana 2026: Kurva S (nilai kumulatif dari persen nilai kontrak) + rencana hasil usaha.
+    // Rencana 2026. Kurva S berbasis PU: RA RKAP = rencana pendapatan, sehingga tidak ada baris
+    // "rencana pendapatan" terpisah. RA Eksternal juga dalam rupiah PU.
     const planPu = PLAN_RKAP_PCT.map(p => r0(PU_RKAP * p / 100));
     const planHpp = planPu.map(v => r0(v * 0.935));
     const rawRencana = {
         tahun: 2026,
         puRkap: PU_RKAP,
-        raRkap: PLAN_RKAP_PCT.map(p => r0(cv * p / 100)),
-        raEksternal: PLAN_EKS_PCT.map(p => r0(cv * p / 100)),
+        raRkap: planPu,
+        raEksternal: PLAN_EKS_PCT.map(p => r0(PU_RKAP * p / 100)),
         huRencana: {
-            pendapatan: planPu,
             hpp: planHpp,
             ebitda: planPu.map((v, i) => r0(v - planHpp[i] + 0.012 * v)),
             labaBersih: planPu.map((v, i) => r0((v - planHpp[i]) * 0.62)),
@@ -185,15 +195,15 @@ async function main() {
     const { laporan, rencana, saldoAwal } = build(cv);
 
     // ── Ringkasan ───────────────────────────────────────────────────────────
-    console.log('\nPeriode    CPI   SPI   RI%     PU s.d      HPP s.d     Cash In(bln)  Tagihan');
+    console.log('\nPeriode    CPI   SPI   PU%kontrak PU s.d      HPP s.d     Cash In(bln)  Tagihan');
     for (const l of laporan) {
         const e = computeEvm(l.evm);
         console.log(
-            `${l.periode}  ${e.cpi?.toFixed(2)}  ${e.spi?.toFixed(2)}  ${(((l.ri ?? 0) / cv) * 100).toFixed(2).padStart(6)}  ` +
+            `${l.periode}  ${e.cpi?.toFixed(2)}  ${e.spi?.toFixed(2)}  ${(((l.huSdBulanIni?.pendapatan ?? 0) / cv) * 100).toFixed(2).padStart(6)}  ` +
             `${fmtM(l.huSdBulanIni?.pendapatan).padStart(10)}  ${fmtM(l.huSdBulanIni?.hpp).padStart(10)}  ${fmtM(l.cashIn).padStart(12)}  ${fmtM(l.tagihanBruto)}`,
         );
     }
-    const derived = derivedFromLaporan({ laporanBulanan: laporan, rencanaKurvaS: [rencana], contractValue: cv, ...saldoAwal });
+    const derived = derivedFromLaporan({ laporanBulanan: laporan, bk: BK_MANUAL, ...saldoAwal });
     console.log('\nField lama setelah sinkronisasi (sebelum → sesudah):');
     const show = (k: string, before: unknown, after: unknown) => console.log(`  ${k.padEnd(16)} ${JSON.stringify(before)} → ${JSON.stringify(after)}`);
     for (const k of Object.keys(derived) as (keyof typeof derived)[]) show(k, doc[k], derived[k]);
@@ -218,6 +228,8 @@ async function main() {
             laporanBulanan: laporan.map(l => ({ ...l, updatedAt: new Date(l.updatedAt as string) })),
             rencanaKurvaS: [rencana],
             ...saldoAwal,
+            bk: BK_MANUAL,                         // BK tetap manual (bukan HPP)
+            progressPercent: PROGRESS_FISIK_ASLI,  // progres fisik tetap manual (bukan turunan Kurva S)
         },
     });
     await syncLegacy(id);

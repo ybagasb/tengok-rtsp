@@ -40,10 +40,7 @@ const EDITABLE_FIELDS = [
 
 
 // Field lama yang bisa diturunkan dari laporan bulanan (lihat derivedFromLaporan).
-const DERIVED_KEYS = [
-    'cpi', 'spi', 'tagihanBruto', 'hasilUsaha', 'pu', 'bk', 'lk',
-    'cashIn', 'cashOut', 'progressPercent', 'progressRencana', 'progressDeviasi',
-] as const;
+const DERIVED_KEYS = ['cpi', 'spi', 'tagihanBruto', 'hasilUsaha', 'pu', 'lk', 'cashIn', 'cashOut', 'saldoHutang', 'bad', 'piutang', 'ccc'] as const;
 
 const MAX_TEXT_LENGTH = 10000;
 
@@ -369,8 +366,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             return NextResponse.json({ success: false, error: 'Proyek tidak ditemukan' }, { status: 404 });
         }
 
-        // Nilai kontrak menjadi basis persen progres fisik turunan → hitung ulang.
-        if ('contractValue' in update) await syncLegacy(id);
+        // LK = PU − BK: PU berasal dari laporan, jadi hitung ulang bila BK diubah.
+        if ('bk' in update) await syncLegacy(id);
 
         const actor = await getAuditActor(req);
         await logAudit({

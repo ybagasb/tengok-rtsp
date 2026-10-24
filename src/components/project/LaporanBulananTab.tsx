@@ -60,18 +60,26 @@ const GROUPS: GroupSpec[] = [
             { path: 'evm.acwp', label: 'ACWP', short: 'ACWP', kind: 'money', hint: 'Actual Cost: biaya aktual yang sudah keluar s.d periode.' },
         ],
     },
-    {
-        id: 'kurva', title: 'Kurva S – Realisasi Internal',
-        desc: 'Nilai kumulatif realisasi internal (RI) s.d periode. Rencana RKAP/Eksternal diisi di tab Rencana Tahunan.',
-        fields: [{ path: 'ri', label: 'Realisasi internal (RI)', short: 'RI kumulatif', kind: 'money' }],
-    },
     { id: 'hu-bulan', title: 'Hasil Usaha – Bulan Ini', huKey: 'huBulanIni', fields: huFields('huBulanIni', 'Bulan ini') },
-    { id: 'hu-sd', title: 'Hasil Usaha – s.d Bulan Ini', huKey: 'huSdBulanIni', fields: huFields('huSdBulanIni', 's.d bulan ini') },
+    {
+        id: 'hu-sd', title: 'Hasil Usaha – s.d Bulan Ini', huKey: 'huSdBulanIni', fields: huFields('huSdBulanIni', 's.d bulan ini'),
+        desc: 'Pendapatan s.d bulan ini juga menjadi realisasi (RI) pada Kurva S, jadi tidak perlu diisi lagi di tempat lain.',
+    },
     {
         id: 'cash', title: 'Cash Flow Bulan Ini',
         fields: [
             { path: 'cashIn', label: 'Cash in', short: 'Cash In', kind: 'money' },
             { path: 'cashOut', label: 'Cash out', short: 'Cash Out', kind: 'money' },
+        ],
+    },
+    {
+        id: 'posisi', title: 'Posisi Keuangan',
+        desc: 'Saldo di akhir periode (bukan arus bulanan). Tampil di tab Cash & Keuangan.',
+        fields: [
+            { path: 'posisi.saldoHutang', label: 'Saldo hutang', short: 'Saldo Hutang', kind: 'money' },
+            { path: 'posisi.bad', label: 'BAD', short: 'BAD', kind: 'money', hint: 'Beban yang Akan Dibayar: bagian dari hutang (lihat laporan cashflow).' },
+            { path: 'posisi.piutang', label: 'Piutang', short: 'Piutang', kind: 'money' },
+            { path: 'posisi.ccc', label: 'CCC (hari)', short: 'CCC (hari)', kind: 'count', hint: 'Cash Conversion Cycle dalam hari. Di atas 90 hari perlu perhatian.' },
         ],
     },
     {
@@ -203,7 +211,7 @@ function parsePasteNumber(raw: string): number | null {
 
 // Nilai kumulatif: biasanya tidak turun dari bulan ke bulan.
 const CUMULATIVE_PATHS = new Set([
-    'evm.bcws', 'evm.bcwp', 'evm.acwp', 'ri', 'huSdBulanIni.pendapatan', 'huSdBulanIni.hpp',
+    'evm.bcws', 'evm.bcwp', 'evm.acwp', 'huSdBulanIni.pendapatan', 'huSdBulanIni.hpp',
     'pengadaan.paketRealisasi', 'pengadaan.paguRealisasi',
 ]);
 
@@ -276,13 +284,13 @@ function NumField({ spec, value, onChange, unit, readOnly, warning }: { spec: Fi
                     title={spec.hint}
                     className={`${CTRL_CLS} ${money ? 'pr-14' : ''} ${readOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
                 />
-                {money && <span className="absolute right-3 top-1/2 -translate-y-1/2 mt-[3px] text-[11px] font-bold text-slate-500 pointer-events-none">{unit}</span>}
+                {money && <span className="absolute right-3 top-1/2 -translate-y-1/2 mt-[3px] text-[11px] font-bold text-slate-600 dark:text-slate-400 pointer-events-none">{unit}</span>}
             </div>
             {money && Number.isFinite(n) && value.trim() !== '' && (
-                <p className="mt-1 text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400">{fmtRp(n * UNITS[unit])}</p>
+                <p className="mt-1 text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtRp(n * UNITS[unit])}</p>
             )}
-            {warning && <p role="status" className="mt-1 text-[11px] font-semibold text-orange-500">⚠ {warning}</p>}
-            {spec.hint && <p className="mt-0.5 text-[11px] text-slate-500">{spec.hint}</p>}
+            {warning && <p role="status" className="mt-1 text-[11px] font-semibold text-orange-700 dark:text-orange-400">⚠ {warning}</p>}
+            {spec.hint && <p className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-400">{spec.hint}</p>}
         </div>
     );
 }
@@ -290,7 +298,7 @@ function NumField({ spec, value, onChange, unit, readOnly, warning }: { spec: Fi
 function UnitPicker({ unit, onChange }: { unit: UnitKey; onChange: (u: UnitKey) => void }) {
     return (
         <div role="group" aria-label="Satuan input" className="inline-flex items-center gap-1 p-1 rounded-xl bg-black/[0.04] dark:bg-white/5">
-            <span className="px-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Satuan</span>
+            <span className="px-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Satuan</span>
             {(Object.keys(UNITS) as UnitKey[]).map(u => (
                 <button
                     key={u}
@@ -305,12 +313,12 @@ function UnitPicker({ unit, onChange }: { unit: UnitKey; onChange: (u: UnitKey) 
 }
 
 function KpiCard({ label, value, hint, tone }: { label: string; value: string; hint: string; tone: 'good' | 'bad' | 'none' }) {
-    const color = tone === 'good' ? 'text-emerald-500' : tone === 'bad' ? 'text-rose-500' : 'text-slate-400';
+    const color = tone === 'good' ? 'text-emerald-700 dark:text-emerald-400' : tone === 'bad' ? 'text-rose-700 dark:text-rose-400' : 'text-slate-400';
     return (
         <div className={CARD_CLS}>
             <div className={LABEL_CLS}>{label}</div>
             <div className={`text-2xl font-black mt-1 ${color}`}>{value}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">{hint}</div>
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">{hint}</div>
         </div>
     );
 }
@@ -320,8 +328,8 @@ function EvmSummary({ evm }: { evm: ReturnType<typeof computeEvm> }) {
     const diff = (v?: number) => (v == null ? 'none' : v >= 0 ? 'good' : 'bad') as 'good' | 'bad' | 'none';
     return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Hasil hitung EVM">
-            <KpiCard label="CPI" value={evm.cpi != null ? evm.cpi.toFixed(2) : '—'} hint="BCWP / ACWP · target ≥ 1" tone={idx(evm.cpi)} />
-            <KpiCard label="SPI" value={evm.spi != null ? evm.spi.toFixed(2) : '—'} hint="BCWP / BCWS · target ≥ 1" tone={idx(evm.spi)} />
+            <KpiCard label="CPI" value={evm.cpi != null ? evm.cpi.toFixed(2) : '-'} hint="BCWP / ACWP · target ≥ 1" tone={idx(evm.cpi)} />
+            <KpiCard label="SPI" value={evm.spi != null ? evm.spi.toFixed(2) : '-'} hint="BCWP / BCWS · target ≥ 1" tone={idx(evm.spi)} />
             <KpiCard label="CV" value={fmtRp(evm.cv).replace('-', '−')} hint="BCWP − ACWP" tone={diff(evm.cv)} />
             <KpiCard label="SV" value={fmtRp(evm.sv).replace('-', '−')} hint="BCWP − BCWS" tone={diff(evm.sv)} />
         </div>
@@ -369,7 +377,7 @@ function SetupCard({ rencana, saldoAwal, contractValue, isAdmin, onGoContract, o
     const items = [
         {
             label: 'Nilai kontrak', done: (contractValue ?? 0) > 0, required: true,
-            hint: 'Dipakai sebagai basis persen progres fisik.',
+            hint: 'Dipakai sebagai basis persen pada Kurva S.',
             action: isAdmin ? { label: 'Isi di tab Kontrak', run: onGoContract } : undefined,
         },
         {
@@ -400,17 +408,17 @@ function SetupCard({ rencana, saldoAwal, contractValue, isAdmin, onGoContract, o
                 <span id={uid} className="text-sm font-bold text-slate-900 dark:text-white">
                     {requiredDone ? '✓ Setup awal lengkap' : 'Setup awal (cukup sekali)'}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+                <ChevronDown className={`w-4 h-4 text-slate-600 dark:text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
             {open && (
                 <ul className="mt-3 space-y-2">
                     {items.map(i => (
                         <li key={i.label} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                             <div className="min-w-0">
-                                <span className={`font-bold ${i.done ? 'text-emerald-500' : 'text-slate-700 dark:text-slate-200'}`}>
+                                <span className={`font-bold ${i.done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-200'}`}>
                                     {i.done ? '✓' : '○'} {i.label}{!i.required && ' (opsional)'}
                                 </span>
-                                <span className="block text-[11px] text-slate-500">{i.hint}</span>
+                                <span className="block text-[11px] text-slate-600 dark:text-slate-400">{i.hint}</span>
                             </div>
                             {!i.done && i.action && (
                                 <button type="button" onClick={i.action.run} className={BTN_GHOST}>{i.action.label}</button>
@@ -609,7 +617,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                 ) : (
                     <div className="flex gap-2">
                         {entry && (
-                            <button type="button" onClick={remove} disabled={saving} className={`${BTN_GHOST} hover:!text-rose-500`}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>
+                            <button type="button" onClick={remove} disabled={saving} className={`${BTN_GHOST} hover:!text-rose-700 dark:text-rose-400`}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>
                         )}
                         <button type="button" onClick={startEdit} className={entry ? BTN_GHOST : BTN_PRIMARY}>
                             {entry ? <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> : <Plus className="w-3.5 h-3.5" aria-hidden="true" />}
@@ -638,7 +646,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
             {editing && <UnitPicker unit={unit} onChange={changeUnit} />}
 
             {!entry && !editing ? (
-                <div className="py-14 px-4 text-center text-slate-500 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
+                <div className="py-14 px-4 text-center text-slate-600 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
                     {sorted.length === 0
                         ? 'Belum ada laporan bulanan untuk proyek ini.'
                         : `Laporan ${periodeLabel(periode)} belum diisi.`}
@@ -663,13 +671,13 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                                 >
                                     <span>
                                         <span id={`g-${g.id}`} className="block text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">{g.title}</span>
-                                        {g.desc && open && <span className="block text-[11px] font-normal normal-case tracking-normal text-slate-500 mt-0.5">{g.desc}</span>}
+                                        {g.desc && open && <span className="block text-[11px] font-normal normal-case tracking-normal text-slate-600 dark:text-slate-400 mt-0.5">{g.desc}</span>}
                                     </span>
                                     <span className="flex items-center gap-2 shrink-0">
-                                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${complete ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10' : 'text-slate-500 border-black/10 dark:border-white/10'}`}>
+                                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${complete ? 'text-emerald-700 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-slate-600 dark:text-slate-400 border-black/10 dark:border-white/10'}`}>
                                             {complete ? '✓ ' : ''}{filled}/{g.fields.length}
                                         </span>
-                                        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+                                        <ChevronDown className={`w-4 h-4 text-slate-600 dark:text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
                                     </span>
                                 </button>
                                 <div id={bodyId} hidden={!open} className="space-y-3">
@@ -729,7 +737,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                                     {/* Rencana hasil usaha: dibaca dari Rencana Tahunan, bukan diketik tiap bulan */}
                                     {g.huKey === 'huSdBulanIni' && (
                                         <div className="space-y-2">
-                                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Rencana s.d {periodeLabel(periode)} (dari Rencana Tahunan)</div>
+                                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Rencana s.d {periodeLabel(periode)} (dari Rencana Tahunan)</div>
                                             {huPlan ? (
                                                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                                     {HU_KEYS.map(k => (
@@ -740,7 +748,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <p className="text-xs text-slate-500">Belum diisi untuk tahun {periode.slice(0, 4)}. Isi sekali di tab Rencana Tahunan.</p>
+                                                <p className="text-xs text-slate-600 dark:text-slate-400">Belum diisi untuk tahun {periode.slice(0, 4)}. Isi sekali di tab Rencana Tahunan.</p>
                                             )}
                                         </div>
                                     )}
@@ -749,7 +757,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                         );
                     })}
                     {!editing && entry?.updatedAt && (
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400">
                             Terakhir disimpan: {new Date(entry.updatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
                         </p>
                     )}
@@ -760,12 +768,11 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
 }
 
 // ── Rencana tahunan (Kurva S + hasil usaha) ───────────────────────────────────
-type SeriesId = 'raRkap' | 'raEksternal' | 'huPendapatan' | 'huHpp' | 'huEbitda' | 'huLabaBersih';
+type SeriesId = 'raRkap' | 'raEksternal' | 'huHpp' | 'huEbitda' | 'huLabaBersih';
 interface SeriesSpec { id: SeriesId; label: string; block: 'kurva' | 'hu'; signed?: boolean }
 const SERIES: SeriesSpec[] = [
-    { id: 'raRkap', label: 'RA RKAP', block: 'kurva' },
+    { id: 'raRkap', label: 'RA RKAP (= rencana pendapatan)', block: 'kurva' },
     { id: 'raEksternal', label: 'RA Eksternal', block: 'kurva' },
-    { id: 'huPendapatan', label: 'Pendapatan', block: 'hu' },
     { id: 'huHpp', label: 'HPP', block: 'hu' },
     { id: 'huEbitda', label: 'EBITDA', block: 'hu', signed: true },
     { id: 'huLabaBersih', label: 'Laba Bersih', block: 'hu', signed: true },
@@ -774,7 +781,7 @@ type RencanaForm = { puRkap: string; series: Record<SeriesId, string[]> };
 const blank12 = () => Array<string>(12).fill('');
 const emptyRencana = (): RencanaForm => ({
     puRkap: '',
-    series: { raRkap: blank12(), raEksternal: blank12(), huPendapatan: blank12(), huHpp: blank12(), huEbitda: blank12(), huLabaBersih: blank12() },
+    series: { raRkap: blank12(), raEksternal: blank12(), huHpp: blank12(), huEbitda: blank12(), huLabaBersih: blank12() },
 });
 
 function seriesValues(r: RencanaKurvaS | undefined, id: SeriesId): number[] {
@@ -782,7 +789,6 @@ function seriesValues(r: RencanaKurvaS | undefined, id: SeriesId): number[] {
     switch (id) {
         case 'raRkap': return r.raRkap;
         case 'raEksternal': return r.raEksternal;
-        case 'huPendapatan': return r.huRencana?.pendapatan ?? [];
         case 'huHpp': return r.huRencana?.hpp ?? [];
         case 'huEbitda': return r.huRencana?.ebitda ?? [];
         case 'huLabaBersih': return r.huRencana?.labaBersih ?? [];
@@ -819,7 +825,7 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
     const riByMonth = useMemo(() => {
         const out: (number | undefined)[] = Array(12).fill(undefined);
         laporan.forEach(l => {
-            if (l.periode.startsWith(`${tahun}-`)) out[Number(l.periode.slice(5, 7)) - 1] = l.ri;
+            if (l.periode.startsWith(`${tahun}-`)) out[Number(l.periode.slice(5, 7)) - 1] = l.huSdBulanIni?.pendapatan;
         });
         return out;
     }, [laporan, tahun]);
@@ -850,7 +856,7 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
             puRkap: toIdr(form.puRkap),
             raRkap: ser('raRkap'),
             raEksternal: ser('raEksternal'),
-            huRencana: { pendapatan: ser('huPendapatan'), hpp: ser('huHpp'), ebitda: ser('huEbitda'), labaBersih: ser('huLabaBersih') },
+            huRencana: { hpp: ser('huHpp'), ebitda: ser('huEbitda'), labaBersih: ser('huLabaBersih') },
         };
         const all: (number | null)[] = [data.puRkap, ...data.raRkap, ...data.raEksternal, ...Object.values(data.huRencana).flat()];
         if (all.some(v => typeof v === 'number' && Number.isNaN(v))) { toast.error('Ada angka yang tidak valid'); return; }
@@ -931,7 +937,7 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                     </div>
                 ) : (
                     <div className="flex gap-2">
-                        {current && <button type="button" onClick={remove} disabled={saving} className={`${BTN_GHOST} hover:!text-rose-500`}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>}
+                        {current && <button type="button" onClick={remove} disabled={saving} className={`${BTN_GHOST} hover:!text-rose-700 dark:text-rose-400`}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>}
                         <button type="button" onClick={() => { setForm(rencanaToForm(current, unit)); setEditing(true); }} className={current ? BTN_GHOST : BTN_PRIMARY}>
                             {current ? <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> : <Plus className="w-3.5 h-3.5" aria-hidden="true" />}
                             {current ? 'Edit' : 'Isi rencana'}
@@ -943,7 +949,7 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
             {editing && <UnitPicker unit={unit} onChange={changeUnit} />}
 
             {!current && !editing ? (
-                <div className="py-14 px-4 text-center text-slate-500 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
+                <div className="py-14 px-4 text-center text-slate-600 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
                     Rencana tahunan {tahun} belum diisi.
                     {!isAdmin && <p className="mt-1 text-xs">Hanya super-admin atau PIC proyek yang dapat mengisi rencana.</p>}
                 </div>
@@ -965,8 +971,8 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                         )}
                     </div>
 
-                    <div className="space-y-1 text-[11px] text-slate-500">
-                        <p>Isi nilai <span className="font-bold">kumulatif</span> s.d akhir tiap bulan. Satu seri diisi lengkap 12 bulan, atau dikosongkan seluruhnya. Kurva S dan pendapatan/HPP tidak boleh turun.</p>
+                    <div className="space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+                        <p>Isi nilai <span className="font-bold">kumulatif</span> s.d akhir tiap bulan. Satu seri diisi lengkap 12 bulan, atau dikosongkan seluruhnya. RA RKAP, RA Eksternal, dan HPP tidak boleh turun. RA RKAP sekaligus menjadi rencana pendapatan pada tabel Hasil Usaha.</p>
                         {editing && <p><span className="font-bold">Tempel dari Excel:</span> salin sel (satu baris atau beberapa baris) lalu Ctrl+V di sel mana pun. Baris tempel mengisi seri di bawahnya; satuan mengikuti pilihan di atas.</p>}
                     </div>
 
@@ -986,7 +992,7 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                                         <Fragment key={sp.id}>
                                             {(sIdx === 0 || SERIES[sIdx - 1].block !== sp.block) && (
                                                 <tr className="border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02]">
-                                                    <th colSpan={13} scope="colgroup" className="text-left px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                                                    <th colSpan={13} scope="colgroup" className="text-left px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                                                         {sp.block === 'kurva' ? 'Kurva S (nilai kumulatif)' : 'Rencana Hasil Usaha (s.d akhir bulan)'}
                                                     </th>
                                                 </tr>
@@ -1017,9 +1023,9 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                                     );
                                 })}
                                 <tr className="border-t border-black/5 dark:border-white/5 bg-black/[0.02] dark:bg-white/[0.02]">
-                                    <th scope="row" className={stickyTh}>RI (dari laporan)</th>
+                                    <th scope="row" className={stickyTh}>RI (pendapatan s.d, dari laporan)</th>
                                     {riByMonth.map((v, i) => (
-                                        <td key={i} className="px-2 py-2 text-right font-mono text-slate-500 whitespace-nowrap">{v == null ? '-' : fmtRp(v)}</td>
+                                        <td key={i} className="px-2 py-2 text-right font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">{v == null ? '-' : fmtRp(v)}</td>
                                     ))}
                                 </tr>
                             </tbody>
@@ -1076,7 +1082,7 @@ function SaldoAwalSection({ projectId, laporan, saldoAwal, isAdmin, onSaved, err
     return (
         <div className="space-y-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
-                <p className="text-xs text-slate-500 max-w-xl">
+                <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xl">
                     Isi total cash in/out sejak proyek mulai sampai <span className="font-bold">sebelum</span> laporan bulanan pertama. Total di tab Finansial dihitung otomatis: saldo awal + arus kas semua laporan bulanan. Kosongkan (atau 0) bila laporan bulanan mulai dari awal proyek.
                 </p>
                 {isAdmin && (editing ? (
@@ -1109,11 +1115,11 @@ function SaldoAwalSection({ projectId, laporan, saldoAwal, isAdmin, onSaved, err
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={CARD_CLS}>
                     <div className={LABEL_CLS}>Total Cash In (awal + laporan)</div>
-                    <div className="text-sm font-bold text-emerald-500 mt-1">{total.cashIn !== undefined ? fmtRp(total.cashIn) : 'Menunggu laporan bulanan'}</div>
+                    <div className="text-sm font-bold text-emerald-700 dark:text-emerald-400 mt-1">{total.cashIn !== undefined ? fmtRp(total.cashIn) : 'Menunggu laporan bulanan'}</div>
                 </div>
                 <div className={CARD_CLS}>
                     <div className={LABEL_CLS}>Total Cash Out (awal + laporan)</div>
-                    <div className="text-sm font-bold text-rose-500 mt-1">{total.cashOut !== undefined ? fmtRp(total.cashOut) : 'Menunggu laporan bulanan'}</div>
+                    <div className="text-sm font-bold text-rose-700 dark:text-rose-400 mt-1">{total.cashOut !== undefined ? fmtRp(total.cashOut) : 'Menunggu laporan bulanan'}</div>
                 </div>
             </div>
         </div>

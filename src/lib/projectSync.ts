@@ -6,7 +6,7 @@ import Location from '@/models/Location';
 import { derivedFromLaporan, type DeriveSource } from '@/lib/projectReport';
 
 /** Bagian dokumen yang dibaca untuk menurunkan field (plus kas untuk saldoKas). */
-export const DERIVE_SELECT = 'laporanBulanan rencanaKurvaS contractValue cashInAwal cashOutAwal';
+export const DERIVE_SELECT = 'laporanBulanan bk cashInAwal cashOutAwal';
 
 export async function loadDeriveSource(id: string): Promise<DeriveSource | null> {
     return Location.findById(id).select(DERIVE_SELECT).lean<DeriveSource>();

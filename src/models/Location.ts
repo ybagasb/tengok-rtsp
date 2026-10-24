@@ -332,13 +332,20 @@ const LaporanBulananSchema = new Schema({
             acwp: { type: Number },
         }, { _id: false }),
     },
-    ri: { type: Number },
     huBulanIni: { type: HasilUsahaPeriodeSchema },
     huSdBulanIni: { type: HasilUsahaPeriodeSchema },
     cashIn: { type: Number },
     cashOut: { type: Number },
     tagihanBruto: { type: Number },
     targetTagihan: { type: Number },
+    posisi: {
+        type: new Schema({
+            saldoHutang: { type: Number },
+            bad: { type: Number },
+            piutang: { type: Number },
+            ccc: { type: Number },
+        }, { _id: false }),
+    },
     pengadaan: {
         type: new Schema({
             paketTotal: { type: Number },
@@ -357,7 +364,6 @@ const RencanaKurvaSSchema = new Schema({
     raEksternal: { type: [Number], default: [] },
     huRencana: {
         type: new Schema({
-            pendapatan: { type: [Number], default: [] },
             hpp: { type: [Number], default: [] },
             ebitda: { type: [Number], default: [] },
             labaBersih: { type: [Number], default: [] },

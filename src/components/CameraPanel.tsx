@@ -350,8 +350,8 @@ function VarianceMini({ label, hint, value }: { label: string; hint: string; val
     const neg = value != null && value < 0;
     return (
         <div className={`px-2.5 py-2 rounded-xl border text-center ${value == null ? 'border-black/[0.06] dark:border-white/[0.06]' : neg ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label} <span className="font-medium normal-case tracking-normal">({hint})</span></div>
-            <div className={`text-[13px] font-black font-mono mt-0.5 ${value == null ? 'text-slate-500' : neg ? 'text-rose-500' : 'text-emerald-500'}`}>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{label} <span className="font-medium normal-case tracking-normal">({hint})</span></div>
+            <div className={`text-[13px] font-black font-mono mt-0.5 ${value == null ? 'text-slate-600 dark:text-slate-400' : neg ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
                 {value == null ? '-' : `${neg ? '−' : '+'}${fRpShort(Math.abs(value))}`}
             </div>
         </div>
@@ -594,7 +594,6 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <TrendingUp className="w-4 h-4 div-accent-text" aria-hidden="true" />
                                             <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Kurva S {kurvaS.tahun}</h3>
                                         </div>
-                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">% terhadap nilai kontrak</span>
                                     </div>
                                     <SCurveChart data={kurvaS} />
                                 </div></Reveal>
@@ -814,14 +813,14 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-2">
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Arus Kas Bulanan {cashflow.tahun}</span>
-                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${cashflow.masuk - cashflow.keluar >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${cashflow.masuk - cashflow.keluar >= 0 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30'}`}>
                                                         Kumulatif {cashflow.masuk - cashflow.keluar >= 0 ? '+' : '−'}{fRpShort(Math.abs(cashflow.masuk - cashflow.keluar))}
                                                     </span>
                                                 </div>
                                                 <CashflowChart points={cashflow.points} tahun={cashflow.tahun} />
                                                 <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                                                    <div>In s.d {periodeText}: <span className="font-black text-emerald-500">{fRpShort(cashflow.masuk)}</span></div>
-                                                    <div className="text-right">Out: <span className="font-black text-rose-500">{fRpShort(cashflow.keluar)}</span></div>
+                                                    <div>In s.d {periodeText}: <span className="font-black text-emerald-700 dark:text-emerald-400">{fRpShort(cashflow.masuk)}</span></div>
+                                                    <div className="text-right">Out: <span className="font-black text-rose-700 dark:text-rose-400">{fRpShort(cashflow.keluar)}</span></div>
                                                 </div>
                                             </div>
                                         )}
@@ -875,7 +874,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                 Hasil Usaha · {periodeText}
                                             </h3>
                                             {margin !== undefined && (
-                                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${margin >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${margin >= 0 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30'}`}>
                                                     Margin kotor {margin.toFixed(2)}%
                                                 </span>
                                             )}
@@ -1236,7 +1235,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <Truck className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
                                             Ringkasan Pengadaan
                                         </h3>
-                                        <span className="text-[11px] text-slate-500 font-mono">{periodeText}</span>
+                                        <span className="text-[11px] text-slate-600 dark:text-slate-400 font-mono">{periodeText}</span>
                                     </div>
                                     <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-3">
                                         {(pengadaan.paketTotal ?? 0) > 0 && (

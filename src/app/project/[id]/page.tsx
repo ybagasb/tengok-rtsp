@@ -18,6 +18,7 @@ import type { FootprintPoint } from '@/components/FootprintEditor';
 import { getDivisionCssVars } from '@/lib/divisionTheme';
 import { computeEvm, derivedFromLaporan, isLaporanFresh, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
 import LaporanBulananTab from '@/components/project/LaporanBulananTab';
+import DashboardRingkasan from '@/components/project/DashboardRingkasan';
 
 // Leaflet butuh browser (window) -> muat hanya di klien.
 const FootprintEditor = dynamic(() => import('@/components/FootprintEditor'), {
@@ -498,7 +499,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             {tab === 'info'       && <InfoTab project={project} isAdmin={canEdit} isSuperAdmin={isSuperAdmin} onSaved={fetchProject} />}
                             {tab === 'location'   && <LocationTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'contract'   && <ContractTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'progress'   && <ProgressTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
+                            {tab === 'progress'   && <ProgressTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'gallery'    && <GalleryTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
                         </motion.div>
                     </AnimatePresence>
@@ -543,11 +544,11 @@ function IndexGauge({ title, hint, value, kind }: { title: string; hint: string;
 }
 
 // Catatan untuk field yang diisi otomatis dari Laporan Bulanan (satu sumber kebenaran).
-function DerivedNote({ periode, onGo, what }: { periode?: string; onGo?: () => void; what: string }) {
+function DerivedNote({ periode, onGo, what, tail = 'Ubah di sana agar tidak perlu mengetik dua kali.' }: { periode?: string; onGo?: () => void; what: string; tail?: string }) {
     return (
         <div role="note" className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 rounded-xl bg-[rgba(var(--div-accent-rgb),0.08)] border border-[rgba(var(--div-accent-rgb),0.25)] text-xs text-slate-600 dark:text-slate-300">
             <span>
-                {what} diisi otomatis dari <span className="font-bold">Laporan Bulanan{periode ? ` (${periodeLabel(periode)})` : ''}</span>. Ubah di sana agar tidak perlu mengetik dua kali.
+                {what} diisi otomatis dari <span className="font-bold">Laporan Bulanan{periode ? ` (${periodeLabel(periode)})` : ''}</span>. {tail}
             </span>
             {onGo && (
                 <button type="button" onClick={onGo} className="px-3 py-2 rounded-lg div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
@@ -590,7 +591,7 @@ function IkhtiarTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
 
     return (
         <div className="space-y-4">
-            <SectionHeader title="Ringkasan — CPI / SPI" isAdmin={isAdmin && !(cpiLocked && spiLocked)} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setForm({ cpi: project.cpi?.toString() ?? '', spi: project.spi?.toString() ?? '' }); setEditing(false); }} onSave={save} saving={saving} />
+            <SectionHeader title="Ringkasan: CPI / SPI" isAdmin={isAdmin && !(cpiLocked && spiLocked)} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setForm({ cpi: project.cpi?.toString() ?? '', spi: project.spi?.toString() ?? '' }); setEditing(false); }} onSave={save} saving={saving} />
             {anyLocked && <DerivedNote what={cpiLocked && spiLocked ? 'CPI dan SPI' : cpiLocked ? 'CPI' : 'SPI'} periode={latest?.periode} onGo={isAdmin ? () => onGoTab('laporan') : undefined} />}
             {!editing ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -619,10 +620,11 @@ function IkhtiarTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
             )}
             {(evm.cv !== undefined || evm.sv !== undefined) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <MoneyCard label="CV — Cost Variance (BCWP − ACWP)" value={evm.cv} icon={CircleDollarSign} tone={(evm.cv ?? 0) >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} />
-                    <MoneyCard label="SV — Schedule Variance (BCWP − BCWS)" value={evm.sv} icon={CircleDollarSign} tone={(evm.sv ?? 0) >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} />
+                    <MoneyCard label="CV: Cost Variance (BCWP − ACWP)" value={evm.cv} icon={CircleDollarSign} tone={(evm.cv ?? 0) >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} />
+                    <MoneyCard label="SV: Schedule Variance (BCWP − BCWS)" value={evm.sv} icon={CircleDollarSign} tone={(evm.sv ?? 0) >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} />
                 </div>
             )}
+            <DashboardRingkasan project={project} canEdit={isAdmin} onGoLaporan={() => onGoTab('laporan')} />
         </div>
     );
 }
@@ -636,7 +638,7 @@ function MoneyCard({ label, value, icon: Icon, tone }: { label: string; value?: 
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 dark:text-slate-400">{label}</span>
             </div>
             <div className="text-xl font-black text-slate-900 dark:text-white font-mono truncate">{formatIDRShort(value)}</div>
-            <div className="text-[11px] text-slate-500 font-mono truncate">{value != null ? formatIDR(value) : ''}</div>
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono truncate">{value != null ? formatIDR(value) : ''}</div>
         </div>
     );
 }
@@ -650,6 +652,12 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
     const huLocked = derivedLap.hasilUsaha !== undefined;
     const cashInLocked = derivedLap.cashIn !== undefined;
     const cashOutLocked = derivedLap.cashOut !== undefined;
+    // Posisi keuangan (hutang, BAD, piutang, CCC) diisi di Laporan Bulanan; tab ini hanya menampilkan.
+    const hutangLocked = derivedLap.saldoHutang !== undefined;
+    const badLocked = derivedLap.bad !== undefined;
+    const piutangLocked = derivedLap.piutang !== undefined;
+    const cccLocked = derivedLap.ccc !== undefined;
+    const posisiLocked = hutangLocked || badLocked || piutangLocked || cccLocked;
     const isKendari = Boolean(project.name?.toLowerCase().includes('kendari'));
     const initForm = () => ({
         tagihanBruto: project.tagihanBruto?.toString() ?? (isKendari ? '49000000000' : ''),
@@ -660,7 +668,6 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
         bad: project.bad?.toString() ?? '',
         piutang: project.piutang?.toString() ?? '',
         ccc: project.ccc?.toString() ?? '',
-        bebanKonstruksi: project.bebanKonstruksi?.toString() ?? '',
         huPendapatan: project.hasilUsaha?.pendapatan?.toString() ?? '',
         huBiaya: project.hasilUsaha?.biaya?.toString() ?? '',
         progressKeuangan: (project.progressKeuangan ?? []) as ProgressKeuangan[],
@@ -685,12 +692,11 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                 ...(tagihanLocked ? {} : { tagihanBruto: form.tagihanBruto === '' ? undefined : Number(form.tagihanBruto) }),
                 ...(cashInLocked ? {} : { cashIn: form.cashIn === '' ? undefined : Number(form.cashIn) }),
                 ...(cashOutLocked ? {} : { cashOut: form.cashOut === '' ? undefined : Number(form.cashOut) }),
-                saldoKas: form.saldoKas === '' ? autoSaldoKas : Number(form.saldoKas),
-                saldoHutang: form.saldoHutang === '' ? undefined : Number(form.saldoHutang),
-                bad: form.bad === '' ? undefined : Number(form.bad),
-                piutang: form.piutang === '' ? undefined : Number(form.piutang),
-                ccc: form.ccc === '' ? undefined : Number(form.ccc),
-                bebanKonstruksi: form.bebanKonstruksi === '' ? undefined : Number(form.bebanKonstruksi),
+                ...((cashInLocked && cashOutLocked) ? {} : { saldoKas: form.saldoKas === '' ? autoSaldoKas : Number(form.saldoKas) }),
+                ...(hutangLocked ? {} : { saldoHutang: form.saldoHutang === '' ? undefined : Number(form.saldoHutang) }),
+                ...(badLocked ? {} : { bad: form.bad === '' ? undefined : Number(form.bad) }),
+                ...(piutangLocked ? {} : { piutang: form.piutang === '' ? undefined : Number(form.piutang) }),
+                ...(cccLocked ? {} : { ccc: form.ccc === '' ? undefined : Number(form.ccc) }),
                 ...(huLocked ? {} : {
                     hasilUsaha: (huP != null || huB != null)
                         ? { pendapatan: huP ?? 0, biaya: huB ?? 0, laba: (huP ?? 0) - (huB ?? 0) }
@@ -710,19 +716,20 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
         <div className="space-y-4">
             <SectionHeader title="Finansial" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { resetForm(); setEditing(false); }} onSave={save} saving={saving} />
 
-            {(tagihanLocked || huLocked || cashInLocked || cashOutLocked) && (
+            {(tagihanLocked || huLocked || cashInLocked || cashOutLocked || posisiLocked) && (
                 <DerivedNote
-                    what={[tagihanLocked && 'Tagihan bruto', huLocked && 'hasil usaha', (cashInLocked || cashOutLocked) && 'cash in/out'].filter(Boolean).join(', ')}
+                    what={[tagihanLocked && 'Tagihan bruto', huLocked && 'hasil usaha', (cashInLocked || cashOutLocked) && 'cash in/out', posisiLocked && 'saldo hutang, BAD, piutang, CCC'].filter(Boolean).join(', ')}
                     periode={latestLap?.periode}
+                    tail="Tidak diisi di tab ini. Hutang, BAD, piutang, dan CCC tetap tampil di bawah; sisanya di Ringkasan."
                     onGo={isAdmin ? () => onGoTab('laporan') : undefined}
                 />
             )}
             {!editing ? (
                 <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <MoneyCard label="Tagihan Bruto"          value={displayTagihanBruto} icon={Receipt}            tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
-                        <MoneyCard label="Cash In (Penerimaan)"   value={project.cashIn}      icon={ArrowDownRight}     tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
-                        <MoneyCard label="Cash Out (Pengeluaran)" value={project.cashOut}     icon={ArrowUpRight}       tone="bg-rose-500/10 border-rose-500/20 text-rose-400" />
+                        {!tagihanLocked && <MoneyCard label="Tagihan Bruto"          value={displayTagihanBruto} icon={Receipt}            tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />}
+                        {!cashInLocked && <MoneyCard label="Cash In (Penerimaan)"   value={project.cashIn}      icon={ArrowDownRight}     tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />}
+                        {!cashOutLocked && <MoneyCard label="Cash Out (Pengeluaran)" value={project.cashOut}     icon={ArrowUpRight}       tone="bg-rose-500/10 border-rose-500/20 text-rose-400" />}
                         <MoneyCard label="Saldo Kas (Cash Balance)" value={displaySaldoKas}   icon={Wallet}             tone="bg-sky-500/10 border-sky-500/20 text-sky-400" />
                         <MoneyCard label="Saldo Hutang"           value={project.saldoHutang} icon={CircleDollarSign}   tone="bg-amber-500/10 border-amber-500/20 text-amber-400" />
                         <MoneyCard label="BAD (komponen hutang)"  value={project.bad}         icon={CircleDollarSign}   tone="bg-orange-500/10 border-orange-500/20 text-orange-400" />
@@ -734,7 +741,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 dark:text-slate-400">CCC — Cash Conversion Cycle</div>
                                 <div className="text-xl font-black text-slate-900 dark:text-white font-mono mt-1">{project.ccc} hari</div>
                             </div>
-                            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${project.ccc > 90 ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${project.ccc > 90 ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'}`}>
                                 {project.ccc > 90 ? '> 90 · Perhatian' : 'Normal'}
                             </span>
                         </div>
@@ -742,33 +749,29 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                 </>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {tagihanLocked
-                        ? <MoneyCard label="Tagihan Bruto (dari Laporan Bulanan)" value={project.tagihanBruto} icon={Receipt} tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
-                        : <MoneyInput label="Tagihan Bruto" value={form.tagihanBruto} onChange={v => setForm({ ...form, tagihanBruto: v })} hint="Total tagihan bruto proyek (Rp)." />}
-                    {cashInLocked
-                        ? <MoneyCard label="Cash In (saldo awal + laporan bulanan)" value={project.cashIn} icon={ArrowDownRight} tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
-                        : <MoneyInput label="Cash In" value={form.cashIn} onChange={v => setForm({ ...form, cashIn: v })} hint="Total uang yang sudah masuk/diterima proyek." />}
-                    {cashOutLocked
-                        ? <MoneyCard label="Cash Out (saldo awal + laporan bulanan)" value={project.cashOut} icon={ArrowUpRight} tone="bg-rose-500/10 border-rose-500/20 text-rose-400" />
-                        : <MoneyInput label="Cash Out" value={form.cashOut} onChange={v => setForm({ ...form, cashOut: v })} hint="Total uang yang sudah keluar/dibelanjakan." />}
-                    <div>
-                        <MoneyInput label="Saldo Kas (kosongkan = otomatis)" value={form.saldoKas} onChange={v => setForm({ ...form, saldoKas: v })} hint="Sisa kas. Dikosongkan = dihitung otomatis dari Cash In − Cash Out." />
-                        <p className="mt-1 text-[11px] text-slate-500">Otomatis: {formatIDR(autoSaldoKas)}</p>
-                    </div>
-                    <MoneyInput label="Saldo Hutang" value={form.saldoHutang} onChange={v => setForm({ ...form, saldoHutang: v })} hint="Total hutang proyek saat ini." />
-                    <MoneyInput label="BAD" value={form.bad} onChange={v => setForm({ ...form, bad: v })} hint="Beban yang Akan Dibayar — bagian dari hutang (lihat laporan cashflow)." />
-                    <MoneyInput label="Piutang" value={form.piutang} onChange={v => setForm({ ...form, piutang: v })} hint="Uang yang masih ditunggu/belum dibayar ke proyek." />
-                    <div>
+                    {!tagihanLocked && <MoneyInput label="Tagihan Bruto" value={form.tagihanBruto} onChange={v => setForm({ ...form, tagihanBruto: v })} hint="Total tagihan bruto proyek (Rp)." />}
+                    {!cashInLocked && <MoneyInput label="Cash In" value={form.cashIn} onChange={v => setForm({ ...form, cashIn: v })} hint="Total uang yang sudah masuk/diterima proyek." />}
+                    {!cashOutLocked && <MoneyInput label="Cash Out" value={form.cashOut} onChange={v => setForm({ ...form, cashOut: v })} hint="Total uang yang sudah keluar/dibelanjakan." />}
+                    {/* Saldo kas = cash in − cash out; bila keduanya dari Laporan Bulanan, dihitung otomatis dan tidak diisi. */}
+                    {!(cashInLocked && cashOutLocked) && (
+                        <div>
+                            <MoneyInput label="Saldo Kas (kosongkan = otomatis)" value={form.saldoKas} onChange={v => setForm({ ...form, saldoKas: v })} hint="Sisa kas. Dikosongkan = dihitung otomatis dari Cash In − Cash Out." />
+                            <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">Otomatis: {formatIDR(autoSaldoKas)}</p>
+                        </div>
+                    )}
+                    {!hutangLocked && <MoneyInput label="Saldo Hutang" value={form.saldoHutang} onChange={v => setForm({ ...form, saldoHutang: v })} hint="Total hutang proyek saat ini." />}
+                    {!badLocked && <MoneyInput label="BAD" value={form.bad} onChange={v => setForm({ ...form, bad: v })} hint="Beban yang Akan Dibayar — bagian dari hutang (lihat laporan cashflow)." />}
+                    {!piutangLocked && <MoneyInput label="Piutang" value={form.piutang} onChange={v => setForm({ ...form, piutang: v })} hint="Uang yang masih ditunggu/belum dibayar ke proyek." />}
+                    {!cccLocked && <div>
                         <Input label="CCC (hari)" type="number" min={0} max={3650} step={1} value={form.ccc} onChange={v => setForm({ ...form, ccc: v })} hint="Cash Conversion Cycle — lama perputaran kas dalam hari. Di atas 90 hari ditandai merah." />
                         <p className="mt-1.5 text-[11px] text-slate-500">&gt; 90 hari ditandai perhatian (merah).</p>
-                    </div>
-                    <MoneyInput label="Beban Konstruksi" value={form.bebanKonstruksi} onChange={v => setForm({ ...form, bebanKonstruksi: v })} hint="Total beban/biaya konstruksi proyek." />
+                    </div>}
                 </div>
             )}
 
-            {/* Hasil Usaha */}
+            {/* Hasil Usaha (disembunyikan bila berasal dari Laporan Bulanan: sudah tampil di Ringkasan) */}
             {!editing ? (
-                (project.hasilUsaha && (project.hasilUsaha.pendapatan || project.hasilUsaha.biaya)) ? (() => {
+                (!huLocked && project.hasilUsaha && (project.hasilUsaha.pendapatan || project.hasilUsaha.biaya)) ? (() => {
                     const { pendapatan, biaya, laba } = project.hasilUsaha!;
                     const margin = pendapatan > 0 ? (laba / pendapatan) * 100 : 0;
                     const rugi = laba < 0;
@@ -847,9 +850,10 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
 
 // ── Operasi (Kinerja Operasi + Progress Mingguan W1-W4 + Milestone + Sumber Daya) ──────────
 function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
-    // PU/BK/LK diisi otomatis dari Laporan Bulanan terbaru (hasil usaha s.d bulan ini) bila tersedia.
+    // PU diisi otomatis dari pendapatan s.d bulan ini (Laporan Bulanan terbaru). BK tetap manual
+    // karena dasarnya berbeda dari HPP; LK = PU − BK dihitung server.
     const latestLap = latestLaporan(project.laporanBulanan);
-    const kinerjaLocked = derivedFromLaporan(project).pu !== undefined;
+    const puLocked = derivedFromLaporan(project).pu !== undefined;
     // ── State untuk Kinerja Operasi PU/BK/LK ──
     const [editingKinerja, setEditingKinerja] = useState(false);
     const [kinerjaForm, setKinerjaForm] = useState({
@@ -881,11 +885,13 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
         try {
             const puV = kinerjaForm.pu === '' ? null : Number(kinerjaForm.pu);
             const bkV = kinerjaForm.bk === '' ? null : Number(kinerjaForm.bk);
-            await axios.patch(`/api/projects/${project._id}`, {
-                pu: puV ?? undefined,
-                bk: bkV ?? undefined,
-                lk: (puV != null && bkV != null) ? puV - bkV : undefined,
-            });
+            await axios.patch(`/api/projects/${project._id}`, puLocked
+                ? { bk: bkV ?? undefined }   // PU dari laporan; server menghitung LK = PU − BK
+                : {
+                    pu: puV ?? undefined,
+                    bk: bkV ?? undefined,
+                    lk: (puV != null && bkV != null) ? puV - bkV : undefined,
+                });
             toast.success('Kinerja Operasi tersimpan');
             setEditingKinerja(false);
             onSaved();
@@ -971,14 +977,14 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
             <div className="space-y-4">
                 <SectionHeader
                     title="Kinerja Operasi (PU / BK / LK)"
-                    isAdmin={isAdmin && !kinerjaLocked}
+                    isAdmin={isAdmin}
                     editing={editingKinerja}
                     onEdit={() => setEditingKinerja(true)}
                     onCancel={() => { setKinerjaForm({ pu: project.pu?.toString() ?? '', bk: project.bk?.toString() ?? '' }); setEditingKinerja(false); }}
                     onSave={saveKinerja}
                     saving={savingKinerja}
                 />
-                {kinerjaLocked && <DerivedNote what="PU, BK, dan LK" periode={latestLap?.periode} onGo={isAdmin ? () => onGoTab('laporan') : undefined} />}
+                {puLocked && <DerivedNote what="PU (pendapatan s.d bulan ini)" periode={latestLap?.periode} onGo={isAdmin ? () => onGoTab('laporan') : undefined} />}
                 {!editingKinerja ? (
                     (project.pu != null || project.bk != null || project.lk != null) ? (
                         <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
@@ -1015,10 +1021,12 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                 ) : (
                     <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <MoneyInput label="PU — Pendapatan Usaha" value={kinerjaForm.pu} onChange={v => setKinerjaForm({ ...kinerjaForm, pu: v })} hint="Pendapatan usaha dari sisi operasi proyek (IDR)." />
-                            <MoneyInput label="BK — Beban Konstruksi" value={kinerjaForm.bk} onChange={v => setKinerjaForm({ ...kinerjaForm, bk: v })} hint="Beban/biaya konstruksi operasi (IDR)." />
+                            {puLocked
+                                ? <MoneyCard label="PU (dari Laporan Bulanan)" value={project.pu} icon={CircleDollarSign} tone="bg-sky-500/10 border-sky-500/20 text-sky-400" />
+                                : <MoneyInput label="PU: Pendapatan Usaha" value={kinerjaForm.pu} onChange={v => setKinerjaForm({ ...kinerjaForm, pu: v })} hint="Pendapatan usaha dari sisi operasi proyek (IDR)." />}
+                            <MoneyInput label="BK: Beban Konstruksi" value={kinerjaForm.bk} onChange={v => setKinerjaForm({ ...kinerjaForm, bk: v })} hint="Beban/biaya konstruksi operasi (IDR)." />
                         </div>
-                        <p className="text-[11px] text-slate-500">LK (Laba Kotor) dihitung otomatis: {formatIDR((Number(kinerjaForm.pu) || 0) - (Number(kinerjaForm.bk) || 0))}</p>
+                        <p className="text-[11px] text-slate-500">LK (Laba Kotor) dihitung otomatis: {formatIDR(((puLocked ? project.pu : Number(kinerjaForm.pu)) || 0) - (Number(kinerjaForm.bk) || 0))}</p>
                     </div>
                 )}
             </div>
@@ -1723,11 +1731,11 @@ function ProgressKeuanganCard({
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-lg bg-sky-500/10 flex items-center justify-center border border-sky-500/20">
-                        <CircleDollarSign className="w-3.5 h-3.5 text-sky-400" />
+                        <CircleDollarSign className="w-3.5 h-3.5 text-sky-700 dark:text-sky-400" />
                     </div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Keuangan</h3>
                 </div>
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/30">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/30">
                     {totalPct.toFixed(1)}% Terserap
                 </span>
             </div>
@@ -1761,9 +1769,9 @@ function ProgressKeuanganCard({
 
                     {/* Center Hub */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Serapan</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Total Serapan</span>
                         <div className="text-3xl font-black text-slate-900 dark:text-white leading-none my-0.5">
-                            {totalPct.toFixed(1)}<span className="text-sm text-sky-400 font-extrabold">%</span>
+                            {totalPct.toFixed(1)}<span className="text-sm text-sky-700 dark:text-sky-400 font-extrabold">%</span>
                         </div>
                         <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 font-bold truncate max-w-[130px]">
                             {formatIDRShort(totalRealisasi)}
@@ -1784,11 +1792,11 @@ function ProgressKeuanganCard({
                                         <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
                                         DIPA {pk.tahun}
                                     </span>
-                                    <span className="text-sky-400 font-mono font-bold">{pct.toFixed(1)}%</span>
+                                    <span className="text-sky-700 dark:text-sky-400 font-mono font-bold">{pct.toFixed(1)}%</span>
                                 </div>
-                                <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                                <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-400">
                                     <span>Realisasi: <strong className="text-slate-600 dark:text-slate-300 font-semibold">{formatIDRShort(pk.realisasi)}</strong></span>
-                                    <span>Pagu: <strong className="text-slate-500 dark:text-slate-400 font-normal">{formatIDRShort(pk.rencana)}</strong></span>
+                                    <span>Pagu: <strong className="text-slate-600 dark:text-slate-400 font-normal">{formatIDRShort(pk.rencana)}</strong></span>
                                 </div>
                                 <div className="w-full h-1.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
                                     <div
@@ -1800,14 +1808,14 @@ function ProgressKeuanganCard({
                         );
                     })
                 ) : (
-                    <p className="text-xs text-slate-500 italic text-center py-2">Belum ada data DIPA keuangan.</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 italic text-center py-2">Belum ada data DIPA keuangan.</p>
                 )}
 
                 {/* Belum ditagihkan callout */}
                 {tagihanBelumDiproses != null && (
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs">
-                        <span className="text-slate-500 dark:text-slate-400 text-[11px]">Belum ditagihkan:</span>
-                        <span className="text-amber-400 font-bold font-mono">{formatIDR(tagihanBelumDiproses)}</span>
+                        <span className="text-slate-600 dark:text-slate-400 text-[11px]">Belum ditagihkan:</span>
+                        <span className="text-amber-700 dark:text-amber-400 font-bold font-mono">{formatIDR(tagihanBelumDiproses)}</span>
                     </div>
                 )}
             </div>
@@ -2156,14 +2164,8 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
 }
 
 // ── Progress ─────────────────────────────────────────────────────────────────
-function ProgressTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
+function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
     const [editing, setEditing] = useState(false);
-    // Progres fisik diturunkan dari Kurva S (RI & RA RKAP ÷ nilai kontrak) bila tersedia.
-    const derivedLap = derivedFromLaporan(project);
-    const realLocked = derivedLap.progressPercent !== undefined;
-    const planLocked = derivedLap.progressRencana !== undefined;
-    const devLocked = derivedLap.progressDeviasi !== undefined;
-    const latestLap = latestLaporan(project.laporanBulanan);
     const [form, setForm] = useState({
         progressPercent: project.progressPercent ?? 0,
         progressRencana: project.progressRencana ?? 0,
@@ -2175,14 +2177,11 @@ function ProgressTab({ project, isAdmin, onSaved, onGoTab }: { project: Project;
     const save = async () => {
         setSaving(true);
         try {
-            // Deviasi dihitung dari nilai efektif (turunan bila terkunci, form bila tidak).
-            const effReal = realLocked ? (project.progressPercent ?? 0) : form.progressPercent;
-            const effPlan = planLocked ? (project.progressRencana ?? 0) : form.progressRencana;
             await axios.patch(`/api/projects/${project._id}`, {
                 lingkupPekerjaan: form.lingkupPekerjaan,
-                ...(realLocked ? {} : { progressPercent: form.progressPercent }),
-                ...(planLocked ? {} : { progressRencana: form.progressRencana }),
-                ...(devLocked ? {} : { progressDeviasi: Math.round((effReal - effPlan) * 100) / 100 }),
+                progressPercent: form.progressPercent,
+                progressRencana: form.progressRencana,
+                progressDeviasi: Math.round((form.progressPercent - form.progressRencana) * 100) / 100,
             });
             toast.success('Progres tersimpan');
             setEditing(false);
@@ -2192,19 +2191,12 @@ function ProgressTab({ project, isAdmin, onSaved, onGoTab }: { project: Project;
     };
 
     const deviasi = editing
-        ? ((realLocked ? (project.progressPercent ?? 0) : form.progressPercent) - (planLocked ? (project.progressRencana ?? 0) : form.progressRencana))
+        ? (form.progressPercent - form.progressRencana)
         : (project.progressDeviasi ?? ((project.progressPercent ?? 0) - (project.progressRencana ?? 0)));
 
     return (
         <div className="space-y-4">
             <SectionHeader title="Progres Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} />
-            {(realLocked || planLocked) && (
-                <DerivedNote
-                    what={realLocked && planLocked ? 'Progres fisik (rencana & realisasi)' : realLocked ? 'Realisasi progres fisik' : 'Rencana progres fisik'}
-                    periode={latestLap?.periode}
-                    onGo={isAdmin ? () => onGoTab('laporan') : undefined}
-                />
-            )}
 
             {!editing ? (
                 <ProgressFisikCard
@@ -2218,15 +2210,14 @@ function ProgressTab({ project, isAdmin, onSaved, onGoTab }: { project: Project;
                     <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Progress Fisik</h3>
                         <div className="space-y-4">
-                            {!planLocked && <div>
+                            <div>
                                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Rencana: {form.progressRencana.toFixed(2)}%</label>
                                 <input aria-label="Progres rencana (persen)" type="range" min={0} max={100} step={0.01} value={form.progressRencana} onChange={e => setForm({ ...form, progressRencana: Number(e.target.value) })} className="w-full mt-2 accent-slate-400" />
-                            </div>}
-                            {!realLocked && <div>
+                            </div>
+                            <div>
                                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Realisasi: {form.progressPercent.toFixed(2)}%</label>
                                 <input aria-label="Progres realisasi (persen)" type="range" min={0} max={100} step={0.01} value={form.progressPercent} onChange={e => setForm({ ...form, progressPercent: Number(e.target.value) })} className="w-full mt-2 accent-[var(--div-accent)]" />
-                            </div>}
-                            {realLocked && planLocked && <p className="text-xs text-slate-500">Rencana dan realisasi mengikuti Laporan Bulanan.</p>}
+                            </div>
                         </div>
                         <div className="flex justify-between items-center pt-1 border-t border-black/5 dark:border-white/5">
                             <span className="text-xs text-slate-500 dark:text-slate-400">Deviasi</span>

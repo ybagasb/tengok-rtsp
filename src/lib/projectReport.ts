@@ -30,10 +30,18 @@ export interface PengadaanData {
     paguRealisasi?: number;
 }
 
+/** Posisi keuangan akhir periode (saldo/stok, bukan arus). */
+export interface PosisiKeuangan {
+    saldoHutang?: number;
+    bad?: number;
+    piutang?: number;
+    ccc?: number;                    // hari
+}
+
 export interface LaporanBulanan {
     periode: string;                 // 'YYYY-MM'
+    posisi?: PosisiKeuangan;
     evm?: EvmData;
-    ri?: number;                     // Realisasi internal kumulatif (Kurva S), IDR
     huBulanIni?: HasilUsahaPeriode;
     huSdBulanIni?: HasilUsahaPeriode;
     cashIn?: number;                 // Arus kas masuk bulan ini
@@ -44,9 +52,11 @@ export interface LaporanBulanan {
     updatedAt?: string;
 }
 
-/** Rencana hasil usaha kumulatif Jan..Des (12 nilai per seri, atau [] bila belum diisi). */
+/**
+ * Rencana hasil usaha kumulatif Jan..Des (12 nilai per seri, atau [] bila belum diisi).
+ * Rencana PENDAPATAN tidak disimpan di sini: sama dengan RA RKAP (Kurva S berbasis PU).
+ */
 export interface HuRencanaSeries {
-    pendapatan: number[];
     hpp: number[];
     ebitda: number[];
     labaBersih: number[];
@@ -55,7 +65,7 @@ export interface HuRencanaSeries {
 export interface RencanaKurvaS {
     tahun: number;
     puRkap?: number;          // Target PU RKAP setahun (IDR)
-    raRkap: number[];         // 12 nilai kumulatif Jan..Des, atau [] bila belum diisi
+    raRkap: number[];         // 12 nilai kumulatif Jan..Des (= rencana pendapatan/PU), atau [] bila belum diisi
     raEksternal: number[];    // idem
     huRencana?: HuRencanaSeries;   // Rencana hasil usaha s.d tiap bulan
 }
@@ -118,14 +128,18 @@ export function isLaporanFresh(list?: LaporanBulanan[], now: Date = new Date()):
     return !!latest && !!prev && latest.periode >= prev;
 }
 
-/** Rencana hasil usaha s.d periode (dari rencana tahunan); undefined bila belum diisi. */
+/**
+ * Rencana hasil usaha s.d periode (dari rencana tahunan); undefined bila belum diisi.
+ * Rencana pendapatan diambil dari RA RKAP (satu sumber dengan Kurva S).
+ */
 export function huRencanaPeriode(rencana: RencanaKurvaS[] | undefined, periode: string): HasilUsahaPeriode | undefined {
-    const r = rencana?.find(x => x.tahun === Number(periode.slice(0, 4)))?.huRencana;
-    if (!r) return undefined;
+    const plan = rencana?.find(x => x.tahun === Number(periode.slice(0, 4)));
+    if (!plan) return undefined;
+    const r = plan.huRencana;
     const idx = Number(periode.slice(5, 7)) - 1;
-    const pick = (a: number[]) => (a.length === 12 ? a[idx] : undefined);
+    const pick = (a?: number[]) => (a && a.length === 12 ? a[idx] : undefined);
     const out: HasilUsahaPeriode = {
-        pendapatan: pick(r.pendapatan), hpp: pick(r.hpp), ebitda: pick(r.ebitda), labaBersih: pick(r.labaBersih),
+        pendapatan: pick(plan.raRkap), hpp: pick(r?.hpp), ebitda: pick(r?.ebitda), labaBersih: pick(r?.labaBersih),
     };
     return Object.values(out).some(v => v !== undefined) ? out : undefined;
 }
@@ -169,27 +183,25 @@ export interface LegacyDerived {
     spi?: number;
     tagihanBruto?: number;
     hasilUsaha?: { pendapatan: number; biaya: number; laba: number };
-    pu?: number;
-    bk?: number;
-    lk?: number;
+    pu?: number;                // = pendapatan s.d periode terbaru
+    lk?: number;                // = PU − BK (BK tetap diisi manual: BK tidak sama dengan HPP)
     cashIn?: number;            // cashInAwal + Σ cashIn laporan s.d periode terbaru
     cashOut?: number;
-    progressPercent?: number;   // RI / nilai kontrak × 100
-    progressRencana?: number;   // RA RKAP (bulan terbaru) / nilai kontrak × 100
-    progressDeviasi?: number;   // realisasi − rencana
+    saldoHutang?: number;       // posisi keuangan laporan terbaru
+    bad?: number;
+    piutang?: number;
+    ccc?: number;
 }
 
 /** Bagian dokumen proyek yang dibutuhkan untuk menurunkan field lama. */
 export interface DeriveSource {
     laporanBulanan?: LaporanBulanan[];
-    rencanaKurvaS?: RencanaKurvaS[];
-    contractValue?: number;
+    bk?: number;                // beban konstruksi (input manual), untuk menghitung LK
     cashInAwal?: number;
     cashOutAwal?: number;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-const clampPct = (n: number) => Math.max(0, Math.min(100, n));
 
 export function derivedFromLaporan(src?: DeriveSource): LegacyDerived {
     const latest = latestLaporan(src?.laporanBulanan);
@@ -201,17 +213,25 @@ export function derivedFromLaporan(src?: DeriveSource): LegacyDerived {
     if (cpi !== undefined) out.cpi = Math.min(5, round2(cpi));
     if (spi !== undefined) out.spi = Math.min(5, round2(spi));
 
+    // Posisi keuangan
+    const ps = latest.posisi;
+    if (ps) {
+        if (typeof ps.saldoHutang === 'number') out.saldoHutang = ps.saldoHutang;
+        if (typeof ps.bad === 'number') out.bad = ps.bad;
+        if (typeof ps.piutang === 'number') out.piutang = ps.piutang;
+        if (typeof ps.ccc === 'number') out.ccc = ps.ccc;
+    }
+
     // Tagihan
     if (typeof latest.tagihanBruto === 'number') out.tagihanBruto = latest.tagihanBruto;
 
-    // Hasil usaha s.d periode → PU/BK/LK
+    // Hasil usaha s.d periode → PU. BK bukan HPP (dasar berbeda), jadi tetap diisi manual;
+    // LK dihitung dari PU − BK bila BK sudah ada.
     const hu = latest.huSdBulanIni;
-    if (hu && typeof hu.pendapatan === 'number' && typeof hu.hpp === 'number') {
-        const laba = hu.pendapatan - hu.hpp;
-        out.hasilUsaha = { pendapatan: hu.pendapatan, biaya: hu.hpp, laba };
+    if (hu && typeof hu.pendapatan === 'number') {
         out.pu = hu.pendapatan;
-        out.bk = hu.hpp;
-        out.lk = laba;
+        if (typeof src.bk === 'number') out.lk = hu.pendapatan - src.bk;
+        if (typeof hu.hpp === 'number') out.hasilUsaha = { pendapatan: hu.pendapatan, biaya: hu.hpp, laba: hu.pendapatan - hu.hpp };
     }
 
     // Kas: saldo awal + total arus bulanan s.d periode terbaru (semua tahun).
@@ -221,20 +241,6 @@ export function derivedFromLaporan(src?: DeriveSource): LegacyDerived {
     }
     if (list.some(l => typeof l.cashOut === 'number')) {
         out.cashOut = (src.cashOutAwal ?? 0) + list.reduce((a, l) => a + (l.periode <= latest.periode ? (l.cashOut ?? 0) : 0), 0);
-    }
-
-    // Progres fisik: nilai Kurva S terhadap nilai kontrak.
-    const cv = src.contractValue;
-    if (typeof cv === 'number' && cv > 0 && typeof latest.ri === 'number') {
-        const real = round2(clampPct((latest.ri / cv) * 100));
-        out.progressPercent = real;
-        const plan = src.rencanaKurvaS?.find(r => r.tahun === Number(latest.periode.slice(0, 4)))?.raRkap;
-        const idx = Number(latest.periode.slice(5, 7)) - 1;
-        if (plan && plan.length === 12 && typeof plan[idx] === 'number') {
-            const rencana = round2(clampPct((plan[idx] / cv) * 100));
-            out.progressRencana = rencana;
-            out.progressDeviasi = round2(real - rencana);
-        }
     }
     return out;
 }
@@ -308,6 +314,15 @@ export function sanitizeLaporan(raw: unknown): SanitizeResult<LaporanBulanan> {
         acwp: readNum(evmRaw.acwp, 'ACWP', errors),
     });
 
+    const psRaw = isObj(raw.posisi) ? raw.posisi : {};
+    const posisi = compact<PosisiKeuangan>({
+        saldoHutang: readNum(psRaw.saldoHutang, 'Saldo hutang', errors),
+        bad: readNum(psRaw.bad, 'BAD', errors),
+        piutang: readNum(psRaw.piutang, 'Piutang', errors),
+        ccc: readNum(psRaw.ccc, 'CCC', errors, { int: true }),
+    });
+    if (posisi?.ccc != null && posisi.ccc > 3650) errors.push('CCC terlalu besar (maks 3650 hari)');
+
     const pRaw = isObj(raw.pengadaan) ? raw.pengadaan : {};
     const pengadaan = compact<PengadaanData>({
         paketTotal: readNum(pRaw.paketTotal, 'Total paket', errors, { int: true }),
@@ -329,7 +344,6 @@ export function sanitizeLaporan(raw: unknown): SanitizeResult<LaporanBulanan> {
     const value: LaporanBulanan = { periode: raw.periode };
     const set = <K extends keyof LaporanBulanan>(k: K, v: LaporanBulanan[K]) => { if (v !== undefined) value[k] = v; };
     set('evm', evm);
-    set('ri', readNum(raw.ri, 'Realisasi internal (RI)', errors));
     set('huBulanIni', readHu(raw.huBulanIni, 'Hasil usaha bulan ini', errors));
     set('huSdBulanIni', readHu(raw.huSdBulanIni, 'Hasil usaha s.d bulan ini', errors));
     set('cashIn', readNum(raw.cashIn, 'Cash in', errors));
@@ -337,6 +351,7 @@ export function sanitizeLaporan(raw: unknown): SanitizeResult<LaporanBulanan> {
     set('tagihanBruto', readNum(raw.tagihanBruto, 'Tagihan bruto', errors));
     set('targetTagihan', readNum(raw.targetTagihan, 'Target tagihan', errors));
     set('pengadaan', pengadaan);
+    set('posisi', posisi);
 
     if (errors.length) return { ok: false, errors };
     return { ok: true, value };
@@ -377,7 +392,6 @@ export function sanitizeRencana(raw: unknown): SanitizeResult<RencanaKurvaS> {
     const raEksternal = readSeries(raw.raEksternal, 'RA Eksternal', errors);
     const huRaw = isObj(raw.huRencana) ? raw.huRencana : {};
     const hu: HuRencanaSeries = {
-        pendapatan: readSeries(huRaw.pendapatan, 'Rencana pendapatan', errors),
         hpp: readSeries(huRaw.hpp, 'Rencana HPP', errors),
         ebitda: readSeries(huRaw.ebitda, 'Rencana EBITDA', errors, { signed: true, monotonic: false }),
         labaBersih: readSeries(huRaw.labaBersih, 'Rencana laba bersih', errors, { signed: true, monotonic: false }),
@@ -410,6 +424,12 @@ export interface KurvaSData {
     rkap: (number | undefined)[];
     eksternal: (number | undefined)[];
     ri: (number | undefined)[];
+    /** Basis persen dalam rupiah (nilai kontrak, atau nilai terbesar di seri bila kontrak kosong). */
+    basis: number;
+    basisFromContract: boolean;
+    /** Pendapatan usaha s.d periode terbaru (tahun yang sama) dan target PU RKAP, untuk penanda "PU vs RKAP". */
+    pu?: number;
+    puRkap?: number;
 }
 
 /**
@@ -433,8 +453,10 @@ export function kurvaSSeries(
         eksternal: (plan?.raEksternal.length === 12 ? plan.raEksternal : Array(12).fill(undefined)) as (number | undefined)[],
         ri: Array<number | undefined>(12).fill(undefined),
     };
+    // RI (realisasi) = pendapatan usaha s.d bulan itu: Kurva S berbasis PU, satu data dengan Hasil Usaha.
     for (const l of src.laporanBulanan ?? []) {
-        if (l.periode.startsWith(`${yr}-`) && typeof l.ri === 'number') raw.ri[Number(l.periode.slice(5, 7)) - 1] = l.ri;
+        const pu = l.huSdBulanIni?.pendapatan;
+        if (l.periode.startsWith(`${yr}-`) && typeof pu === 'number') raw.ri[Number(l.periode.slice(5, 7)) - 1] = pu;
     }
 
     const all = [...raw.rkap, ...raw.eksternal, ...raw.ri].filter((v): v is number => typeof v === 'number');
@@ -442,7 +464,13 @@ export function kurvaSSeries(
     const basis = src.contractValue && src.contractValue > 0 ? src.contractValue : Math.max(...all);
     if (!(basis > 0)) return undefined;
     const pct = (a: (number | undefined)[]) => a.map(v => (typeof v === 'number' ? (v / basis) * 100 : undefined));
-    return { tahun: yr, rkap: pct(raw.rkap), eksternal: pct(raw.eksternal), ri: pct(raw.ri) };
+    const sameYear = !!latest && latest.periode.startsWith(`${yr}-`);
+    return {
+        tahun: yr, rkap: pct(raw.rkap), eksternal: pct(raw.eksternal), ri: pct(raw.ri),
+        basis, basisFromContract: !!(src.contractValue && src.contractValue > 0),
+        pu: sameYear ? latest?.huSdBulanIni?.pendapatan : undefined,
+        puRkap: plan?.puRkap,
+    };
 }
 
 // ── Seri arus kas bulanan untuk grafik ───────────────────────────────────────
