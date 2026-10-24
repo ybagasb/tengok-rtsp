@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { useTheme } from './ThemeProvider';
 import { BULAN_SINGKAT, hppPersen, type CashflowPoint, type HasilUsahaPeriode, type KurvaSData } from '@/lib/projectReport';
@@ -310,7 +310,35 @@ export function StackedBar({
 const fPct = (v?: number) => (v == null ? '-' : `${v.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`);
 const fMil1 = (v: number) => (v / 1e9).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
+/** Kurva mulus monoton (Fritsch-Carlson): tidak pernah melampaui titik data, jadi kurva kumulatif tidak "membengkok" turun. */
+type Pt = [number, number];
+function smoothSegment(pts: Pt[], withMove = true): string {
+    const n = pts.length;
+    if (n === 0) return '';
+    const f = (v: number) => v.toFixed(1);
+    const start = `${withMove ? 'M' : 'L'} ${f(pts[0][0])} ${f(pts[0][1])}`;
+    if (n === 1) return start;
+    const dx: number[] = [], m: number[] = [];
+    for (let i = 0; i < n - 1; i++) { dx.push(pts[i + 1][0] - pts[i][0]); m.push((pts[i + 1][1] - pts[i][1]) / dx[i]); }
+    const t: number[] = [m[0]];
+    for (let i = 1; i < n - 1; i++) t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2);
+    t.push(m[n - 2]);
+    for (let i = 0; i < n - 1; i++) {
+        if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+        const a = t[i] / m[i], b = t[i + 1] / m[i], h = Math.hypot(a, b);
+        if (h > 3) { t[i] = (3 * a / h) * m[i]; t[i + 1] = (3 * b / h) * m[i]; }
+    }
+    let d = start;
+    for (let i = 0; i < n - 1; i++) {
+        const c1x = pts[i][0] + dx[i] / 3, c1y = pts[i][1] + (t[i] * dx[i]) / 3;
+        const c2x = pts[i + 1][0] - dx[i] / 3, c2y = pts[i + 1][1] - (t[i + 1] * dx[i]) / 3;
+        d += ` C ${f(c1x)} ${f(c1y)} ${f(c2x)} ${f(c2y)} ${f(pts[i + 1][0])} ${f(pts[i + 1][1])}`;
+    }
+    return d;
+}
+
 export function SCurveChart({ data }: { data: KurvaSData }) {
+    const uid = useId().replace(/:/g, '');
     const { theme } = useTheme();
     const isDark = theme === 'dark';
     const [hover, setHover] = useState<number | null>(null);
@@ -319,22 +347,24 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
     const defaultIdx = Math.max(lastIdx(data.ri), lastIdx(data.rkap), lastIdx(data.eksternal), 0);
     const idx = hover ?? (lastIdx(data.ri) >= 0 ? lastIdx(data.ri) : defaultIdx);
 
-    const W = 320, H = 170, L = 30, R = 10, T = 10, B = 22;
+    const W = 320, H = 196, L = 30, R = 12, T = 18, B = 24;
     const nums = [...data.rkap, ...data.eksternal, ...data.ri].filter((v): v is number => typeof v === 'number');
     const yMax = Math.max(100, Math.ceil(Math.max(...nums) / 10) * 10);
     const x = (i: number) => L + ((W - L - R) * i) / 11;
     const y = (v: number) => T + (H - T - B) * (1 - v / yMax);
-    const path = (a: (number | undefined)[]) => {
-        let d = '';
-        let pen = false;
-        a.forEach((v, i) => {
-            if (typeof v !== 'number') { pen = false; return; }
-            d += `${pen ? 'L' : 'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
-            pen = true;
-        });
-        return d.trim();
-    };
-
+    const points = (a: (number | undefined)[]): Pt[] => a.flatMap((v, i) => (typeof v === 'number' ? [[x(i), y(v)] as Pt] : []));
+    const path = (a: (number | undefined)[]) => smoothSegment(points(a));
+    // Area di bawah RI dan pita selisih terhadap rencana RKAP (hanya sepanjang bulan yang sudah dilaporkan).
+    const riIdxLast = lastIdx(data.ri);
+    const riPts = points(data.ri);
+    const areaPath = riPts.length > 1
+        ? `${smoothSegment(riPts)} L ${riPts[riPts.length - 1][0].toFixed(1)} ${y(0).toFixed(1)} L ${riPts[0][0].toFixed(1)} ${y(0).toFixed(1)} Z`
+        : '';
+    const gapPts = data.rkap.slice(0, riIdxLast + 1).flatMap((v, i) => (typeof v === 'number' ? [[x(i), y(v)] as Pt] : []));
+    const gapPath = riPts.length > 1 && gapPts.length > 1
+        ? `${smoothSegment(gapPts)} ${smoothSegment([...riPts].reverse(), false)} Z`
+        : '';
+    const gapBehind = (data.ri[riIdxLast] ?? 0) < (data.rkap[riIdxLast] ?? 0);
     const grid = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.10)';
     const txt = isDark ? '#94a3b8' : '#475569';
     const cRkap = isDark ? '#38bdf8' : '#0369a1';
@@ -397,23 +427,54 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
 
             <div className="max-w-[560px] mx-auto">
                 <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" aria-hidden="true">
+                    <defs>
+                        <linearGradient id={`${uid}-ri`} x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" style={{ stopColor: cRi, stopOpacity: isDark ? 0.34 : 0.26 }} />
+                            <stop offset="100%" style={{ stopColor: cRi, stopOpacity: 0 }} />
+                        </linearGradient>
+                    </defs>
                     {ticks.map(t => (
                         <g key={t}>
-                            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke={grid} strokeWidth="1" />
-                            <text x={L - 4} y={y(t) + 3} textAnchor="end" fontSize="8" fill={txt}>{Math.round(t)}</text>
+                            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke={grid} strokeWidth="1" strokeDasharray={t === 0 ? undefined : '2 4'} />
+                            <text x={L - 5} y={y(t) + 3} textAnchor="end" fontSize="8" fill={txt}>{Math.round(t)}%</text>
                         </g>
                     ))}
+                    {/* bulan yang belum dilaporkan */}
+                    {riIdxLast >= 0 && riIdxLast < 11 && (
+                        <g>
+                            <rect x={x(riIdxLast)} y={T} width={W - R - x(riIdxLast)} height={H - T - B} fill={isDark ? 'rgba(255,255,255,0.03)' : 'rgba(15,23,42,0.035)'} />
+                            <text x={W - R - 3} y={H - B - 5} textAnchor="end" fontSize="7.5" fill={txt}>belum dilaporkan</text>
+                        </g>
+                    )}
                     {BULAN_SINGKAT.map((b, i) => (
-                        i % 2 === 0 ? <text key={b} x={x(i)} y={H - 7} textAnchor="middle" fontSize="8" fill={txt}>{b}</text> : null
+                        <text key={b} x={x(i)} y={H - 8} textAnchor="middle" fontSize="7.5" fontWeight={i === idx ? 700 : 400} fill={i === idx ? (isDark ? '#f1f5f9' : '#0f172a') : txt}>{b}</text>
                     ))}
+                    {/* selisih rencana vs realisasi */}
+                    {gapPath && <path d={gapPath} fill={gapBehind ? (isDark ? 'rgba(251,113,133,0.16)' : 'rgba(225,29,72,0.10)') : (isDark ? 'rgba(52,211,153,0.16)' : 'rgba(5,150,105,0.10)')} />}
+                    {areaPath && <path d={areaPath} fill={`url(#${uid}-ri)`} />}
                     {/* penanda bulan terpilih */}
                     <line x1={x(idx)} x2={x(idx)} y1={T} y2={H - B} stroke={txt} strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
-                    <path d={path(data.rkap)} fill="none" stroke={cRkap} strokeWidth="1.8" strokeDasharray="5 3" strokeLinejoin="round" />
-                    <path d={path(data.eksternal)} fill="none" stroke={cEks} strokeWidth="1.8" strokeDasharray="2 3" strokeLinejoin="round" />
-                    <path d={path(data.ri)} fill="none" style={{ stroke: cRi }} strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
-                    {data.ri.map((v, i) => (typeof v === 'number' ? <circle key={i} cx={x(i)} cy={y(v)} r={i === idx ? 4 : 2.2} style={{ fill: cRi }} /> : null))}
+                    <path d={path(data.rkap)} fill="none" stroke={cRkap} strokeWidth="1.6" strokeDasharray="5 3" strokeLinecap="round" />
+                    <path d={path(data.eksternal)} fill="none" stroke={cEks} strokeWidth="1.6" strokeDasharray="1.5 3" strokeLinecap="round" />
+                    <path d={path(data.ri)} fill="none" style={{ stroke: cRi }} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                    {data.ri.map((v, i) => (typeof v === 'number' ? (
+                        <circle key={i} cx={x(i)} cy={y(v)} r={i === idx ? 4.2 : 2.4} style={{ fill: i === idx ? cRi : (isDark ? '#0f172a' : '#ffffff'), stroke: cRi }} strokeWidth="1.6" />
+                    ) : null))}
                     {typeof rkap === 'number' && <circle cx={x(idx)} cy={y(rkap)} r="3.2" fill={cRkap} />}
                     {typeof eks === 'number' && <circle cx={x(idx)} cy={y(eks)} r="3.2" fill={cEks} />}
+                    {/* label nilai realisasi pada bulan terpilih */}
+                    {typeof ri === 'number' && (() => {
+                        const label = fPct(ri);
+                        const bw = label.length * 5.2 + 10;
+                        const bx = Math.max(L, Math.min(W - R - bw, x(idx) - bw / 2));
+                        const by = Math.min(H - B - 18, y(ri) + 9);
+                        return (
+                            <g>
+                                <rect x={bx} y={by} width={bw} height="14" rx="4" fill={isDark ? '#f1f5f9' : '#0f172a'} />
+                                <text x={bx + bw / 2} y={by + 10} textAnchor="middle" fontSize="8.5" fontWeight="700" fill={isDark ? '#0f172a' : '#f8fafc'}>{label}</text>
+                            </g>
+                        );
+                    })()}
                     {/* area interaksi */}
                     <rect x={L} y={T} width={W - L - R} height={H - T - B} fill="transparent" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)} style={{ touchAction: 'pan-y' }} />
                 </svg>
