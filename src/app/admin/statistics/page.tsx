@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ComposedChart, Line, CartesianGrid, BarChart, Bar, Cell } from 'recharts';
+import { useCallback, useEffect, useState } from 'react';
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, ComposedChart, Line, CartesianGrid, Bar } from 'recharts';
 import { Loader2, Users, Eye, BarChart3, Smartphone, TrendingUp, Activity, Globe, MapPin, Share2, Layout, Monitor, Sparkles, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { containerVariants, cardVariants } from '@/components/admin/shared';
-import { PageHeader } from '@/components/admin/AdminUI';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface StatsData {
     summary: {
@@ -35,6 +35,18 @@ const SOURCE_COLORS: Record<string, string> = {
     map: '#3b82f6',
     shared: '#f97316',
     app: '#10b981',
+};
+// Varian lebih gelap untuk teks/aksen di tema terang (kontras AA di latar putih)
+const DEVICE_COLORS_LIGHT: Record<string, string> = {
+    'Mobile': '#a16207',
+    'Desktop': '#1d4ed8',
+    'Tablet': '#7e22ce',
+};
+const SOURCE_COLORS_LIGHT: Record<string, string> = {
+    categories: '#a16207',
+    map: '#1d4ed8',
+    shared: '#c2410c',
+    app: '#047857',
 };
 const SOURCE_ICONS: Record<string, React.ElementType> = {
     categories: Layout,
@@ -100,11 +112,16 @@ export default function StatisticsPage() {
     const [data, setData] = useState<StatsData | null>(null);
     const [loading, setLoading] = useState(true);
     const [days, setDays] = useState(30);
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+    const axisColor = isDark ? '#94a3b8' : '#475569';
+    const gridColor = isDark ? 'rgba(148,163,184,0.12)' : 'rgba(71,85,105,0.15)';
+    const lineColor = isDark ? '#eab308' : '#ca8a04';
 
     // Real-time Active Pulse
     const [liveCount, setLiveCount] = useState(0);
 
-    const fetchStats = () => {
+    const fetchStats = useCallback(() => {
         fetch(`/api/stats/summary?days=${days}`)
             .then(res => res.json())
             .then(res => { 
@@ -117,25 +134,26 @@ export default function StatisticsPage() {
             })
             .catch(err => console.error('Failed to fetch stats', err))
             .finally(() => setLoading(false));
-    };
+    }, [days]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- tampilkan loader saat rentang hari berganti, sebelum fetch
         setLoading(true);
         fetchStats();
-        
+
         // Refresh live data automatically every 30 seconds
         const int = setInterval(fetchStats, 30000);
         return () => clearInterval(int);
-    }, [days]);
+    }, [fetchStats]);
 
     // Generate Smart Insight text dynamically
     const generateInsight = () => {
         if (!data) return "Sedang menganalisis tren data...";
 
-        let targetPage = data.visitsBySource?.[0]?.label || 'Aplikasi Utama';
-        let deviceList = [...data.deviceStats].sort((a, b) => b.value - a.value);
-        let topDevice = deviceList[0]?.name || 'Mobile';
-        let uniqueRatio = data.summary.totalVisits > 0
+        const targetPage = data.visitsBySource?.[0]?.label || 'Aplikasi Utama';
+        const deviceList = [...data.deviceStats].sort((a, b) => b.value - a.value);
+        const topDevice = deviceList[0]?.name || 'Mobile';
+        const uniqueRatio = data.summary.totalVisits > 0
             ? Math.round((data.summary.uniqueVisitors / data.summary.totalVisits) * 100)
             : 0;
 
@@ -153,17 +171,17 @@ export default function StatisticsPage() {
 
     if (loading && !data) {
         return (
-            <div className="flex h-[80vh] items-center justify-center">
-                <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
+            <div role="status" aria-label="Memuat statistik" className="flex h-[80dvh] items-center justify-center">
+                <Loader2 aria-hidden="true" className="w-8 h-8 text-yellow-700 dark:text-yellow-500 animate-spin motion-reduce:animate-none" />
             </div>
         );
     }
 
     if (!data) {
         return (
-            <div className="flex h-[80vh] items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-slate-600">
-                    <BarChart3 className="w-16 h-16 opacity-10" />
+            <div className="flex h-[80dvh] items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-slate-500">
+                    <BarChart3 aria-hidden="true" className="w-16 h-16 opacity-10" />
                     <p className="font-bold uppercase tracking-wider opacity-30">Gagal memuat data statistik</p>
                 </div>
             </div>
@@ -182,8 +200,8 @@ export default function StatisticsPage() {
                         <div className="flex items-center gap-3">
                             <h1 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3 tracking-tight">
                                 Statistik Pengunjung
-                                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400 uppercase tracking-wider animate-pulse">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider animate-pulse motion-reduce:animate-none">
+                                    <span aria-hidden="true" className="w-2 h-2 rounded-full bg-emerald-500" />
                                     {liveCount} Aktif Saat Ini
                                 </span>
                             </h1>
@@ -194,16 +212,17 @@ export default function StatisticsPage() {
                     </div>
 
                     {/* Period Selector + Export */}
-                    <div className="flex items-center gap-3 shrink-0">
-                        <div className="flex items-center bg-white/70 dark:bg-slate-900/60 rounded-2xl border border-black/10 dark:border-white/10 p-1">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div role="group" aria-label="Periode statistik" className="flex items-center bg-white/70 dark:bg-slate-900/60 rounded-2xl border border-black/10 dark:border-white/10 p-1">
                             {[7, 14, 30].map(d => (
                                 <button
                                     key={d}
                                     onClick={() => setDays(d)}
-                                    className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${days === d
+                                    aria-pressed={days === d}
+                                    className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-3 sm:px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${days === d
                                         ? 'bg-yellow-500 text-slate-950 shadow-lg shadow-yellow-500/20'
                                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
-                                        }`}
+                                        } min-h-10`}
                                 >
                                     {d} Hari
                                 </button>
@@ -212,24 +231,24 @@ export default function StatisticsPage() {
                         <button
                             onClick={() => data && exportStatsToCSV(data, days)}
                             disabled={!data}
-                            className="flex items-center gap-2 px-4 py-3 bg-white/70 dark:bg-slate-900/60 hover:bg-emerald-500/10 border border-black/10 dark:border-white/10 hover:border-emerald-500/30 rounded-2xl text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-emerald-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-3 bg-white/70 dark:bg-slate-900/60 hover:bg-emerald-500/10 border border-black/10 dark:border-white/10 hover:border-emerald-500/30 rounded-2xl text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Export statistik ke CSV"
                             aria-label="Download statistik sebagai file CSV"
                         >
-                            <Download className="w-4 h-4" />
+                            <Download aria-hidden="true" className="w-4 h-4" />
                             <span className="hidden sm:inline">Export CSV</span>
                         </button>
                     </div>
                 </div>
 
                 {/* ── Smart Insights Panel ── */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-r from-blue-900/40 to-slate-200/60 dark:to-slate-900/60 backdrop-blur-xl border border-blue-500/30 rounded-3xl p-6 flex items-start gap-5">
-                    <div className="p-3 bg-blue-500/20 rounded-2xl shrink-0 text-blue-400 border border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.3)]">
-                        <Sparkles className="w-6 h-6" />
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-r from-blue-100 dark:from-blue-900/40 to-slate-200/60 dark:to-slate-900/60 backdrop-blur-xl border border-blue-500/30 rounded-3xl p-6 flex items-start gap-5">
+                    <div className="p-3 bg-blue-500/20 rounded-2xl shrink-0 text-blue-700 dark:text-blue-400 border border-blue-500/20 dark:shadow-[0_0_20px_rgba(59,130,246,0.3)]">
+                        <Sparkles aria-hidden="true" className="w-6 h-6" />
                     </div>
                     <div className="flex-1 w-full">
-                        <h3 className="text-sm font-bold text-blue-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">AI Insights</h3>
-                        <p className="text-slate-600 dark:text-slate-300 text-[15px] font-medium leading-relaxed w-full tracking-wide text-justify">{generateInsight()}</p>
+                        <h3 className="text-sm font-bold text-blue-700 dark:text-blue-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">AI Insights</h3>
+                        <p className="text-slate-600 dark:text-slate-300 text-[15px] font-medium leading-relaxed w-full tracking-wide text-left">{generateInsight()}</p>
                     </div>
                 </motion.div>
 
@@ -238,10 +257,10 @@ export default function StatisticsPage() {
                     {/* Total Visits */}
                     <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 relative overflow-hidden group hover:border-yellow-500/30 transition-all">
                         <div className="absolute -top-6 -right-6 w-24 h-24 bg-yellow-500/10 rounded-full blur-[30px]" />
-                        <div className="absolute top-5 right-5 opacity-10"><Eye className="w-14 h-14 text-yellow-500" /></div>
+                        <div className="absolute top-5 right-5 opacity-10"><Eye aria-hidden="true" className="w-14 h-14 text-yellow-700 dark:text-yellow-500" /></div>
                         <div className="relative z-10">
                             <div className="flex items-center gap-2 mb-3">
-                                <div className="p-2 rounded-xl bg-yellow-500/10"><Eye className="w-4 h-4 text-yellow-500" /></div>
+                                <div className="p-2 rounded-xl bg-yellow-500/10"><Eye aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" /></div>
                                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Kunjungan</p>
                             </div>
                             <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">{data.summary.totalVisits.toLocaleString()}</h2>
@@ -251,10 +270,10 @@ export default function StatisticsPage() {
                     {/* Unique Visitors */}
                     <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 relative overflow-hidden group hover:border-orange-500/30 transition-all">
                         <div className="absolute -top-6 -right-6 w-24 h-24 bg-orange-500/10 rounded-full blur-[30px]" />
-                        <div className="absolute top-5 right-5 opacity-10"><Users className="w-14 h-14 text-orange-500" /></div>
+                        <div className="absolute top-5 right-5 opacity-10"><Users aria-hidden="true" className="w-14 h-14 text-orange-700 dark:text-orange-500" /></div>
                         <div className="relative z-10">
                             <div className="flex items-center gap-2 mb-3">
-                                <div className="p-2 rounded-xl bg-orange-500/10"><Users className="w-4 h-4 text-orange-500" /></div>
+                                <div className="p-2 rounded-xl bg-orange-500/10"><Users aria-hidden="true" className="w-4 h-4 text-orange-700 dark:text-orange-500" /></div>
                                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pengunjung Unik</p>
                             </div>
                             <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">{data.summary.uniqueVisitors.toLocaleString()}</h2>
@@ -264,31 +283,31 @@ export default function StatisticsPage() {
                     {/* Halaman Terpopuler */}
                     <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 relative overflow-hidden group hover:border-blue-500/30 transition-all">
                         <div className="absolute -top-6 -right-6 w-24 h-24 bg-blue-500/10 rounded-full blur-[30px]" />
-                        <div className="absolute top-5 right-5 opacity-10"><TrendingUp className="w-14 h-14 text-blue-400" /></div>
+                        <div className="absolute top-5 right-5 opacity-10"><TrendingUp aria-hidden="true" className="w-14 h-14 text-blue-700 dark:text-blue-400" /></div>
                         <div className="relative z-10">
                             <div className="flex items-center gap-2 mb-3">
-                                <div className="p-2 rounded-xl bg-blue-500/10"><TrendingUp className="w-4 h-4 text-blue-400" /></div>
+                                <div className="p-2 rounded-xl bg-blue-500/10"><TrendingUp aria-hidden="true" className="w-4 h-4 text-blue-700 dark:text-blue-400" /></div>
                                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Halaman Favorit</p>
                             </div>
                             <h2 className="text-xl font-bold text-slate-900 dark:text-white truncate max-w-[180px]">{topSource?.label || '-'}</h2>
-                            <p className="text-xs text-blue-400 mt-2 font-bold uppercase tracking-wider">{topSource?.count || 0} Histori</p>
+                            <p className="text-xs text-blue-700 dark:text-blue-400 mt-2 font-bold uppercase tracking-wider">{topSource?.count || 0} Histori</p>
                         </div>
                     </motion.div>
 
                     {/* Link Berbagi Terpopuler */}
                     <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-emerald-500/20 rounded-3xl p-6 relative overflow-hidden group hover:border-emerald-500/40 transition-all">
                         <div className="absolute -top-6 -right-6 w-24 h-24 bg-emerald-500/5 rounded-full blur-[30px]" />
-                        <div className="absolute top-5 right-5 opacity-10"><Share2 className="w-14 h-14 text-emerald-500" /></div>
+                        <div className="absolute top-5 right-5 opacity-10"><Share2 aria-hidden="true" className="w-14 h-14 text-emerald-700 dark:text-emerald-500" /></div>
                         <div className="relative z-10">
                             <div className="flex items-center gap-2 mb-3">
-                                <div className="p-2 rounded-xl bg-emerald-500/10"><Share2 className="w-4 h-4 text-emerald-500" /></div>
-                                <p className="text-[11px] font-bold text-emerald-500/80 uppercase tracking-wider">Top Share Link</p>
+                                <div className="p-2 rounded-xl bg-emerald-500/10"><Share2 aria-hidden="true" className="w-4 h-4 text-emerald-700 dark:text-emerald-500" /></div>
+                                <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-500/80 uppercase tracking-wider">Top Share Link</p>
                             </div>
-                            <h2 className="text-[16px] font-bold text-emerald-400 truncate max-w-[180px]">
+                            <h2 className="text-[16px] font-bold text-emerald-700 dark:text-emerald-400 truncate max-w-[180px]">
                                 {data.popularLinks[0]?.name && !data.popularLinks[0].name.includes('bdf') && !data.popularLinks[0].name.includes('adb')
                                     ? data.popularLinks[0].name : (data.popularLinks[0] ? 'Link Eksternal' : '-')}
                             </h2>
-                            <p className="text-xs text-emerald-500 mt-2 font-bold uppercase tracking-wider">{data.popularLinks[0]?.views || 0} tayangan</p>
+                            <p className="text-xs text-emerald-700 dark:text-emerald-500 mt-2 font-bold uppercase tracking-wider">{data.popularLinks[0]?.views || 0} tayangan</p>
                         </div>
                     </motion.div>
                 </motion.div>
@@ -297,23 +316,23 @@ export default function StatisticsPage() {
                 <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                     {/* Tren Kunjungan (Dual Axis) */}
-                    <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-7 lg:col-span-2">
-                        <div className="flex items-center justify-between gap-3 mb-6">
+                    <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-5 sm:p-7 lg:col-span-2">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-xl bg-blue-500/10"><Activity className="w-5 h-5 text-blue-400" /></div>
+                                <div className="p-2 rounded-xl bg-blue-500/10"><Activity aria-hidden="true" className="w-5 h-5 text-blue-700 dark:text-blue-400" /></div>
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-wider">Tren Analitik Kunjungan</h3>
                             </div>
                             <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-wider">
-                                <span className="flex items-center gap-1.5 text-blue-400">
+                                <span className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
                                     <span className="inline-block w-4 h-4 bg-blue-500/20 border border-blue-500/50 rounded"></span>Total Views
                                 </span>
-                                <span className="flex items-center gap-1.5 text-yellow-500">
+                                <span className="flex items-center gap-1.5 text-yellow-700 dark:text-yellow-500">
                                     <span className="inline-block w-6 border-t-[3px] border-yellow-500/80"></span>Unik Visitor
                                 </span>
                             </div>
                         </div>
 
-                        <div className="h-[320px] w-full">
+                        <div className="h-[320px] w-full" role="img" aria-label={`Grafik tren kunjungan harian ${days} hari terakhir: total views (batang) dan pengunjung unik (garis)`}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart
                                     data={data.dailyVisits}
@@ -321,30 +340,30 @@ export default function StatisticsPage() {
                                 >
                                     <defs>
                                         <linearGradient id="blueBarGrad" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.6} />
-                                            <stop offset="100%" stopColor="#1e3a8a" stopOpacity={0.1} />
+                                            <stop offset="0%" stopColor={isDark ? '#3b82f6' : '#2563eb'} stopOpacity={0.6} />
+                                            <stop offset="100%" stopColor={isDark ? '#1e3a8a' : '#93c5fd'} stopOpacity={0.1} />
                                         </linearGradient>
                                     </defs>
 
-                                    <CartesianGrid strokeDasharray="3 6" stroke="rgba(148,163,184,0.06)" vertical={false} />
-                                    <XAxis dataKey="date" stroke="transparent" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} tickLine={false} axisLine={false} dy={10} />
-                                    <YAxis yAxisId="left" stroke="transparent" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} tickLine={false} axisLine={false} width={36} />
-                                    <YAxis yAxisId="right" orientation="right" stroke="transparent" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} tickLine={false} axisLine={false} width={36} />
+                                    <CartesianGrid strokeDasharray="3 6" stroke={gridColor} vertical={false} />
+                                    <XAxis dataKey="date" stroke="transparent" tick={{ fontSize: 11, fill: axisColor, fontWeight: 600 }} tickLine={false} axisLine={false} dy={10} />
+                                    <YAxis yAxisId="left" stroke="transparent" tick={{ fontSize: 11, fill: axisColor, fontWeight: 600 }} tickLine={false} axisLine={false} width={36} />
+                                    <YAxis yAxisId="right" orientation="right" stroke="transparent" tick={{ fontSize: 11, fill: axisColor, fontWeight: 600 }} tickLine={false} axisLine={false} width={36} />
 
                                     <Tooltip
-                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(59,130,246,0.3)', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}
-                                        labelStyle={{ color: '#94a3b8', fontSize: 12, fontWeight: 700, marginBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 6 }}
-                                        formatter={(val: any, name: any) => {
+                                        contentStyle={{ backgroundColor: isDark ? '#0f172a' : '#ffffff', color: isDark ? '#f8fafc' : '#0f172a', borderColor: 'rgba(59,130,246,0.3)', borderRadius: '16px', boxShadow: isDark ? '0 10px 40px rgba(0,0,0,0.5)' : '0 10px 30px rgba(15,23,42,0.15)' }}
+                                        labelStyle={{ color: axisColor, fontSize: 12, fontWeight: 700, marginBottom: 6, borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(15,23,42,0.1)', paddingBottom: 6 }}
+                                        formatter={(val, name) => {
                                             return [
                                                 <span key="value" className="font-black tabular-nums">{val}</span>,
                                                 <span key="name" className="font-bold text-slate-500 dark:text-slate-400 ml-2">{name === 'views' ? 'Total Views' : 'Visitor Unik'}</span>
-                                            ] as any;
+                                            ] as [React.ReactNode, React.ReactNode];
                                         }}
-                                        cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                                        cursor={{ fill: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(15,23,42,0.04)' }}
                                     />
 
                                     <Bar yAxisId="left" dataKey="views" name="views" fill="url(#blueBarGrad)" radius={[6, 6, 0, 0]} barSize={40} />
-                                    <Line yAxisId="right" type="monotone" dataKey="unique" name="unique" stroke="#eab308" strokeWidth={3} dot={{ r: 4, fill: '#eab308' }} activeDot={{ r: 6, fill: '#fff', stroke: '#eab308', strokeWidth: 2 }} />
+                                    <Line yAxisId="right" type="monotone" dataKey="unique" name="unique" stroke={lineColor} strokeWidth={3} dot={{ r: 4, fill: lineColor }} activeDot={{ r: 6, fill: isDark ? '#fff' : '#0f172a', stroke: lineColor, strokeWidth: 2 }} />
                                 </ComposedChart>
                             </ResponsiveContainer>
                         </div>
@@ -353,9 +372,9 @@ export default function StatisticsPage() {
                     {/* Perangkat & Sumber Gabungan */}
                     <div className="space-y-6">
                         {/* Perangkat (Progress Bar Redesign) */}
-                        <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-7 relative">
+                        <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-5 sm:p-7 relative">
                             <div className="flex items-center gap-3 mb-6">
-                                <div className="p-2 rounded-xl bg-orange-500/10"><Smartphone className="w-5 h-5 text-orange-400" /></div>
+                                <div className="p-2 rounded-xl bg-orange-500/10"><Smartphone aria-hidden="true" className="w-5 h-5 text-orange-700 dark:text-orange-400" /></div>
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-wider">Perangkat Utama</h3>
                             </div>
 
@@ -363,14 +382,14 @@ export default function StatisticsPage() {
                                 <div className="space-y-5 mt-4">
                                     {data.deviceStats.map((entry) => {
                                         const Icon = DEVICE_ICONS[entry.name] || Globe;
-                                        const color = DEVICE_COLORS[entry.name] || '#60a5fa';
+                                        const color = (isDark ? DEVICE_COLORS[entry.name] : DEVICE_COLORS_LIGHT[entry.name]) || (isDark ? '#60a5fa' : '#1d4ed8');
                                         const pct = data.summary.totalVisits > 0 ? Math.round((entry.value / data.summary.totalVisits) * 100) : 0;
 
                                         return (
                                             <div key={entry.name}>
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                                                        <Icon className="w-4 h-4" style={{ color }} />
+                                                        <Icon aria-hidden="true" className="w-4 h-4" style={{ color }} />
                                                         <span className="text-xs font-bold uppercase tracking-wider">{entry.name}</span>
                                                     </div>
                                                     <span className="text-sm font-black tabular-nums" style={{ color }}>{pct}%</span>
@@ -381,27 +400,27 @@ export default function StatisticsPage() {
                                                         animate={{ width: `${pct}%` }}
                                                         transition={{ duration: 1, ease: 'easeOut' }}
                                                         className="h-full rounded-full"
-                                                        style={{ backgroundColor: color, boxShadow: `0 0 10px ${color}` }}
+                                                        style={{ backgroundColor: color, boxShadow: isDark ? `0 0 10px ${color}` : 'none' }}
                                                     />
                                                 </div>
-                                                <div className="text-[10px] text-slate-500 text-right mt-1 font-bold">{entry.value} Kunjungan</div>
+                                                <div className="text-[11px] text-slate-500 text-right mt-1 font-bold">{entry.value} Kunjungan</div>
                                             </div>
                                         );
                                     })}
                                 </div>
                             ) : (
-                                <div className="h-[150px] flex flex-col items-center justify-center text-slate-600">
-                                    <Smartphone className="w-12 h-12 mb-3 opacity-10" />
+                                <div className="h-[150px] flex flex-col items-center justify-center text-slate-500">
+                                    <Smartphone aria-hidden="true" className="w-12 h-12 mb-3 opacity-10" />
                                     <span className="text-sm font-bold uppercase tracking-wider opacity-30">Belum ada data</span>
                                 </div>
                             )}
                         </motion.div>
 
                         {/* Top Shared Links (Mini List) */}
-                        <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-7">
+                        <motion.div variants={cardVariants} className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-5 sm:p-7">
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-3">
-                                    <div className="p-2 rounded-xl bg-purple-500/10"><Share2 className="w-5 h-5 text-purple-400" /></div>
+                                    <div className="p-2 rounded-xl bg-purple-500/10"><Share2 aria-hidden="true" className="w-5 h-5 text-purple-700 dark:text-purple-400" /></div>
                                     <h3 className="text-[15px] font-bold text-slate-900 dark:text-white uppercase tracking-wider">Top Share Link</h3>
                                 </div>
                             </div>
@@ -411,13 +430,13 @@ export default function StatisticsPage() {
                                     data.popularLinks.slice(0, 3).map((link, i) => (
                                         <div key={link.token} className="p-3 bg-black/[0.04] dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5 flex items-center justify-between">
                                             <div className="flex items-center gap-3 min-w-0">
-                                                <div className="w-6 h-6 shrink-0 rounded-full bg-purple-500/10 flex items-center justify-center text-[10px] font-black text-purple-400">{i + 1}</div>
+                                                <div className="w-6 h-6 shrink-0 rounded-full bg-purple-500/10 flex items-center justify-center text-[11px] font-black text-purple-700 dark:text-purple-400">{i + 1}</div>
                                                 <div className="min-w-0 truncate">
-                                                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate w-[130px]">{link.name.length > 30 ? 'Link Berbagi' : link.name}</p>
-                                                    <p className="text-[9px] text-slate-500 font-mono mt-0.5">{link.token.slice(0, 10)}...</p>
+                                                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[130px]">{link.name.length > 30 ? 'Link Berbagi' : link.name}</p>
+                                                    <p className="text-[11px] text-slate-500 font-mono mt-0.5">{link.token.slice(0, 10)}...</p>
                                                 </div>
                                             </div>
-                                            <span className="text-sm font-black text-purple-400 tabular-nums shrink-0">{link.views}</span>
+                                            <span className="text-sm font-black text-purple-700 dark:text-purple-400 tabular-nums shrink-0">{link.views}</span>
                                         </div>
                                     ))
                                 ) : (
@@ -434,7 +453,7 @@ export default function StatisticsPage() {
                     <motion.div variants={cardVariants} initial="hidden" animate="show" className="mt-6">
                         <div className="flex flex-wrap gap-6">
                             {data.visitsBySource.map((src) => {
-                                const color = SOURCE_COLORS[src.page] || '#60a5fa';
+                                const color = (isDark ? SOURCE_COLORS[src.page] : SOURCE_COLORS_LIGHT[src.page]) || (isDark ? '#60a5fa' : '#1d4ed8');
                                 const Icon = SOURCE_ICONS[src.page] || Globe;
                                 const label = src.label === 'Tidak Diketahui' ? 'Aplikasi Utama' : src.label;
                                 const pct = data.summary.totalVisits > 0 ? Math.round((src.count / data.summary.totalVisits) * 100) : 0;
@@ -443,7 +462,7 @@ export default function StatisticsPage() {
                                         <div className="absolute -bottom-10 -right-10 w-32 h-32 opacity-10 blur-2xl group-hover:opacity-30 transition-opacity" style={{ backgroundColor: color }} />
                                         <div className="flex items-center gap-3 mb-4">
                                             <div className="p-2 rounded-xl" style={{ backgroundColor: `${color}15` }}>
-                                                <Icon className="w-5 h-5" style={{ color }} />
+                                                <Icon aria-hidden="true" className="w-5 h-5" style={{ color }} />
                                             </div>
                                             <span className="text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300">{label}</span>
                                         </div>
@@ -452,7 +471,7 @@ export default function StatisticsPage() {
                                             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{pct}% Rasio</span>
                                         </div>
                                         <div className="mt-2 h-1.5 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-800">
-                                            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color, boxShadow: `0 0 10px ${color}80` }} />
+                                            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color, boxShadow: isDark ? `0 0 10px ${color}80` : 'none' }} />
                                         </div>
                                     </div>
                                 );

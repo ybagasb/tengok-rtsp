@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
         ffmpegManager.stopStream(cameraId);
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed stopping stream:', error);
         return NextResponse.json({ error: 'Gagal menghentikan stream' }, { status: 500 });
     }

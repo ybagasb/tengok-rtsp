@@ -5,13 +5,12 @@ import useSWR, { mutate } from 'swr';
 import axios from 'axios';
 import {
     Link2, Plus, Trash2, Copy, CheckCircle2, XCircle, Clock,
-    Loader2, Eye, ToggleLeft, ToggleRight, MapPin, X,
+    Loader2, Eye, ToggleRight, MapPin, X,
     ChevronDown, ChevronUp, Search, Check, Timer
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageHeader, useConfirm } from '@/components/admin/AdminUI';
-import { inputCls } from '@/components/admin/shared';
 import { swrFetcher } from '@/lib/swrFetcher';
 
 interface LocationOption {
@@ -103,18 +102,21 @@ function LocationSelector({
     };
 
     return (
-        <div className="relative">
+        <div className="relative" onKeyDown={(e) => { if (e.key === 'Escape' && isOpen) { e.stopPropagation(); setIsOpen(false); } }}>
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm text-left flex items-center justify-between hover:border-yellow-500/50 transition-all font-medium text-slate-600 dark:text-slate-300"
+                aria-expanded={isOpen}
+                aria-haspopup="true"
+                aria-label={selected.length > 0 ? `Pilih lokasi target, ${selected.length} area terpilih` : 'Pilih lokasi target'}
+                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm text-left flex items-center justify-between hover:border-yellow-500/50 transition-all font-medium text-slate-600 dark:text-slate-300"
             >
                 <span className={selected.length > 0 ? 'text-slate-900 dark:text-white' : 'text-slate-500'}>
                     {selected.length > 0
                         ? `${selected.length} area terhubung`
                         : 'Pilih lokasi target...'}
                 </span>
-                {isOpen ? <ChevronUp className="w-4 h-4 text-yellow-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                {isOpen ? <ChevronUp aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" /> : <ChevronDown aria-hidden="true" className="w-4 h-4 text-slate-500" />}
             </button>
 
             <AnimatePresence>
@@ -124,18 +126,19 @@ function LocationSelector({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -8, scale: 0.98 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute top-full mt-2 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] z-50 overflow-hidden"
+                        className="absolute top-full mt-2 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl shadow-[0_30px_60px_rgba(15,23,42,0.15)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.6)] z-50 overflow-hidden"
                     >
                         {/* Search */}
                         <div className="p-4 border-b border-black/5 dark:border-white/5 bg-black/[0.03] dark:bg-black/20">
                             <div className="relative">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                <Search aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                                 <input
                                     type="text"
                                     placeholder="Cari nama lokasi atau kategori..."
+                                    aria-label="Cari nama lokasi atau kategori"
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
-                                    className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-10 pr-4 text-[13px] focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-600 focus:ring-1 focus:ring-yellow-500/50"
+                                    className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl py-3 pl-10 pr-4 text-[13px] focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-500 focus:ring-1 focus:ring-yellow-500/50"
                                 />
                             </div>
                         </div>
@@ -144,10 +147,11 @@ function LocationSelector({
                         <button
                             type="button"
                             onClick={toggleAll}
-                            className="w-full px-5 py-3.5 text-left text-[11px] font-bold text-yellow-500 hover:bg-yellow-500/10 transition-colors border-b border-black/5 dark:border-white/5 flex items-center gap-3 uppercase tracking-wider bg-white/[0.02]"
+                            aria-pressed={selected.length === locations.length}
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full px-5 py-3.5 text-left text-[11px] font-bold text-yellow-700 dark:text-yellow-500 hover:bg-yellow-500/10 transition-colors border-b border-black/5 dark:border-white/5 flex items-center gap-3 uppercase tracking-wider bg-white/[0.02]"
                         >
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${selected.length === locations.length ? 'bg-yellow-500 border-yellow-500' : 'border-black/15 dark:border-white/20'}`}>
-                                {selected.length === locations.length && <Check className="w-3 h-3 text-slate-950 stroke-[3]" />}
+                            <div aria-hidden="true" className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${selected.length === locations.length ? 'bg-yellow-500 border-yellow-500' : 'border-black/15 dark:border-white/20'}`}>
+                                {selected.length === locations.length && <Check aria-hidden="true" className="w-3 h-3 text-slate-950 stroke-[3]" />}
                             </div>
                             {selected.length === locations.length ? 'Batalkan Semua Pilihan' : 'Pilih Seluruh Area'}
                         </button>
@@ -161,21 +165,22 @@ function LocationSelector({
                                         type="button"
                                         key={loc._id}
                                         onClick={() => toggleLocation(loc._id)}
-                                        className={`w-full px-5 py-3.5 text-left flex items-center gap-4 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${isSelected ? 'bg-yellow-500/5' : ''}`}
+                                        aria-pressed={isSelected}
+                                        className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full px-5 py-3.5 text-left flex items-center gap-4 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${isSelected ? 'bg-yellow-500/5' : ''}`}
                                     >
-                                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-yellow-500 border-yellow-500' : 'border-black/15 dark:border-white/20'}`}>
-                                            {isSelected && <Check className="w-3 h-3 text-slate-950 stroke-[3]" />}
+                                        <div aria-hidden="true" className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all ${isSelected ? 'bg-yellow-500 border-yellow-500' : 'border-black/15 dark:border-white/20'}`}>
+                                            {isSelected && <Check aria-hidden="true" className="w-3 h-3 text-slate-950 stroke-[3]" />}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <div className={`text-[13px] font-bold truncate transition-colors ${isSelected ? 'text-yellow-500' : 'text-slate-600 dark:text-slate-300'}`}>{loc.name}</div>
-                                            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">{loc.category}</div>
+                                            <div className={`text-[13px] font-bold truncate transition-colors ${isSelected ? 'text-yellow-700 dark:text-yellow-500' : 'text-slate-600 dark:text-slate-300'}`}>{loc.name}</div>
+                                            <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mt-1">{loc.category}</div>
                                         </div>
                                     </button>
                                 );
                             })}
                             {filtered.length === 0 && (
                                 <div className="px-5 py-8 text-center text-sm font-bold text-slate-500 flex flex-col items-center justify-center gap-2">
-                                    <MapPin className="w-8 h-8 opacity-20" />
+                                    <MapPin aria-hidden="true" className="w-8 h-8 opacity-20" />
                                     Area tidak ditemukan
                                 </div>
                             )}
@@ -203,13 +208,20 @@ export default function ShareLinksPage() {
     const [showExpired, setShowExpired] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [showAddSheet, setShowAddSheet] = useState(false);
+    // Escape menutup sheet form (mobile)
+    useEffect(() => {
+        if (!showAddSheet) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowAddSheet(false); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [showAddSheet]);
 
     useEffect(() => {
         const fetchLocations = async () => {
             try {
                 const res = await axios.get('/api/locations');
                 if (res.data.success) {
-                    setLocations(res.data.data.map((l: any) => ({
+                    setLocations(res.data.data.map((l: LocationOption) => ({
                         _id: l._id,
                         name: l.name,
                         category: l.category,
@@ -270,7 +282,7 @@ export default function ShareLinksPage() {
             setCopiedId(id);
             toast.success('Tautan disalin ke clipboard!');
             setTimeout(() => setCopiedId(null), 2000);
-        } catch (error) {
+        } catch {
             toast.error('Gagal menyalin tautan');
         }
     };
@@ -324,13 +336,13 @@ export default function ShareLinksPage() {
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                            className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 p-8 rounded-3xl sticky top-6 shadow-[0_30px_60px_rgba(0,0,0,0.5)] relative overflow-hidden group"
+                            className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 p-8 rounded-3xl sticky top-6 shadow-[0_30px_60px_rgba(15,23,42,0.15)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.5)] relative overflow-hidden group"
                         >
                             <div className="absolute top-0 right-0 w-40 h-40 bg-orange-500/10 rounded-full blur-[50px] pointer-events-none" />
 
                             <h2 className="text-lg font-bold mb-8 flex items-center gap-3 text-slate-900 dark:text-white uppercase tracking-wide">
                                 <div className="p-2 rounded-xl bg-yellow-500/10">
-                                    <Plus className="w-5 h-5 text-yellow-500" />
+                                    <Plus aria-hidden="true" className="w-5 h-5 text-yellow-700 dark:text-yellow-500" />
                                 </div>
                                 Form Link Baru
                             </h2>
@@ -338,22 +350,23 @@ export default function ShareLinksPage() {
                             <form onSubmit={handleCreate} className="space-y-6 relative z-10">
                                 {/* Label */}
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Judul Hak Akses *</label>
+                                    <label htmlFor="sl-label-d" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Judul Hak Akses *</label>
                                     <input
+                                        id="sl-label-d"
                                         type="text"
                                         value={label}
                                         onChange={e => setLabel(e.target.value)}
                                         placeholder="Contoh: Inspeksi K3 Lapangan"
-                                        className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-600 focus:ring-1 focus:ring-yellow-500/50"
+                                        className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-500 focus:ring-1 focus:ring-yellow-500/50"
                                     />
                                 </div>
 
                                 {/* Location Selector */}
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Teritori / Proyek *</label>
+                                    <span id="sl-loc-d" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Teritori / Proyek *</span>
                                     {isLoadingLocations ? (
                                         <div className="flex items-center justify-center bg-black/[0.04] dark:bg-black/40 border border-black/5 dark:border-white/5 rounded-xl p-4 text-slate-500 font-bold text-xs uppercase">
-                                            <Loader2 className="w-4 h-4 animate-spin mr-2 text-yellow-500" /> Memuat Peta Data...
+                                            <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin mr-2 text-yellow-700 dark:text-yellow-500" /> Memuat Peta Data...
                                         </div>
                                     ) : (
                                         <LocationSelector
@@ -366,14 +379,15 @@ export default function ShareLinksPage() {
 
                                 {/* Duration */}
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Timer Kedaluwarsa *</label>
-                                    <div className="grid grid-cols-2 gap-3 mt-2">
+                                    <span id="sl-dur-d" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Timer Kedaluwarsa *</span>
+                                    <div role="group" aria-labelledby="sl-dur-d" className="grid grid-cols-2 gap-3 mt-2">
                                         {DURATION_OPTIONS.map(opt => (
                                             <button
                                                 key={opt.value}
                                                 type="button"
                                                 onClick={() => setDuration(opt.value)}
-                                                className={`py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
+                                                aria-pressed={duration === opt.value}
+                                                className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${
                                                     duration === opt.value
                                                         ? 'bg-gradient-to-br from-yellow-500 to-orange-500 border-orange-400 text-slate-950 shadow-[0_10px_20px_rgba(234,179,8,0.3)]'
                                                         : 'bg-black/[0.04] dark:bg-black/40 border-black/10 dark:border-white/10 text-slate-500 hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
@@ -390,9 +404,9 @@ export default function ShareLinksPage() {
                                     whileTap={{ scale: 0.97 }}
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-900 font-bold py-5 rounded-2xl transition-all shadow-[0_10px_30px_rgba(234,179,8,0.3)] disabled:opacity-50 flex items-center justify-center gap-3 mt-4 uppercase text-sm tracking-wider group/btn"
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-900 font-bold py-5 rounded-2xl transition-all shadow-[0_10px_30px_rgba(234,179,8,0.3)] disabled:opacity-50 flex items-center justify-center gap-3 mt-4 uppercase text-sm tracking-wider group/btn"
                                 >
-                                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Link2 className="w-5 h-5 group-hover/btn:scale-110 transition-transform" /> Distribusikan Tautan</>}
+                                    {isSubmitting ? <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" /> : <><Link2 aria-hidden="true" className="w-5 h-5 group-hover/btn:scale-110 transition-transform" /> Distribusikan Tautan</>}
                                 </motion.button>
                             </form>
                         </motion.div>
@@ -404,24 +418,24 @@ export default function ShareLinksPage() {
                         <div>
                             <div className="flex items-center gap-3 mb-6 ml-1">
                                 <h2 className="text-xl font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                                    <CheckCircle2 aria-hidden="true" className="w-6 h-6 text-emerald-700 dark:text-emerald-500" />
                                     Tautan Tersedia
                                 </h2>
                                 <span className="bg-emerald-500 text-slate-950 font-bold px-2.5 py-0.5 rounded-full text-sm">{activeLinks.length}</span>
                             </div>
 
                             {isLoading ? (
-                                <div className="text-center py-24 text-slate-500 flex flex-col items-center justify-center">
-                                    <Loader2 className="w-8 h-8 animate-spin mb-4 text-emerald-500" />
+                                <div role="status" className="text-center py-24 text-slate-500 flex flex-col items-center justify-center">
+                                    <Loader2 aria-hidden="true" className="w-8 h-8 animate-spin mb-4 text-emerald-700 dark:text-emerald-500" />
                                     <p className="uppercase tracking-wider font-bold text-sm">Sinkronisasi Jaringan...</p>
                                 </div>
                             ) : activeLinks.length === 0 ? (
                                 <motion.div 
                                     initial={{ opacity: 0, scale: 0.95 }}
                                     animate={{ opacity: 1, scale: 1 }}
-                                    className="flex flex-col items-center justify-center py-20 text-slate-600 border-2 border-dashed border-black/10 dark:border-white/10 rounded-[2rem] bg-black/[0.02] dark:bg-slate-900/20"
+                                    className="flex flex-col items-center justify-center py-20 text-slate-500 border-2 border-dashed border-black/10 dark:border-white/10 rounded-[2rem] bg-black/[0.02] dark:bg-slate-900/20"
                                 >
-                                    <Link2 className="w-20 h-20 mb-4 opacity-10" />
+                                    <Link2 aria-hidden="true" className="w-20 h-20 mb-4 opacity-10" />
                                     <p className="font-bold text-lg uppercase tracking-wider opacity-30">Distribusi Kosong</p>
                                 </motion.div>
                             ) : (
@@ -437,17 +451,17 @@ export default function ShareLinksPage() {
                                             <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-3 mb-4">
-                                                        <h3 className="font-bold text-slate-900 dark:text-white text-xl tracking-tight truncate group-hover:text-yellow-500 transition-colors">{link.label}</h3>
-                                                        <span className="text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 px-3 py-1 rounded-full uppercase tracking-widest shrink-0 shadow-[0_0_10px_rgba(16,185,129,0.3)]">
+                                                        <h3 className="font-bold text-slate-900 dark:text-white text-xl tracking-tight truncate group-hover:text-yellow-700 dark:group-hover:text-yellow-500 transition-colors">{link.label}</h3>
+                                                        <span className="text-[11px] font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 px-3 py-1 rounded-full uppercase tracking-widest shrink-0 shadow-[0_0_10px_rgba(16,185,129,0.3)]">
                                                             Live
                                                         </span>
                                                     </div>
 
                                                     {/* Locations */}
                                                     <div className="flex flex-wrap gap-2 mb-6">
-                                                        {link.locations.map((loc: any) => (
-                                                            <span key={loc._id} className="text-[10px] font-bold bg-black/[0.04] dark:bg-black/40 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg border border-black/5 dark:border-white/5 flex items-center gap-1.5 hover:border-black/20 dark:hover:border-white/20 transition-colors">
-                                                                <MapPin className="w-3 h-3 text-orange-400" />
+                                                        {link.locations.map((loc) => (
+                                                            <span key={loc._id} className="text-[11px] font-bold bg-black/[0.04] dark:bg-black/40 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg border border-black/5 dark:border-white/5 flex items-center gap-1.5 hover:border-black/20 dark:hover:border-white/20 transition-colors">
+                                                                <MapPin aria-hidden="true" className="w-3 h-3 text-orange-700 dark:text-orange-400" />
                                                                 {loc.name}
                                                             </span>
                                                         ))}
@@ -456,15 +470,15 @@ export default function ShareLinksPage() {
                                                     {/* Meta Stats Box */}
                                                     <div className="flex flex-wrap items-center gap-4 bg-black/[0.03] dark:bg-black/30 p-3 rounded-xl border border-black/5 dark:border-white/5">
                                                         <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 border-r border-black/10 dark:border-white/10 pr-4">
-                                                            <Timer className="w-4 h-4 text-emerald-400" />
+                                                            <Timer aria-hidden="true" className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                                                             {formatTimeLeft(link.expiresAt)}
                                                         </div>
                                                         <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 border-r border-black/10 dark:border-white/10 pr-4 hidden sm:flex">
-                                                            <Clock className="w-4 h-4" />
+                                                            <Clock aria-hidden="true" className="w-4 h-4" />
                                                             {formatDate(link.createdAt).split(',')[0]}
                                                         </div>
-                                                        <div className="flex items-center gap-2 text-[11px] font-bold text-yellow-500 uppercase tracking-wider">
-                                                            <Eye className="w-4 h-4" />
+                                                        <div className="flex items-center gap-2 text-[11px] font-bold text-yellow-700 dark:text-yellow-500 uppercase tracking-wider">
+                                                            <Eye aria-hidden="true" className="w-4 h-4" />
                                                             {link.accessCount} Viewer
                                                         </div>
                                                     </div>
@@ -474,25 +488,28 @@ export default function ShareLinksPage() {
                                                 <div className="flex md:flex-col items-center gap-3 shrink-0 bg-black/[0.03] dark:bg-black/20 p-2 rounded-2xl border border-black/5 dark:border-white/5">
                                                     <button
                                                         onClick={() => handleCopy(link.token, link._id)}
-                                                        className={`p-3.5 rounded-xl transition-all flex items-center justify-center relative ${copiedId === link._id ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 dark:text-slate-400 hover:text-slate-950 hover:bg-yellow-500'}`}
+                                                        className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3.5 min-w-11 min-h-11 rounded-xl transition-all flex items-center justify-center relative ${copiedId === link._id ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 dark:text-slate-400 hover:text-slate-950 hover:bg-yellow-500'}`}
                                                         title="Salin Tautan"
+                                                        aria-label={`Salin tautan ${link.label}`}
                                                     >
-                                                        {copiedId === link._id ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                                                        {copiedId === link._id ? <CheckCircle2 aria-hidden="true" className="w-5 h-5" /> : <Copy aria-hidden="true" className="w-5 h-5" />}
                                                     </button>
                                                     <div className="w-px h-6 md:w-6 md:h-px bg-black/[0.06] dark:bg-white/10" />
                                                     <button
                                                         onClick={() => handleToggle(link._id)}
-                                                        className="p-3.5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-700 rounded-xl transition-all"
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3.5 min-w-11 min-h-11 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-all"
                                                         title="Bekukan Akses"
+                                                        aria-label={`Bekukan akses ${link.label}`}
                                                     >
-                                                        <ToggleRight className="w-5 h-5" />
+                                                        <ToggleRight aria-hidden="true" className="w-5 h-5" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleDelete(link._id)}
-                                                        className="p-3.5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-red-500 rounded-xl transition-all"
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3.5 min-w-11 min-h-11 flex items-center justify-center text-slate-500 hover:text-white hover:bg-red-500 rounded-xl transition-all"
                                                         title="Hapus Data"
+                                                        aria-label={`Hapus tautan ${link.label}`}
                                                     >
-                                                        <Trash2 className="w-5 h-5" />
+                                                        <Trash2 aria-hidden="true" className="w-5 h-5" />
                                                     </button>
                                                 </div>
                                             </div>
@@ -507,16 +524,17 @@ export default function ShareLinksPage() {
                             <div className="pt-6 border-t border-black/5 dark:border-white/5">
                                 <button
                                     onClick={() => setShowExpired(!showExpired)}
-                                    className="flex items-center justify-between w-full bg-white/60 dark:bg-slate-900/40 border border-black/5 dark:border-white/5 hover:border-black/10 dark:hover:border-white/10 p-4 rounded-2xl transition-all group"
+                                    aria-expanded={showExpired}
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center justify-between w-full bg-white/60 dark:bg-slate-900/40 border border-black/5 dark:border-white/5 hover:border-black/10 dark:hover:border-white/10 p-4 rounded-2xl transition-all group"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <XCircle className="w-6 h-6 text-red-500/50 group-hover:text-red-500 transition-colors" />
-                                        <span className="text-sm font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 group-hover:text-white transition-colors">
+                                        <XCircle aria-hidden="true" className="w-6 h-6 text-red-600/70 dark:text-red-500/60 group-hover:text-red-700 dark:group-hover:text-red-500 transition-colors" />
+                                        <span className="text-sm font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
                                             Log Kedaluwarsa ({expiredLinks.length})
                                         </span>
                                     </div>
-                                    <div className="p-2 bg-black/[0.04] dark:bg-black/40 rounded-lg group-hover:bg-black/60 transition-colors text-slate-500 group-hover:text-white">
-                                        {showExpired ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                    <div className="p-2 bg-black/[0.04] dark:bg-black/40 rounded-lg group-hover:bg-black/10 dark:group-hover:bg-black/60 transition-colors text-slate-500 group-hover:text-slate-900 dark:group-hover:text-white">
+                                        {showExpired ? <ChevronUp aria-hidden="true" className="w-4 h-4" /> : <ChevronDown aria-hidden="true" className="w-4 h-4" />}
                                     </div>
                                 </button>
 
@@ -536,22 +554,23 @@ export default function ShareLinksPage() {
                                                     <div className="min-w-0 pr-4">
                                                         <div className="flex items-center gap-3 mb-1">
                                                             <h3 className="font-bold text-slate-600 dark:text-slate-300 truncate text-base">{link.label}</h3>
-                                                            <span className="text-[9px] font-bold bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded uppercase tracking-wider">
+                                                            <span className="text-[11px] font-bold bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20 px-2 py-0.5 rounded uppercase tracking-wider">
                                                                 {!link.isActive ? 'Dicabut' : 'Habis'}
                                                             </span>
                                                         </div>
-                                                        <div className="flex items-center gap-4 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                                        <div className="flex items-center gap-4 text-[11px] text-slate-500 font-bold uppercase tracking-wider">
                                                             <span>{formatDate(link.createdAt).split(',')[0]}</span>
-                                                            <span className="w-1 h-1 rounded-full bg-slate-700" />
+                                                            <span aria-hidden="true" className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-700" />
                                                             <span>{link.accessCount} VIEWER</span>
                                                         </div>
                                                     </div>
                                                     <button
                                                         onClick={() => handleDelete(link._id)}
-                                                        className="p-3 bg-black/[0.04] dark:bg-white/5 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-red-500 rounded-xl transition-all shrink-0"
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3 bg-black/[0.04] dark:bg-white/5 text-slate-500 hover:text-white hover:bg-red-500 rounded-xl transition-all shrink-0 min-w-10 min-h-10 inline-flex items-center justify-center"
                                                         title="Hapus Permanen"
+                                                        aria-label={`Hapus permanen tautan ${link.label}`}
                                                     >
-                                                        <Trash2 className="w-4 h-4" />
+                                                        <Trash2 aria-hidden="true" className="w-4 h-4" />
                                                     </button>
                                                 </div>
                                             ))}
@@ -566,13 +585,15 @@ export default function ShareLinksPage() {
 
             {/* ── Mobile FAB ─────────────────────────────────────────────── */}
             <motion.button
-                className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl shadow-[0_8px_30px_rgba(234,179,8,0.5)] flex items-center justify-center text-slate-950"
+                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl shadow-[0_8px_30px_rgba(234,179,8,0.5)] flex items-center justify-center text-slate-950"
                 whileTap={{ scale: 0.92 }}
                 whileHover={{ y: -2 }}
                 onClick={() => setShowAddSheet(true)}
                 title="Buat Link Baru"
+                aria-label="Buat link baru"
+                aria-haspopup="dialog"
             >
-                <Plus className="w-7 h-7 stroke-[2.5]" />
+                <Plus aria-hidden="true" className="w-7 h-7 stroke-[2.5]" />
             </motion.button>
 
             {/* ── Mobile Slide-Up Sheet ───────────────────────────────────── */}
@@ -582,53 +603,56 @@ export default function ShareLinksPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Form link baru"
                         className="lg:hidden fixed inset-0 z-[70] flex items-end"
                     >
-                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowAddSheet(false)} />
+                        <div aria-hidden="true" className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowAddSheet(false)} />
                         <motion.div
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
                             transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                            className="relative w-full bg-white/98 dark:bg-slate-900/98 backdrop-blur-2xl border-t border-black/10 dark:border-white/10 rounded-t-3xl p-6 pb-10 max-h-[90vh] overflow-y-auto"
+                            className="relative w-full bg-white/98 dark:bg-slate-900/98 backdrop-blur-2xl border-t border-black/10 dark:border-white/10 rounded-t-3xl p-6 pb-[max(2rem,env(safe-area-inset-bottom))] max-h-[90dvh] overflow-y-auto"
                         >
-                            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-6" />
+                            <div aria-hidden="true" className="w-10 h-1 bg-black/15 dark:bg-white/20 rounded-full mx-auto mb-6" />
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-3">
                                     <div className="p-2 rounded-xl bg-yellow-500/10">
-                                        <Plus className="w-5 h-5 text-yellow-500" />
+                                        <Plus aria-hidden="true" className="w-5 h-5 text-yellow-700 dark:text-yellow-500" />
                                     </div>
                                     Form Link Baru
                                 </h3>
-                                <button onClick={() => setShowAddSheet(false)} className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
-                                    <X className="w-5 h-5" />
+                                <button type="button" onClick={() => setShowAddSheet(false)} aria-label="Tutup form link baru" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white min-w-10 min-h-10 inline-flex items-center justify-center">
+                                    <X aria-hidden="true" className="w-5 h-5" />
                                 </button>
                             </div>
                             <form onSubmit={async (e) => { const ok = await handleCreate(e); if (ok) setShowAddSheet(false); }} className="space-y-6">
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Judul Hak Akses *</label>
-                                    <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="Contoh: Inspeksi K3 Lapangan"
-                                        className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-600"
+                                    <label htmlFor="sl-label-m" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Judul Hak Akses *</label>
+                                    <input id="sl-label-m" type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="Contoh: Inspeksi K3 Lapangan"
+                                        className="w-full bg-black/[0.04] dark:bg-black/40 border border-black/10 dark:border-white/10 rounded-xl p-4 text-sm focus:border-yellow-500/50 outline-none transition-all text-slate-900 dark:text-white placeholder:text-slate-500"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Teritori / Proyek *</label>
+                                    <span id="sl-loc-m" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Teritori / Proyek *</span>
                                     <LocationSelector locations={locations} selected={selectedLocationIds} onChange={setSelectedLocationIds} />
                                 </div>
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Timer Kedaluwarsa *</label>
-                                    <div className="grid grid-cols-2 gap-3 mt-2">
+                                    <span id="sl-dur-m" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-2 block">Timer Kedaluwarsa *</span>
+                                    <div role="group" aria-labelledby="sl-dur-m" className="grid grid-cols-2 gap-3 mt-2">
                                         {DURATION_OPTIONS.map(opt => (
-                                            <button key={opt.value} type="button" onClick={() => setDuration(opt.value)}
-                                                className={`py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${duration === opt.value ? 'bg-gradient-to-br from-yellow-500 to-orange-500 border-orange-400 text-slate-950 shadow-[0_10px_20px_rgba(234,179,8,0.3)]' : 'bg-black/[0.04] dark:bg-black/40 border-black/10 dark:border-white/10 text-slate-500 hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'}`}
+                                            <button key={opt.value} type="button" onClick={() => setDuration(opt.value)} aria-pressed={duration === opt.value}
+                                                className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border ${duration === opt.value ? 'bg-gradient-to-br from-yellow-500 to-orange-500 border-orange-400 text-slate-950 shadow-[0_10px_20px_rgba(234,179,8,0.3)]' : 'bg-black/[0.04] dark:bg-black/40 border-black/10 dark:border-white/10 text-slate-500 hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'}`}
                                             >{opt.label}</button>
                                         ))}
                                     </div>
                                 </div>
                                 <motion.button whileTap={{ scale: 0.97 }} type="submit" disabled={isSubmitting}
-                                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-900 font-bold py-5 rounded-2xl transition-all shadow-[0_10px_30px_rgba(234,179,8,0.3)] disabled:opacity-50 flex items-center justify-center gap-3 uppercase text-sm tracking-wider"
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-900 font-bold py-5 rounded-2xl transition-all shadow-[0_10px_30px_rgba(234,179,8,0.3)] disabled:opacity-50 flex items-center justify-center gap-3 uppercase text-sm tracking-wider"
                                 >
-                                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Link2 className="w-5 h-5" /> Distribusikan Tautan</>}
+                                    {isSubmitting ? <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" /> : <><Link2 aria-hidden="true" className="w-5 h-5" /> Distribusikan Tautan</>}
                                 </motion.button>
                             </form>
                         </motion.div>

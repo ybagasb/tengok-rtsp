@@ -76,8 +76,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         });
 
         return NextResponse.json({ success: true, key });
-    } catch (error: any) {
-        console.error('[Project Upload] Error:', error?.message);
+    } catch (error) {
+        console.error('[Project Upload] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ success: false, error: 'Gagal mengunggah file' }, { status: 500 });
     }
 }

@@ -14,7 +14,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     // Hapus atau set false setelah masalah teridentifikasi
     logger: {
         error(error: Error) {
-            const cause = (error as any).cause;
+            const cause = (error as Error & { cause?: { message?: string; code?: string; errno?: number | string; address?: string; port?: number } }).cause;
             console.error('[AUTH ERROR]', error.message);
             if (cause) {
                 console.error('[AUTH CAUSE]', {

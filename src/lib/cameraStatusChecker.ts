@@ -53,7 +53,7 @@ export function probeCamera(rtspUrl: string): Promise<'online' | 'offline'> {
             }
             try {
                 const parsed = JSON.parse(outputData);
-                const hasVideoStream = parsed?.streams?.some((s: any) => s.codec_type === 'video');
+                const hasVideoStream = (parsed as { streams?: Array<{ codec_type?: string }> } | null)?.streams?.some((s) => s.codec_type === 'video');
                 resolve(hasVideoStream ? 'online' : 'offline');
             } catch {
                 resolve('offline'); // If output isn't valid JSON or format changes, assume offline to be safe
@@ -124,7 +124,7 @@ class CameraStatusChecker {
 
             // Skip cameras that are currently being actively streamed
             // to avoid RTSP connection conflicts (many cameras only allow 1 connection)
-            const camerasToProbe = cameras.filter((cam: any) => !ffmpegManager.isStreaming(cam._id.toString()));
+            const camerasToProbe = cameras.filter((cam) => !ffmpegManager.isStreaming(cam._id.toString()));
             const skipped = cameras.length - camerasToProbe.length;
             if (skipped > 0) console.log(`[StatusChecker] Skipping ${skipped} camera(s) with active streams`);
 
@@ -134,12 +134,12 @@ class CameraStatusChecker {
             let offlineCount = 0;
 
             const now = new Date();
-            await runInBatches(camerasToProbe, BATCH_SIZE, async (cam: any) => {
+            await runInBatches(camerasToProbe, BATCH_SIZE, async (cam) => {
                 const status = await probeCamera(cam.streamUrl);
                 if (status === 'online') onlineCount++;
                 else offlineCount++;
 
-                const updateFields: Record<string, any> = { status, lastCheckedAt: now };
+                const updateFields: Record<string, unknown> = { status, lastCheckedAt: now };
                 if (status === 'online') {
                     updateFields.lastOnlineAt = now;
                 }
@@ -158,8 +158,8 @@ class CameraStatusChecker {
             console.log(`[StatusChecker] Done in ${elapsed}s → ${onlineCount} online, ${offlineCount} offline. Next check in ${nextInterval / 1000}s`);
             return nextInterval;
 
-        } catch (err: any) {
-            console.error('[StatusChecker] Error:', err.message);
+        } catch (err) {
+            console.error('[StatusChecker] Error:', err instanceof Error ? err.message : undefined);
             return INTERVAL_HAS_OFFLINE_MS;
         } finally {
             this.isRunning = false;

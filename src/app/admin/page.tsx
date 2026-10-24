@@ -3,21 +3,43 @@
 import { useEffect, useState, useMemo } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { 
-    LayoutDashboard, Monitor, MapPin, Tags, Link2, BarChart3, Activity, 
-    ClipboardList, Wifi, WifiOff, Users, ArrowUpRight, Plus, 
-    ShieldCheck, AlertTriangle, PlayCircle, RefreshCw, Eye, Sparkles,
-    CheckCircle2, Clock, Globe, ArrowRight, FileDown, Loader2
+    Monitor, MapPin, Tags, Link2, BarChart3, Activity, 
+    ClipboardList, Wifi, WifiOff, ArrowUpRight, 
+    ShieldCheck, AlertTriangle, PlayCircle, RefreshCw,
+    CheckCircle2, ArrowRight, FileDown, Loader2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { PageHeader } from '@/components/admin/AdminUI';
 import { containerVariants, cardVariants } from '@/components/admin/shared';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { swrFetcher } from '@/lib/swrFetcher';
+import { useTheme } from '@/components/ThemeProvider';
 
+// Bentuk minimal data yang dipakai dashboard (hasil API)
+interface DashCamera {
+    _id: string;
+    name: string;
+    status: string;
+    streamUrl?: string;
+}
+interface DashLocation {
+    _id: string;
+    name: string;
+    cameras?: (string | { _id?: string })[];
+}
+interface DashShareLink {
+    isActive: boolean;
+}
+interface DashAuditLog {
+    _id: string;
+    action: string;
+    entity: string;
+    entityName?: string;
+    detail?: string;
+    by?: string;
+    timestamp: string;
+}
 function formatDate(iso: string) {
     const d = new Date(iso);
     return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ', ' +
@@ -32,12 +54,14 @@ function displayActor(by?: string): string {
 }
 
 export default function AdminOverviewDashboard() {
-    const router = useRouter();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
+    const axisColor = isDark ? '#94a3b8' : '#475569';
 
     // Data Fetching
     // includeStreamUrl=1: dashboard PDF export includes the stream URL column.
     const { data: cameraData, isLoading: loadingCameras, mutate: refreshCameras } = useSWR('/api/cameras?includeStreamUrl=1', swrFetcher);
-    const { data: locationData, isLoading: loadingLocations, mutate: refreshLocations } = useSWR('/api/locations', swrFetcher);
+    const { data: locationData, mutate: refreshLocations } = useSWR('/api/locations', swrFetcher);
     const { data: categoryData } = useSWR('/api/categories', swrFetcher);
     const { data: shareLinkData } = useSWR('/api/share-links', swrFetcher);
     const { data: statsData } = useSWR('/api/stats/summary?days=7', swrFetcher);
@@ -61,15 +85,15 @@ export default function AdminOverviewDashboard() {
         return () => clearInterval(timer);
     }, []);
 
-    const cameras = cameraData?.data || [];
-    const locations = locationData?.data || [];
+    const cameras = useMemo<DashCamera[]>(() => cameraData?.data || [], [cameraData]);
+    const locations = useMemo<DashLocation[]>(() => locationData?.data || [], [locationData]);
     const categories = Array.isArray(categoryData) ? categoryData : (categoryData?.data || []);
-    const shareLinks = shareLinkData?.data || [];
-    const auditLogs = auditData?.data || [];
+    const shareLinks: DashShareLink[] = shareLinkData?.data || [];
+    const auditLogs: DashAuditLog[] = auditData?.data || [];
 
     // Computed Stats
-    const onlineCameras = cameras.filter((c: any) => c.status === 'online');
-    const offlineCameras = cameras.filter((c: any) => c.status === 'offline');
+    const onlineCameras = cameras.filter((c) => c.status === 'online');
+    const offlineCameras = cameras.filter((c) => c.status === 'offline');
     const totalCameras = cameras.length;
     // Tanpa data kamera (masih memuat / belum ada) jangan tampilkan 100% yang menyesatkan.
     const hasCameraData = totalCameras > 0;
@@ -80,9 +104,9 @@ export default function AdminOverviewDashboard() {
     // Assigned vs Unassigned Cameras
     const cameraToLocationMap = useMemo(() => {
         const map = new Map<string, { id: string; name: string }[]>();
-        locations.forEach((loc: any) => {
+        locations.forEach((loc) => {
             if (Array.isArray(loc.cameras)) {
-                loc.cameras.forEach((cam: any) => {
+                loc.cameras.forEach((cam) => {
                     const cid = typeof cam === 'string' ? cam : cam._id;
                     if (cid) {
                         const existing = map.get(cid) || [];
@@ -95,7 +119,7 @@ export default function AdminOverviewDashboard() {
         return map;
     }, [locations]);
 
-    const unassignedCameras = cameras.filter((c: any) => !cameraToLocationMap.has(c._id));
+    const unassignedCameras = cameras.filter((c) => !cameraToLocationMap.has(c._id));
 
     // Visitor Stats
     const totalVisits = statsData?.data?.summary?.totalVisits || 0;
@@ -122,7 +146,7 @@ export default function AdminOverviewDashboard() {
             doc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, 14, 28);
             doc.text(`Total Kamera: ${totalCameras} | Online: ${onlineCameras.length} | Offline: ${offlineCameras.length} | SLA: ${availabilityRate}%`, 14, 34);
 
-            const tableRows = cameras.map((c: any, i: number) => {
+            const tableRows = cameras.map((c, i: number) => {
                 const locs = (cameraToLocationMap.get(c._id) || []).map(l => l.name).join(', ') || 'Belum Terpasang';
                 return [i + 1, c.name, locs, c.status.toUpperCase(), c.streamUrl || '-'];
             });
@@ -153,8 +177,8 @@ export default function AdminOverviewDashboard() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-black/5 dark:border-white/5 pb-6">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
-                            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Sistem Berjalan Aktif</span>
+                            <div aria-hidden="true" className="w-2 h-2 rounded-full bg-emerald-400 animate-ping motion-reduce:animate-none" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Sistem Berjalan Aktif</span>
                         </div>
                         <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
                             Executive Dashboard
@@ -168,24 +192,25 @@ export default function AdminOverviewDashboard() {
                         <button
                             onClick={handleExportPDF}
                             disabled={isExportingPDF}
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50 min-h-10"
                         >
-                            {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin text-yellow-500" /> : <FileDown className="w-4 h-4" />}
+                            {isExportingPDF ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin text-yellow-700 dark:text-yellow-500" /> : <FileDown aria-hidden="true" className="w-4 h-4" />}
                             Export PDF
                         </button>
                         <Link
                             href="/multiview"
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-10"
                         >
-                            <PlayCircle className="w-4 h-4 text-yellow-500" />
+                            <PlayCircle aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" />
                             Multi-View
                         </Link>
                         <button
                             onClick={handleRefreshAll}
-                            className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-w-10 min-h-10 inline-flex items-center justify-center p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
                             title="Segarkan Data"
+                            aria-label="Segarkan data dashboard"
                         >
-                            <RefreshCw className="w-4 h-4" />
+                            <RefreshCw aria-hidden="true" className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
@@ -204,8 +229,8 @@ export default function AdminOverviewDashboard() {
                     >
                         <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Kamera CCTV</span>
-                            <div className="p-2.5 rounded-2xl bg-yellow-500/10 text-yellow-500">
-                                <Monitor className="w-5 h-5" />
+                            <div className="p-2.5 rounded-2xl bg-yellow-500/10 text-yellow-700 dark:text-yellow-500">
+                                <Monitor aria-hidden="true" className="w-5 h-5" />
                             </div>
                         </div>
                         <div className="mt-3 flex items-baseline gap-2">
@@ -213,12 +238,12 @@ export default function AdminOverviewDashboard() {
                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Total Unit</span>
                         </div>
                         <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-black/5 dark:border-white/5">
-                            <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                                <Wifi className="w-3.5 h-3.5" />
+                            <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-bold">
+                                <Wifi aria-hidden="true" className="w-3.5 h-3.5" />
                                 <span>{onlineCameras.length} Online</span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-rose-400 font-bold">
-                                <WifiOff className="w-3.5 h-3.5" />
+                            <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400 font-bold">
+                                <WifiOff aria-hidden="true" className="w-3.5 h-3.5" />
                                 <span>{offlineCameras.length} Offline</span>
                             </div>
                         </div>
@@ -231,12 +256,12 @@ export default function AdminOverviewDashboard() {
                     >
                         <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Kesiapan Sistem (SLA)</span>
-                            <div className={`p-2.5 rounded-2xl ${!hasCameraData ? 'bg-slate-500/10 text-slate-400' : availabilityRate >= 85 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                <Activity className="w-5 h-5" />
+                            <div className={`p-2.5 rounded-2xl ${!hasCameraData ? 'bg-slate-500/10 text-slate-500 dark:text-slate-400' : availabilityRate >= 85 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400'}`}>
+                                <Activity aria-hidden="true" className="w-5 h-5" />
                             </div>
                         </div>
                         <div className="mt-3 flex items-baseline gap-2">
-                            <span className={`text-3xl font-extrabold tracking-tight ${!hasCameraData ? 'text-slate-400' : availabilityRate >= 85 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            <span className={`text-3xl font-extrabold tracking-tight ${!hasCameraData ? 'text-slate-500 dark:text-slate-400' : availabilityRate >= 85 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
                                 {hasCameraData ? `${availabilityRate}%` : '—'}
                             </span>
                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Availability</span>
@@ -258,8 +283,8 @@ export default function AdminOverviewDashboard() {
                     >
                         <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Lokasi Proyek</span>
-                            <div className="p-2.5 rounded-2xl bg-blue-500/10 text-blue-400">
-                                <MapPin className="w-5 h-5" />
+                            <div className="p-2.5 rounded-2xl bg-blue-500/10 text-blue-700 dark:text-blue-400">
+                                <MapPin aria-hidden="true" className="w-5 h-5" />
                             </div>
                         </div>
                         <div className="mt-3 flex items-baseline gap-2">
@@ -268,8 +293,8 @@ export default function AdminOverviewDashboard() {
                         </div>
                         <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400">
                             <span>{categories.length} Kategori</span>
-                            <Link href="/admin/locations" className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-0.5">
-                                Kelola <ArrowUpRight className="w-3 h-3" />
+                            <Link href="/admin/locations" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-blue-700 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-bold flex items-center gap-0.5">
+                                Kelola <ArrowUpRight aria-hidden="true" className="w-3 h-3" />
                             </Link>
                         </div>
                     </motion.div>
@@ -281,18 +306,18 @@ export default function AdminOverviewDashboard() {
                     >
                         <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Share Link Aktif</span>
-                            <div className="p-2.5 rounded-2xl bg-purple-500/10 text-purple-400">
-                                <Link2 className="w-5 h-5" />
+                            <div className="p-2.5 rounded-2xl bg-purple-500/10 text-purple-700 dark:text-purple-400">
+                                <Link2 aria-hidden="true" className="w-5 h-5" />
                             </div>
                         </div>
                         <div className="mt-3 flex items-baseline gap-2">
-                            <span className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">{shareLinks.filter((s: any) => s.isActive).length}</span>
+                            <span className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">{shareLinks.filter((s) => s.isActive).length}</span>
                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Akses Dibagikan</span>
                         </div>
                         <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400">
                             <span>{uniqueVisitors} Pengunjung (7h)</span>
-                            <Link href="/admin/share-links" className="text-purple-400 hover:text-purple-300 font-bold flex items-center gap-0.5">
-                                Buat Link <ArrowUpRight className="w-3 h-3" />
+                            <Link href="/admin/share-links" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-purple-700 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-bold flex items-center gap-0.5">
+                                Buat Link <ArrowUpRight aria-hidden="true" className="w-3 h-3" />
                             </Link>
                         </div>
                     </motion.div>
@@ -306,8 +331,8 @@ export default function AdminOverviewDashboard() {
                         <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl">
                             <div className="flex items-center justify-between pb-4 border-b border-black/5 dark:border-white/5">
                                 <div className="flex items-center gap-3">
-                                    <div className={`p-2.5 rounded-2xl ${offlineCameras.length > 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                                        {offlineCameras.length > 0 ? <AlertTriangle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                                    <div className={`p-2.5 rounded-2xl ${offlineCameras.length > 0 ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'}`}>
+                                        {offlineCameras.length > 0 ? <AlertTriangle aria-hidden="true" className="w-5 h-5" /> : <CheckCircle2 aria-hidden="true" className="w-5 h-5" />}
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-slate-900 dark:text-white text-base">Status Pengawasan Kritis</h3>
@@ -322,9 +347,9 @@ export default function AdminOverviewDashboard() {
                                 </div>
                                 <Link 
                                     href="/admin/cameras?filter=offline"
-                                    className="text-xs font-bold text-yellow-500 hover:text-yellow-400 flex items-center gap-1"
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-xs font-bold text-yellow-700 dark:text-yellow-500 hover:text-yellow-800 dark:hover:text-yellow-400 flex items-center gap-1"
                                 >
-                                    Lihat Semua <ArrowRight className="w-3.5 h-3.5" />
+                                    Lihat Semua <ArrowRight aria-hidden="true" className="w-3.5 h-3.5" />
                                 </Link>
                             </div>
 
@@ -335,15 +360,15 @@ export default function AdminOverviewDashboard() {
                                     </div>
                                 ) : offlineCameras.length === 0 ? (
                                     <div className="p-6 rounded-2xl bg-emerald-500/[0.04] border border-emerald-500/20 text-center space-y-2">
-                                        <ShieldCheck className="w-10 h-10 text-emerald-400 mx-auto" />
-                                        <p className="text-sm font-bold text-emerald-300">100% Kamera Beroperasi Normal</p>
+                                        <ShieldCheck aria-hidden="true" className="w-10 h-10 text-emerald-700 dark:text-emerald-400 mx-auto" />
+                                        <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">100% Kamera Beroperasi Normal</p>
                                         <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
                                             Tidak ada gangguan koneksi stream pada seluruh lokasi yang terdaftar saat ini.
                                         </p>
                                     </div>
                                 ) : (
                                     <div className="space-y-2.5">
-                                        {offlineCameras.slice(0, 4).map((cam: any) => {
+                                        {offlineCameras.slice(0, 4).map((cam) => {
                                             const locs = cameraToLocationMap.get(cam._id) || [];
                                             return (
                                                 <div 
@@ -351,11 +376,11 @@ export default function AdminOverviewDashboard() {
                                                     className="flex items-center justify-between p-3.5 rounded-2xl bg-rose-500/[0.03] border border-rose-500/20 hover:border-rose-500/40 transition-colors"
                                                 >
                                                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                        <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+                                                        <div aria-hidden="true" className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-bold text-slate-900 dark:text-white text-xs truncate">{cam.name}</span>
-                                                                <span className="text-[10px] text-rose-400 font-bold uppercase bg-rose-500/10 px-2 py-0.5 rounded-full">Offline</span>
+                                                                <span className="text-[11px] text-rose-700 dark:text-rose-400 font-bold uppercase bg-rose-500/10 px-2 py-0.5 rounded-full">Offline</span>
                                                             </div>
                                                             <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                                                                 📍 {locs.map(l => l.name).join(', ') || 'Belum Terpasang ke Lokasi'}
@@ -365,7 +390,7 @@ export default function AdminOverviewDashboard() {
 
                                                     <Link
                                                         href={`/admin/cameras`}
-                                                        className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all shrink-0 ml-3"
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all shrink-0 ml-3 min-h-10"
                                                     >
                                                         Diagnosa
                                                     </Link>
@@ -382,20 +407,20 @@ export default function AdminOverviewDashboard() {
                             <div className="flex items-center justify-between pb-4 border-b border-black/5 dark:border-white/5">
                                 <div>
                                     <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
-                                        <BarChart3 className="w-5 h-5 text-yellow-500" />
+                                        <BarChart3 aria-hidden="true" className="w-5 h-5 text-yellow-700 dark:text-yellow-500" />
                                         Tren Kunjungan Pengawasan (7 Hari Terakhir)
                                     </h3>
                                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Total {totalVisits} impresi tayangan streaming</p>
                                 </div>
                                 <Link 
                                     href="/admin/statistics"
-                                    className="text-xs font-bold text-yellow-500 hover:text-yellow-400 flex items-center gap-1"
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-xs font-bold text-yellow-700 dark:text-yellow-500 hover:text-yellow-800 dark:hover:text-yellow-400 flex items-center gap-1"
                                 >
-                                    Laporan Lengkap <ArrowRight className="w-3.5 h-3.5" />
+                                    Laporan Lengkap <ArrowRight aria-hidden="true" className="w-3.5 h-3.5" />
                                 </Link>
                             </div>
 
-                            <div className="h-56 mt-4 w-full">
+                            <div className="h-56 mt-4 w-full" role="img" aria-label={`Grafik area tren kunjungan 7 hari terakhir, total ${totalVisits} tayangan`}>
                                 {dailyVisits.length === 0 ? (
                                     <div className="h-full flex items-center justify-center text-slate-500 text-xs font-bold">
                                         Belum ada data kunjungan yang tercatat
@@ -409,22 +434,22 @@ export default function AdminOverviewDashboard() {
                                                     <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
                                                 </linearGradient>
                                             </defs>
-                                            <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} />
-                                            <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                                            <XAxis dataKey="date" stroke={axisColor} tick={{ fill: axisColor }} fontSize={11} tickLine={false} />
+                                            <YAxis stroke={axisColor} tick={{ fill: axisColor }} fontSize={11} tickLine={false} axisLine={false} />
                                             <Tooltip 
                                                 contentStyle={{ 
-                                                    backgroundColor: '#0f172a', 
-                                                    border: '1px solid rgba(255,255,255,0.1)', 
+                                                    backgroundColor: isDark ? '#0f172a' : '#ffffff', 
+                                                    border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(15,23,42,0.12)', 
                                                     borderRadius: '12px',
                                                     fontSize: '11px',
-                                                    color: '#fff'
+                                                    color: isDark ? '#fff' : '#0f172a'
                                                 }} 
                                             />
                                             <Area 
                                                 type="monotone" 
                                                 dataKey="views" 
                                                 name="Total Kunjungan"
-                                                stroke="#eab308" 
+                                                stroke={isDark ? '#eab308' : '#ca8a04'} 
                                                 strokeWidth={2}
                                                 fillOpacity={1} 
                                                 fill="url(#colorViews)" 
@@ -442,12 +467,12 @@ export default function AdminOverviewDashboard() {
                         <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl">
                             <div className="flex items-center justify-between pb-3 border-b border-black/5 dark:border-white/5">
                                 <div className="flex items-center gap-2">
-                                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-                                        <AlertTriangle className="w-4 h-4" />
+                                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                                        <AlertTriangle aria-hidden="true" className="w-4 h-4" />
                                     </div>
                                     <h3 className="font-bold text-slate-900 dark:text-white text-sm">Kamera Belum Terpasang</h3>
                                 </div>
-                                <span className="text-xs font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
+                                <span className="text-xs font-mono font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">
                                     {unassignedCameras.length}
                                 </span>
                             </div>
@@ -463,12 +488,12 @@ export default function AdminOverviewDashboard() {
                                             Kamera berikut sudah terdaftar di sistem namun belum dimasukkan ke titik lokasi manapun:
                                         </p>
                                         <div className="max-h-40 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
-                                            {unassignedCameras.slice(0, 5).map((cam: any) => (
+                                            {unassignedCameras.slice(0, 5).map((cam) => (
                                                 <div key={cam._id} className="flex items-center justify-between p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-xs">
                                                     <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[140px]">{cam.name}</span>
                                                     <Link 
                                                         href="/admin/cameras" 
-                                                        className="text-[10px] font-bold text-yellow-500 hover:text-yellow-400"
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-[11px] font-bold text-yellow-700 dark:text-yellow-500 hover:text-yellow-800 dark:hover:text-yellow-400"
                                                     >
                                                         Pasangkan →
                                                     </Link>
@@ -484,14 +509,14 @@ export default function AdminOverviewDashboard() {
                         <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
                             <div className="flex items-center justify-between pb-3 border-b border-black/5 dark:border-white/5">
                                 <div className="flex items-center gap-2">
-                                    <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-500">
-                                        <ClipboardList className="w-4 h-4" />
+                                    <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-700 dark:text-yellow-500">
+                                        <ClipboardList aria-hidden="true" className="w-4 h-4" />
                                     </div>
                                     <h3 className="font-bold text-slate-900 dark:text-white text-sm">Aktivitas Terkini</h3>
                                 </div>
                                 <Link 
                                     href="/admin/audit-log"
-                                    className="text-xs font-bold text-yellow-500 hover:text-yellow-400"
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-xs font-bold text-yellow-700 dark:text-yellow-500 hover:text-yellow-800 dark:hover:text-yellow-400"
                                 >
                                     Semua Log →
                                 </Link>
@@ -501,13 +526,13 @@ export default function AdminOverviewDashboard() {
                                 {auditLogs.length === 0 ? (
                                     <p className="text-xs text-slate-500 py-4 text-center">Belum ada rekaman audit</p>
                                 ) : (
-                                    auditLogs.slice(0, 5).map((log: any) => (
+                                    auditLogs.slice(0, 5).map((log) => (
                                         <div key={log._id} className="p-3 rounded-2xl bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
-                                            <div className="flex items-center justify-between text-[10px]">
+                                            <div className="flex items-center justify-between text-[11px]">
                                                 <span className={`font-bold px-1.5 py-0.5 rounded ${
-                                                    log.action === 'CREATE' ? 'bg-emerald-500/10 text-emerald-400' :
-                                                    log.action === 'UPDATE' ? 'bg-yellow-500/10 text-yellow-400' :
-                                                    'bg-rose-500/10 text-rose-400'
+                                                    log.action === 'CREATE' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' :
+                                                    log.action === 'UPDATE' ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400' :
+                                                    'bg-rose-500/10 text-rose-700 dark:text-rose-400'
                                                 }`}>
                                                     {log.action} • {log.entity}
                                                 </span>
@@ -516,7 +541,7 @@ export default function AdminOverviewDashboard() {
                                             <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{log.entityName}</p>
                                             <div className="flex flex-col gap-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                                                 <span className="line-clamp-2 break-words">{log.detail}</span>
-                                                <span className="text-yellow-500/90 font-medium truncate" title={log.by}>Oleh: {displayActor(log.by)}</span>
+                                                <span className="text-yellow-700 dark:text-yellow-500/90 font-medium truncate" title={log.by}>Oleh: {displayActor(log.by)}</span>
                                             </div>
                                         </div>
                                     ))
@@ -533,27 +558,27 @@ export default function AdminOverviewDashboard() {
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                         {[
-                            { name: 'Kamera', href: '/admin/cameras', icon: Monitor, color: 'text-yellow-400', desc: 'RTSP & Streams' },
-                            { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin, color: 'text-blue-400', desc: 'Peta & Titik CCTV' },
-                            { name: 'Kategori', href: '/admin/categories', icon: Tags, color: 'text-emerald-400', desc: 'Sektor & Wilayah' },
-                            { name: 'Share Links', href: '/admin/share-links', icon: Link2, color: 'text-purple-400', desc: 'Token Berbagi' },
-                            { name: 'Statistik', href: '/admin/statistics', icon: BarChart3, color: 'text-orange-400', desc: 'Analitik Trafik' },
-                            { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList, color: 'text-teal-400', desc: 'Log Keamanan' },
+                            { name: 'Kamera', href: '/admin/cameras', icon: Monitor, color: 'text-yellow-700 dark:text-yellow-400', desc: 'RTSP & Streams' },
+                            { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin, color: 'text-blue-700 dark:text-blue-400', desc: 'Peta & Titik CCTV' },
+                            { name: 'Kategori', href: '/admin/categories', icon: Tags, color: 'text-emerald-700 dark:text-emerald-400', desc: 'Sektor & Wilayah' },
+                            { name: 'Share Links', href: '/admin/share-links', icon: Link2, color: 'text-purple-700 dark:text-purple-400', desc: 'Token Berbagi' },
+                            { name: 'Statistik', href: '/admin/statistics', icon: BarChart3, color: 'text-orange-700 dark:text-orange-400', desc: 'Analitik Trafik' },
+                            { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList, color: 'text-teal-700 dark:text-teal-400', desc: 'Log Keamanan' },
                         ].map((item) => {
                             const Icon = item.icon;
                             return (
                                 <Link
                                     key={item.name}
                                     href={item.href}
-                                    className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 hover:border-yellow-500/30 hover:bg-slate-900/90 transition-all group space-y-2"
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 hover:border-yellow-500/30 hover:bg-white dark:hover:bg-slate-900/90 transition-all group space-y-2"
                                 >
                                     <div className="flex items-center justify-between">
-                                        <Icon className={`w-5 h-5 ${item.color} group-hover:scale-110 transition-transform`} />
-                                        <ArrowUpRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-white transition-colors" />
+                                        <Icon aria-hidden="true" className={`w-5 h-5 ${item.color} group-hover:scale-110 transition-transform`} />
+                                        <ArrowUpRight aria-hidden="true" className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
                                     </div>
                                     <div>
                                         <h4 className="font-bold text-slate-900 dark:text-white text-xs tracking-tight">{item.name}</h4>
-                                        <p className="text-[10px] text-slate-500 mt-0.5">{item.desc}</p>
+                                        <p className="text-[11px] text-slate-500 mt-0.5">{item.desc}</p>
                                     </div>
                                 </Link>
                             );

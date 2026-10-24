@@ -30,7 +30,7 @@ export async function DELETE(
         }
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to delete share link:', error);
         return NextResponse.json({ error: 'Gagal menghapus share link' }, { status: 500 });
     }
@@ -67,7 +67,7 @@ export async function PATCH(
         });
 
         return NextResponse.json({ success: true, data: link });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to update share link:', error);
         return NextResponse.json({ error: 'Gagal memperbarui share link' }, { status: 500 });
     }

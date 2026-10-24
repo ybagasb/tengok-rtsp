@@ -17,14 +17,16 @@ export default function GlobalError({
         <html lang="id">
             <head>
                 <title>Gangguan Sistem — Tengok Monitoring</title>
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <meta name="color-scheme" content="light dark" />
                 <style dangerouslySetInnerHTML={{ __html: `
                     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
                     body {
-                        font-family: 'Inter', -apple-system, sans-serif;
+                        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
                         background: #020617;
                         color: #e2e8f0;
                         min-height: 100vh;
+                        min-height: 100dvh;
                         display: flex;
                         align-items: center;
                         justify-content: center;
@@ -65,7 +67,7 @@ export default function GlobalError({
                         font-size: 2rem; font-weight: 800; letter-spacing: -0.02em;
                         margin-bottom: 0.75rem;
                         background: linear-gradient(135deg, #fca5a5, #ef4444, #dc2626);
-                        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                        -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
                     }
                     .sub { font-size: 0.875rem; color: #64748b; line-height: 1.7; margin-bottom: 2.5rem; }
                     .btn {
@@ -86,6 +88,18 @@ export default function GlobalError({
                     .footer img { height: 18px; }
                     .footer span { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em; color: #64748b; }
                     .footer-div { width: 1px; height: 14px; background: rgba(255,255,255,0.2); }
+                    /* Tema terang mengikuti preferensi OS (halaman ini di luar ThemeProvider). */
+                    @media (prefers-color-scheme: light) {
+                        body { background: #f1f5f9; color: #0f172a; }
+                        .sub { color: #475569; }
+                        .footer span { color: #475569; }
+                        .footer { opacity: 0.6; }
+                        .footer-div { background: rgba(15,23,42,0.25); }
+                        h1 { background: linear-gradient(135deg, #dc2626, #b91c1c); -webkit-background-clip: text; background-clip: text; }
+                    }
+                    @media (prefers-reduced-motion: reduce) {
+                        *, *::before, *::after { animation: none !important; transition: none !important; }
+                    }
                 ` }} />
             </head>
             <body>
@@ -116,6 +130,7 @@ export default function GlobalError({
                     </button>
 
                     <div className="footer">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal (SVG), tidak perlu optimasi next/image; global-error merender di luar layout */}
                         <img src="/abipraya_original.svg" alt="Logo" />
                         <div className="footer-div" />
                         <span>Tengok Monitoring</span>

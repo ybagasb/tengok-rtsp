@@ -3,11 +3,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { 
     ClipboardList, Loader2, Trash2, Pencil, Plus, RefreshCw, Filter, 
-    Search, Camera, MapPin, Tags, Link2, Download, CheckCircle2, AlertCircle,
+    Camera, MapPin, Tags, Link2, Download,
     Bell, FolderOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { containerVariants, cardVariants } from '@/components/admin/shared';
+import { containerVariants, cardVariants, getErrorMessage } from '@/components/admin/shared';
 import { PageHeader, SearchBar } from '@/components/admin/AdminUI';
 import toast from 'react-hot-toast';
 
@@ -30,9 +30,9 @@ interface Pagination {
 }
 
 const ACTION_STYLE: Record<string, string> = {
-    CREATE: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-    UPDATE: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-    DELETE: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+    CREATE: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+    UPDATE: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30',
+    DELETE: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30',
 };
 
 const ACTION_ICON: Record<string, React.ElementType> = {
@@ -87,10 +87,10 @@ export default function AuditLogPage() {
                 setLogs(data.data || []);
                 setPagination(data.pagination || null);
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('Failed to fetch audit logs', e);
             if (!isSilent) {
-                toast.error(`Gagal memuat audit log: ${e.message}`);
+                toast.error(`Gagal memuat audit log: ${getErrorMessage(e)}`);
             }
         } finally {
             if (!isSilent) setLoading(false);
@@ -149,19 +149,20 @@ export default function AuditLogPage() {
                                 whileTap={{ scale: 0.97 }}
                                 onClick={handleExportCSV}
                                 disabled={isExporting || logs.length === 0}
-                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50 min-h-10"
                             >
-                                <Download className="w-4 h-4" />
+                                <Download aria-hidden="true" className="w-4 h-4" />
                                 Export CSV
                             </motion.button>
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={() => fetchLogs()}
-                                className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-w-10 min-h-10 inline-flex items-center justify-center p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
                                 title="Segarkan Data"
+                                aria-label="Segarkan data audit log"
                             >
-                                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-yellow-500' : ''}`} />
+                                <RefreshCw aria-hidden="true" className={`w-4 h-4 ${loading ? 'animate-spin text-yellow-700 dark:text-yellow-500' : ''}`} />
                             </motion.button>
                         </div>
                     }
@@ -179,11 +180,11 @@ export default function AuditLogPage() {
 
                     <div className="md:col-span-6 flex flex-wrap gap-2 items-center justify-start md:justify-end">
                         <div className="flex items-center gap-1.5 bg-white/70 dark:bg-slate-900/60 border border-black/10 dark:border-white/10 rounded-xl px-3 py-2">
-                            <Filter className="w-3.5 h-3.5 text-slate-500" />
+                            <Filter aria-hidden="true" className="w-3.5 h-3.5 text-slate-500" />
                             <select
                                 value={filterEntity}
                                 onChange={e => { setFilterEntity(e.target.value); setPage(1); }}
-                                className="bg-transparent text-slate-600 dark:text-slate-300 text-xs focus:outline-none cursor-pointer"
+                                className="bg-transparent text-slate-600 dark:text-slate-300 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded cursor-pointer min-h-8"
                                 aria-label="Filter Entitas"
                             >
                                 <option value="" className="bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">Semua Entitas</option>
@@ -198,13 +199,13 @@ export default function AuditLogPage() {
                             <select
                                 value={filterAction}
                                 onChange={e => { setFilterAction(e.target.value); setPage(1); }}
-                                className="bg-transparent text-slate-600 dark:text-slate-300 text-xs focus:outline-none cursor-pointer"
+                                className="bg-transparent text-slate-600 dark:text-slate-300 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded cursor-pointer min-h-8"
                                 aria-label="Filter Aksi"
                             >
                                 <option value="" className="bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">Semua Aksi</option>
-                                <option value="CREATE" className="bg-white dark:bg-slate-900 text-emerald-400">CREATE (Tambah)</option>
-                                <option value="UPDATE" className="bg-white dark:bg-slate-900 text-yellow-400">UPDATE (Ubah)</option>
-                                <option value="DELETE" className="bg-white dark:bg-slate-900 text-rose-400">DELETE (Hapus)</option>
+                                <option value="CREATE" className="bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400">CREATE (Tambah)</option>
+                                <option value="UPDATE" className="bg-white dark:bg-slate-900 text-yellow-700 dark:text-yellow-400">UPDATE (Ubah)</option>
+                                <option value="DELETE" className="bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400">DELETE (Hapus)</option>
                             </select>
                         </div>
 
@@ -216,7 +217,7 @@ export default function AuditLogPage() {
                                     setSearchQuery('');
                                     setPage(1);
                                 }}
-                                className="text-xs text-yellow-500 hover:text-yellow-400 underline font-bold px-2 py-1"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-xs text-yellow-700 dark:text-yellow-500 hover:text-yellow-800 dark:hover:text-yellow-400 underline font-bold px-3 min-h-10"
                             >
                                 Reset
                             </button>
@@ -225,26 +226,28 @@ export default function AuditLogPage() {
                 </div>
 
                 {/* Table Container */}
-                <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+                <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(15,23,42,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+                  <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Tabel audit log (dapat digulir horizontal)">
+                  <div role="table" aria-label="Riwayat audit" className="min-w-[760px]">
                     {/* Header */}
-                    <div className="grid grid-cols-[140px_110px_100px_1fr_120px] gap-4 px-6 py-4 border-b border-black/5 dark:border-white/5 text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-black/[0.03] dark:bg-black/20">
-                        <span>Waktu</span>
-                        <span>Entitas</span>
-                        <span>Aksi</span>
-                        <span>Detail Aktivitas</span>
-                        <span className="text-right">Admin / User</span>
+                    <div role="row" className="grid grid-cols-[140px_110px_100px_1fr_120px] gap-4 px-6 py-4 border-b border-black/5 dark:border-white/5 text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-black/[0.03] dark:bg-black/20">
+                        <span role="columnheader">Waktu</span>
+<span role="columnheader">Entitas</span>
+<span role="columnheader">Aksi</span>
+<span role="columnheader">Detail Aktivitas</span>
+<span role="columnheader" className="text-right">Admin / User</span>
                     </div>
 
                     {loading ? (
-                        <div className="flex flex-col items-center justify-center py-20 gap-3">
-                            <Loader2 className="w-8 h-8 animate-spin text-yellow-500" />
+                        <div role="status" className="flex flex-col items-center justify-center py-20 gap-3">
+                            <Loader2 aria-hidden="true" className="w-8 h-8 animate-spin text-yellow-700 dark:text-yellow-500" />
                             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Memuat riwayat audit...</span>
                         </div>
                     ) : logs.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-                            <ClipboardList className="w-16 h-16 mb-4 opacity-20 text-yellow-500" />
+                            <ClipboardList aria-hidden="true" className="w-16 h-16 mb-4 opacity-20 text-yellow-700 dark:text-yellow-500" />
                             <p className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Belum ada catatan aktivitas</p>
-                            <p className="text-xs text-slate-600 mt-1 max-w-sm text-center">
+                            <p className="text-xs text-slate-500 mt-1 max-w-sm text-center">
                                 {searchQuery || filterEntity || filterAction 
                                     ? 'Tidak ada log yang cocok dengan kriteria pencarian Anda.' 
                                     : 'Aktivitas pembuatan, pengubahan, dan penghapusan data akan terekam secara otomatis di sini.'}
@@ -259,34 +262,35 @@ export default function AuditLogPage() {
                                     return (
                                         <motion.div
                                             key={log._id}
-                                            variants={cardVariants}
+                                            role="row"
+ variants={cardVariants}
                                             className="grid grid-cols-[140px_110px_100px_1fr_120px] gap-4 px-6 py-4 border-b border-black/5 dark:border-white/5 last:border-0 hover:bg-black/[0.03] dark:hover:bg-white/[0.02] transition-colors items-center text-xs"
                                         >
-                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                                                {formatDate(log.timestamp)}
+                                            <span role="cell" className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+{formatDate(log.timestamp)}
                                             </span>
 
-                                            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-semibold">
-                                                <EntityIcon className="w-3.5 h-3.5 text-slate-500" />
+                                            <div role="cell" className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-semibold">
+                                                <EntityIcon aria-hidden="true" className="w-3.5 h-3.5 text-slate-500" />
                                                 <span>{log.entity}</span>
                                             </div>
 
-                                            <div>
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${ACTION_STYLE[log.action] || 'bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 border-black/10 dark:border-white/10'}`}>
-                                                    <ActionIcon className="w-3 h-3" />
+                                            <div role="cell">
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${ACTION_STYLE[log.action] || 'bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 border-black/10 dark:border-white/10'}`}>
+                                                    <ActionIcon aria-hidden="true" className="w-3 h-3" />
                                                     {log.action}
                                                 </span>
                                             </div>
 
-                                            <div className="min-w-0 pr-4">
+                                            <div role="cell" className="min-w-0 pr-4">
                                                 <p className="font-bold text-slate-900 dark:text-white truncate text-xs">{log.entityName}</p>
                                                 {log.detail && (
                                                     <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{log.detail}</p>
                                                 )}
                                             </div>
 
-                                            <div className="text-right">
-                                                <span className="inline-block text-[11px] font-medium text-yellow-500/90 bg-yellow-500/10 px-2 py-0.5 rounded-lg border border-yellow-500/20 truncate max-w-[110px]" title={log.by}>
+                                            <div role="cell" className="text-right">
+                                                <span className="inline-block text-[11px] font-medium text-yellow-700 dark:text-yellow-500/90 bg-yellow-500/10 px-2 py-0.5 rounded-lg border border-yellow-500/20 truncate max-w-[110px]" title={log.by}>
                                                     {log.by}
                                                 </span>
                                             </div>
@@ -296,6 +300,8 @@ export default function AuditLogPage() {
                             </AnimatePresence>
                         </motion.div>
                     )}
+                  </div>
+                  </div>
                 </div>
 
                 {/* Pagination */}
@@ -308,17 +314,19 @@ export default function AuditLogPage() {
                             <button
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
                                 disabled={page <= 1}
-                                className="px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                aria-label="Halaman sebelumnya"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-h-10 px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                             >
                                 ← Sebelumnya
                             </button>
-                            <div className="text-xs font-bold px-3 py-2 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20">
+                            <div aria-current="page" className="text-xs font-bold px-3 py-2 bg-yellow-500/10 text-yellow-700 dark:text-yellow-500 rounded-xl border border-yellow-500/20">
                                 {page}
                             </div>
                             <button
                                 onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
                                 disabled={page >= pagination.totalPages}
-                                className="px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                aria-label="Halaman berikutnya"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-h-10 px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                             >
                                 Selanjutnya →
                             </button>

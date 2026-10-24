@@ -31,7 +31,7 @@ function categoryIcon(category?: string): LucideIcon {
     return (category && CATEGORY_ICON[category]) || MapPin;
 }
 import { AnimatePresence, motion } from 'framer-motion';
-import CameraPanel from './CameraPanel';
+import CameraPanel, { type IPopulatedCamera } from './CameraPanel';
 import ResourceMonitor from './ResourceMonitor';
 import CctvNotices from './CctvNotices';
 import BrandLoader from './BrandLoader';
@@ -40,6 +40,21 @@ import { MAP_STYLES, MAP_STYLE_META, type MapStyleId } from '@/lib/mapStyles';
 import { useTheme } from '@/components/ThemeProvider';
 import { getDivisionCssVars, getDivisionTheme } from '@/lib/divisionTheme';
 
+// Bentuk saran pencarian lokasi (dibangun dari data lokasi yang sudah dimuat).
+interface SearchSuggestion {
+    id: string;
+    display_name: string;
+    lat: number;
+    lon: number;
+    fullData: LocationData;
+}
+// Subset field kategori yang dipakai peta untuk pusat tampilan awal.
+interface CategorySummary {
+    identifier: string;
+    defaultLat?: number;
+    defaultLng?: number;
+    defaultZoom?: number;
+}
 interface LocationData {
     _id: string;
     name: string;
@@ -50,7 +65,7 @@ interface LocationData {
     lng: number;
     pmName: string;
     pmPhone: string;
-    cameras: any[];
+    cameras: IPopulatedCamera[];
     onlineCount: number;
     offlineCount: number;
     // Footprint bangunan proyek (blok 3D di peta)
@@ -203,7 +218,6 @@ export default function MapComponent({
     // toggle is only shown/used in normal mode.
     const hasCategory = Boolean(category);
     const hasDivision = Boolean(division);
-    const hasContext = hasCategory || hasDivision;
     const [scopeMode, setScopeMode] = useState<'context' | 'division' | 'all'>(category ? 'context' : 'division');
     const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
 
@@ -284,7 +298,7 @@ export default function MapComponent({
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
     const [searchFocused, setSearchFocused] = useState(false);
-    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -293,7 +307,7 @@ export default function MapComponent({
     // Compute majority-online status for a location (uses realtime overrides).
     const isMajorityOnline = useCallback((loc: LocationData) => {
         let on = 0, off = 0;
-        (loc.cameras || []).forEach((cam: any) => {
+        (loc.cameras || []).forEach((cam) => {
             if ((realtimeStatuses[cam._id] || cam.status) === 'online') on++;
             else off++;
         });
@@ -369,18 +383,20 @@ export default function MapComponent({
         if (!category || sharedMode) return;
         axios.get('/api/categories')
             .then(res => {
-                const cats = res.data || [];
-                const cat = cats.find((c: any) => c.identifier === category);
-                if (cat?.defaultLat && cat?.defaultLng) {
+                const cats: CategorySummary[] = res.data || [];
+                const cat = cats.find((c) => c.identifier === category);
+                const defLat = cat?.defaultLat;
+                const defLng = cat?.defaultLng;
+                if (cat && defLat && defLng) {
                     setInitialView(v => ({
                         ...v,
-                        longitude: cat.defaultLng,
-                        latitude: cat.defaultLat,
+                        longitude: defLng,
+                        latitude: defLat,
                         zoom: cat.defaultZoom || v.zoom,
                     }));
                     // If the map is already mounted, ease to the new default.
                     mapRef.current?.jumpTo({
-                        center: [cat.defaultLng, cat.defaultLat],
+                        center: [defLng, defLat],
                         zoom: cat.defaultZoom || DEFAULT_ZOOM,
                     });
                 }
@@ -407,13 +423,13 @@ export default function MapComponent({
                 const qs = params.toString();
                 const apiUrl = qs ? `/api/locations?${qs}` : '/api/locations';
                 const res = await axios.get(apiUrl, { signal: controller.signal });
-                let rawLocations = res.data.data;
+                let rawLocations: LocationData[] = res.data.data;
                 if (allowedLocationIds && allowedLocationIds.length > 0) {
-                    rawLocations = rawLocations.filter((loc: any) => allowedLocationIds.includes(loc._id));
+                    rawLocations = rawLocations.filter((loc) => allowedLocationIds.includes(loc._id));
                 }
-                const fetched = rawLocations.map((loc: any) => {
+                const fetched: LocationData[] = rawLocations.map((loc) => {
                     let onlineCount = 0, offlineCount = 0;
-                    (loc.cameras || []).forEach((cam: any) => {
+                    (loc.cameras || []).forEach((cam) => {
                         if (cam.status === 'online') onlineCount++;
                         else offlineCount++;
                     });
@@ -426,14 +442,14 @@ export default function MapComponent({
 
                 if (!hasProbed) {
                     hasProbed = true;
-                    const allCameraIds = fetched.flatMap((loc: any) => (loc.cameras || []).map((cam: any) => cam._id));
+                    const allCameraIds = fetched.flatMap((loc) => (loc.cameras || []).map((cam) => cam._id));
                     const shouldProbe = scopeMode !== 'division' && scopeMode !== 'all';
                     if (shouldProbe && allCameraIds.length > 0) {
                         axios.post('/api/cameras/probe-now', { cameraIds: allCameraIds }).catch(() => {});
                     }
                     if (!sharedMode) {
                         const onlineIds = fetched
-                            .flatMap((loc: any) => (loc.cameras || []).filter((c: any) => c.status === 'online').map((c: any) => c._id))
+                            .flatMap((loc) => (loc.cameras || []).filter((c) => c.status === 'online').map((c) => c._id))
                             .slice(0, 20);
                         if (onlineIds.length > 0) {
                             axios.post('/api/streams/prewarm', { cameraIds: onlineIds }).catch(() => {});
@@ -500,7 +516,7 @@ export default function MapComponent({
         flyTo(loc.lng, loc.lat, { zoom: FOCUS_ZOOM, pitch: FOCUS_PITCH });
     }, [flyTo]);
 
-    const handleSelectSuggestion = (s: any) => {
+    const handleSelectSuggestion = (s: SearchSuggestion) => {
         if (!s?.fullData) return;
         setSearchQuery(s.display_name);
         setShowSuggestions(false);
@@ -577,7 +593,7 @@ export default function MapComponent({
     const rootStyle = getDivisionCssVars(effectiveDiv) as React.CSSProperties;
 
     return (
-        <div ref={rootRef} style={rootStyle} className="flex h-screen w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
+        <div ref={rootRef} style={rootStyle} className="flex h-dvh w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
             <style>{customStyles}</style>
 
             {/* Loader bermerek selama data lokasi belum selesai dimuat. */}
@@ -615,7 +631,7 @@ export default function MapComponent({
                             // Letakkan bangunan 3D di bawah label pertama dari style aktif.
                             try {
                                 const layers = e.target.getStyle()?.layers ?? [];
-                                const label = layers.find(l => l.type === 'symbol' && (l as any).layout?.['text-field']);
+                                const label = layers.find(l => l.type === 'symbol' && (l as { layout?: Record<string, unknown> }).layout?.['text-field']);
                                 const id = label?.id;
                                 setLabelLayerId(prev => (prev === id ? prev : id));
                             } catch { /* style belum siap */ }
@@ -763,7 +779,7 @@ export default function MapComponent({
                             className="p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
                             title="Kembali ke Kategori"
                         >
-                            <Home className="w-5 h-5 group-hover:-translate-y-1 transition-transform" />
+                            <Home className="w-5 h-5 group-hover:-translate-y-1 transition-transform" aria-hidden="true" />
                         </button>
                         <button
                             onClick={() => {
@@ -780,7 +796,7 @@ export default function MapComponent({
                             className="p-3 sm:p-3.5 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 div-accent-text hover:bg-slate-200 dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group shrink-0"
                             title="Ke Halaman Multi-View"
                         >
-                            <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                            <LayoutGrid className="w-5 h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
                         </button>
 
                         {/* Project scope filter: proyek ini / se-divisi / lintas divisi */}
@@ -792,7 +808,7 @@ export default function MapComponent({
                                 }`}
                                 title="Filter proyek yang ditampilkan"
                             >
-                                <Filter className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                <Filter className="w-5 h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
                                 {scopeMode !== 'context' && (
                                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full div-accent-solid border-2 border-slate-900" />
                                 )}
@@ -806,7 +822,7 @@ export default function MapComponent({
                                         transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                         className="absolute left-full ml-2 top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-2xl border border-black/10 dark:border-white/10 shadow-2xl overflow-hidden w-60"
                                     >
-                                        <div className="px-4 py-2.5 border-b border-black/5 dark:border-white/5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                        <div className="px-4 py-2.5 border-b border-black/5 dark:border-white/5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                                             Tampilkan Proyek
                                         </div>
                                         {/* 1. Proyek ini (divisi + kategori yang dibuka) */}
@@ -820,10 +836,10 @@ export default function MapComponent({
                                                 scopeMode === 'context' ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
                                             } ${!hasCategory ? 'opacity-40 cursor-not-allowed' : ''}`}
                                         >
-                                            <FolderTree className="w-4 h-4 shrink-0" />
+                                            <FolderTree className="w-4 h-4 shrink-0" aria-hidden="true" />
                                             <div className="min-w-0">
                                                 <div className="text-xs font-bold uppercase tracking-wider">Kategori Ini</div>
-                                                <div className="text-[10px] text-slate-500 truncate">
+                                                <div className="text-[11px] text-slate-500 truncate">
                                                     {[division, category].filter(Boolean).join(' • ') || 'Konteks saat ini'}
                                                 </div>
                                             </div>
@@ -840,10 +856,10 @@ export default function MapComponent({
                                                 scopeMode === 'division' ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
                                             } ${!hasDivision ? 'opacity-40 cursor-not-allowed' : ''}`}
                                         >
-                                            <Layers className="w-4 h-4 shrink-0" />
+                                            <Layers className="w-4 h-4 shrink-0" aria-hidden="true" />
                                             <div className="min-w-0">
                                                 <div className="text-xs font-bold uppercase tracking-wider">Satu Divisi</div>
-                                                <div className="text-[10px] text-slate-500 truncate">
+                                                <div className="text-[11px] text-slate-500 truncate">
                                                     Semua kategori di {division || 'divisi ini'}
                                                 </div>
                                             </div>
@@ -868,10 +884,10 @@ export default function MapComponent({
                                                 scopeMode === 'all' ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5'
                                             }`}
                                         >
-                                            <Globe className="w-4 h-4 shrink-0" />
+                                            <Globe className="w-4 h-4 shrink-0" aria-hidden="true" />
                                             <div className="min-w-0">
                                                 <div className="text-xs font-bold uppercase tracking-wider">Semua Proyek</div>
-                                                <div className="text-[10px] text-slate-500 truncate">Lintas divisi (Brantas Abipraya)</div>
+                                                <div className="text-[11px] text-slate-500 truncate">Lintas divisi (Brantas Abipraya)</div>
                                             </div>
                                         </button>
                                     </motion.div>
@@ -885,7 +901,7 @@ export default function MapComponent({
                     <div ref={searchRef} className={`flex-1 sm:max-w-xl sm:mx-8 relative pointer-events-auto transition-all duration-700 ${selectedLocation ? 'opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto' : 'opacity-100'}`}>
                         <div className="relative group">
                             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-500 dark:text-slate-400 group-focus-within:text-[var(--div-accent)] transition-colors">
-                                {isSearching ? <Loader2 className="w-4 h-4 animate-spin div-accent-text" /> : <Search className="w-4 h-4" />}
+                                {isSearching ? <Loader2 className="w-4 h-4 animate-spin div-accent-text" aria-hidden="true" /> : <Search className="w-4 h-4" aria-hidden="true" />}
                             </div>
                             <input
                                 type="text"
@@ -906,7 +922,7 @@ export default function MapComponent({
                                     aria-label="Hapus pencarian"
                                 >
                                     <div className="p-1.5 rounded-full bg-white/5 group-hover/clear:bg-red-500/20 text-slate-500 dark:text-slate-400 group-hover/clear:text-red-400 transition-all border border-black/5 dark:border-white/5">
-                                        <CloseIcon className="w-3.5 h-3.5" />
+                                        <CloseIcon className="w-3.5 h-3.5" aria-hidden="true" />
                                     </div>
                                 </button>
                             )}
@@ -929,11 +945,11 @@ export default function MapComponent({
                                             className={`w-full px-5 py-3.5 flex items-center gap-4 transition-colors text-left group border-b border-black/5 dark:border-white/5 last:border-0 ${selectedIndex === idx ? 'bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
                                         >
                                             <div className="p-2 rounded-lg shrink-0 bg-[rgba(var(--div-accent-rgb),0.1)]">
-                                                <MapPin className="w-4 h-4 div-accent-text" />
+                                                <MapPin className="w-4 h-4 div-accent-text" aria-hidden="true" />
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{item.display_name}</div>
-                                                <div className="text-[10px] text-slate-500 truncate mt-0.5 font-medium">{item.fullData?.category ? `Kategori: ${item.fullData.category}` : 'Lokasi proyek'}</div>
+                                                <div className="text-[11px] text-slate-500 truncate mt-0.5 font-medium">{item.fullData?.category ? `Kategori: ${item.fullData.category}` : 'Lokasi proyek'}</div>
                                             </div>
                                         </button>
                                     )) : !isSearching ? (
@@ -1006,7 +1022,7 @@ export default function MapComponent({
                         {/* Compass: drag to rotate/tilt (POV); click resets north + level */}
                         <button
                             onPointerDown={handleCompassPointerDown}
-                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all cursor-grab active:cursor-grabbing touch-none"
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all cursor-grab active:cursor-grabbing touch-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                             title="Seret untuk memutar/miringkan · klik untuk reset utara"
                             aria-label="Kompas: seret untuk memutar atau memiringkan peta, klik untuk reset ke utara"
                         >
@@ -1056,11 +1072,11 @@ export default function MapComponent({
                             Gaya peta (satelit/streets) diatur layer toggle terpisah. */}
                         <button
                             onClick={toggle}
-                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all"
+                            className="w-11 h-11 flex items-center justify-center text-slate-900 dark:text-white hover:bg-[rgba(var(--div-accent-rgb),0.15)] hover:text-[var(--div-accent)] active:scale-95 transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                             title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
                             aria-label={theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'}
                         >
-                            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                            {theme === 'dark' ? <Sun className="w-5 h-5" aria-hidden="true" /> : <Moon className="w-5 h-5" aria-hidden="true" />}
                         </button>
                     </div>
                 </div>
@@ -1076,7 +1092,7 @@ export default function MapComponent({
 
             {/* Atribusi data peta (OpenStreetMap/OpenFreeMap & Esri) — atribusi bawaan MapLibre disembunyikan */}
             <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-[450] pointer-events-none max-w-[90vw] text-center">
-                <span className="pointer-events-auto text-[9px] sm:text-[10px] font-medium text-white/80 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
+                <span className="pointer-events-auto text-[11px] sm:text-[11px] font-medium text-white/80 [text-shadow:0_1px_2px_rgba(0,0,0,0.9)]">
                     Data peta ©{' '}
                     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">OpenStreetMap</a>
                     {' '}· Citra © Esri · OpenFreeMap
@@ -1106,11 +1122,13 @@ export default function MapComponent({
                 <div className={`fixed bottom-4 z-[450] pointer-events-none transition-all duration-700 ${selectedLocation ? 'opacity-0 right-4' : 'opacity-100 right-20 sm:right-24'}`}>
                     <div className="flex items-center gap-2.5 bg-white/80 dark:bg-slate-950/70 backdrop-blur-xl rounded-2xl px-3.5 py-2.5 border border-black/5 dark:border-white/5 shadow-2xl">
                         {/* Logo biru untuk light mode, logo putih/kuning untuk dark mode */}
-                        <img src="/LOGO_ABIPRAYA.png" alt="PT Brantas Abipraya" className="w-7 h-7 object-contain opacity-80 block dark:hidden" draggable={false} />
+                        {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal, tidak perlu optimasi next/image */}
+                        <img src="/abipraya_blue.svg" alt="PT Brantas Abipraya" className="w-7 h-7 object-contain opacity-80 block dark:hidden" draggable={false} />
+                        {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal (SVG), tidak perlu optimasi next/image */}
                         <img src="/abipraya_original.svg" alt="PT Brantas Abipraya" className="w-7 h-7 object-contain opacity-70 hidden dark:block" draggable={false} />
                         <div className="hidden sm:block">
-                            <p className="text-[9px] font-bold text-slate-500 dark:text-white/50 uppercase tracking-[0.15em] leading-none">PT Brantas Abipraya</p>
-                            <p className="text-[8px] font-medium text-slate-400 dark:text-white/25 uppercase tracking-wider mt-0.5">Smart Monitoring</p>
+                            <p className="text-[11px] font-bold text-slate-500 dark:text-white/50 uppercase tracking-[0.15em] leading-none">PT Brantas Abipraya</p>
+                            <p className="text-[11px] font-medium text-slate-400 dark:text-white/25 uppercase tracking-wider mt-0.5">Smart Monitoring</p>
                         </div>
                     </div>
                 </div>
@@ -1160,10 +1178,11 @@ function MapPin3D({ online, count, category, isSelected, progress }: { online: b
                         />
                     </svg>
                 )}
+                {/* eslint-disable-next-line react-hooks/static-components -- Icon dipilih dari peta komponen lucide statis (CATEGORY_ICON), bukan komponen baru per render */}
                 <Icon className="w-[18px] h-[18px] text-slate-900 dark:text-white" strokeWidth={2.5} />
                 {/* Badge jumlah kamera */}
                 {count > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-slate-900 border border-white/80 flex items-center justify-center text-[8px] font-black text-white leading-none">
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-slate-900 border border-white/80 flex items-center justify-center text-[11px] font-black text-white leading-none">
                         {count}
                     </span>
                 )}
@@ -1186,15 +1205,16 @@ function LocationTooltip({
     lastCheckedTimes?: Record<string, string>;
 }) {
     let on = 0, off = 0;
-    (loc.cameras || []).forEach((cam: any) => {
+    (loc.cameras || []).forEach((cam) => {
         if ((realtimeStatuses[cam._id] || cam.status) === 'online') on++;
         else off++;
     });
     const majorityOnline = on >= off;
 
     let latest: string | null = null;
-    (loc.cameras || []).forEach((cam: any) => {
-        const t = lastCheckedTimes?.[cam._id] || cam.lastCheckedAt;
+    (loc.cameras || []).forEach((cam) => {
+        const raw = lastCheckedTimes?.[cam._id] || cam.lastCheckedAt;
+        const t = raw instanceof Date ? raw.toISOString() : raw;
         if (t && (!latest || new Date(t) > new Date(latest))) latest = t;
     });
     let rel: string | null = null;
@@ -1210,28 +1230,28 @@ function LocationTooltip({
         <div className="flex flex-col min-w-[160px] overflow-hidden rounded-2xl shadow-2xl border border-black/10 dark:border-white/10 bg-white/75 dark:bg-slate-950/60 backdrop-blur-md">
             <div className="px-3.5 py-2.5 bg-white/90 dark:bg-slate-900/90 border-b border-black/10 dark:border-white/10 flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${majorityOnline ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]'}`} />
-                <div className="text-[10px] font-bold text-slate-800 dark:text-white/90 uppercase tracking-wider truncate">{loc.name}</div>
+                <div className="text-[11px] font-bold text-slate-800 dark:text-white/90 uppercase tracking-wider truncate">{loc.name}</div>
             </div>
             <div className="p-3 bg-white/80 dark:bg-slate-900/70 flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-3">
                     <div className="flex-1 flex flex-col items-center gap-1 px-2 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
                         <div className="flex items-center gap-2">
-                            <Signal className="w-4 h-4 text-emerald-400" />
+                            <Signal className="w-4 h-4 text-emerald-400" aria-hidden="true" />
                             <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{on}</span>
                         </div>
-                        <span className="text-[9px] font-bold text-emerald-400/80 uppercase tracking-wider">Online</span>
+                        <span className="text-[11px] font-bold text-emerald-400/80 uppercase tracking-wider">Online</span>
                     </div>
                     <div className="flex-1 flex flex-col items-center gap-1 px-2 py-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
                         <div className="flex items-center gap-2">
-                            <SignalZero className="w-4 h-4 text-rose-400" />
+                            <SignalZero className="w-4 h-4 text-rose-400" aria-hidden="true" />
                             <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{off}</span>
                         </div>
-                        <span className="text-[9px] font-bold text-rose-400/80 uppercase tracking-wider">Offline</span>
+                        <span className="text-[11px] font-bold text-rose-400/80 uppercase tracking-wider">Offline</span>
                     </div>
                 </div>
                 {rel && (
                     <div className="text-center pt-1 border-t border-black/5 dark:border-white/5">
-                        <span className="text-[8px] font-semibold text-slate-500 tracking-wide">Dicek {rel}</span>
+                        <span className="text-[11px] font-semibold text-slate-500 tracking-wide">Dicek {rel}</span>
                     </div>
                 )}
             </div>

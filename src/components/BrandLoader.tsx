@@ -21,7 +21,7 @@ export default function BrandLoader({
     fullscreen?: boolean;
 }) {
     const { theme } = useTheme();
-    const logoSrc = theme === 'dark' ? '/abipraya_original.svg' : '/LOGO_ABIPRAYA.png';
+    const logoSrc = theme === 'dark' ? '/abipraya_original.svg' : '/abipraya_blue.svg';
     return (
         <div
             className={`${fullscreen ? 'fixed inset-0' : 'absolute inset-0'} z-[9999] flex flex-col items-center justify-center bg-slate-100/95 dark:bg-slate-950/95 backdrop-blur-xl`}

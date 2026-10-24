@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
                 .lean();
 
             // Skip cameras already streaming (viewer or a previous prewarm).
-            const targets = (cameras as any[]).filter(
+            const targets = (cameras as unknown as Array<{ _id: { toString(): string }; streamUrl: string }>).filter(
                 (cam) => !ffmpegManager.isStreaming(cam._id.toString())
             );
 
@@ -86,8 +86,8 @@ export async function POST(req: NextRequest) {
             }
 
             console.log('[Prewarm] Done.');
-        } catch (err: any) {
-            console.error('[Prewarm] Error:', err?.message || err);
+        } catch (err) {
+            console.error('[Prewarm] Error:', err instanceof Error ? err.message : err);
         } finally {
             isPrewarming = false;
         }

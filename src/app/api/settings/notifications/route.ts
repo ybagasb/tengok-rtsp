@@ -10,6 +10,15 @@ export const runtime = 'nodejs';
 const SETTINGS_KEY = 'cctv-notices';
 const VALID_TYPES = ['info', 'tip', 'warning'] as const;
 
+// Bentuk mentah notice dari klien (tidak dipercaya, divalidasi di bawah).
+interface RawNotice {
+    id?: unknown;
+    type?: unknown;
+    title?: unknown;
+    message?: unknown;
+    enabled?: unknown;
+}
+
 /**
  * GET /api/settings/notifications  (PUBLIC)
  * Read the CCTV notices config. Public so the shared/public map view can render
@@ -31,7 +40,7 @@ export async function GET() {
                 notices: doc.notices ?? [],
             },
         });
-    } catch (error) {
+    } catch {
         // On failure, fall back to defaults so the UI still shows something.
         return NextResponse.json({ success: true, data: DEFAULT_NOTIFICATION_SETTINGS });
     }
@@ -56,11 +65,11 @@ export async function PUT(req: NextRequest) {
         // Sanitize the notices array — never trust the client shape.
         const rawNotices = Array.isArray(body.notices) ? body.notices : [];
         const notices: INotice[] = rawNotices
-            .filter((n: any) => n && typeof n.message === 'string' && n.message.trim())
+            .filter((n: RawNotice): n is RawNotice & { message: string } => !!n && typeof n.message === 'string' && n.message.trim().length > 0)
             .slice(0, 20) // hard cap
-            .map((n: any, i: number) => ({
+            .map((n: RawNotice & { message: string }, i: number): INotice => ({
                 id: typeof n.id === 'string' && n.id.trim() ? n.id : `notice-${Date.now()}-${i}`,
-                type: VALID_TYPES.includes(n.type) ? n.type : 'info',
+                type: (VALID_TYPES as readonly unknown[]).includes(n.type) ? (n.type as INotice['type']) : 'info',
                 title: typeof n.title === 'string' ? n.title.slice(0, 120) : '',
                 message: n.message.slice(0, 600),
                 enabled: n.enabled !== false,
@@ -83,7 +92,7 @@ export async function PUT(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, data: updated });
-    } catch (error: any) {
+    } catch {
         return NextResponse.json(
             { success: false, error: 'Gagal menyimpan pengaturan notifikasi' },
             { status: 400 }

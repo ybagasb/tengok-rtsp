@@ -45,11 +45,11 @@ export async function GET(req: NextRequest) {
         // 2. Ambil data kamera per location & status kamera saat ini (2 query ringan)
         const locations = (await Location.find({ division: { $in: DIVISIONS } })
             .select('division category cameras')
-            .lean()) as Array<{ division?: string; category?: string; cameras?: any[] }>;
+            .lean()) as Array<{ division?: string; category?: string; cameras?: unknown[] }>;
 
         const cameras = (await Camera.find({})
             .select('_id status')
-            .lean()) as Array<{ _id: any; status?: string }>;
+            .lean()) as Array<{ _id: unknown; status?: string }>;
 
         const statusById = new Map<string, string>();
         for (const cam of cameras) {
@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
             return { total: idSet.size, online };
         };
 
-        const allCategories = (await Category.find().lean()) as any[];
+        const allCategories = (await Category.find().lean()) as Array<{ identifier?: string } & Record<string, unknown>>;
         const catByIdentifier = new Map(allCategories.map(c => [c.identifier, c]));
 
         const result = DIVISIONS.map(div => {
@@ -130,8 +130,8 @@ export async function GET(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, data: result });
-    } catch (error: any) {
-        console.error('[Divisions GET] Error:', error?.message);
+    } catch (error) {
+        console.error('[Divisions GET] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ success: false, error: 'Gagal memuat data divisi' }, { status: 500 });
     }
 }

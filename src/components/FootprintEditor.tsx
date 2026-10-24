@@ -93,7 +93,7 @@ export default function FootprintEditor({ lat, lng, footprint, height, canEdit, 
         }
     };
 
-    const btn = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors disabled:opacity-50';
+    const btn = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors disabled:opacity-50 min-h-10 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none';
     const btnGhost = `${btn} bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300`;
 
     return (
@@ -176,7 +176,7 @@ export default function FootprintEditor({ lat, lng, footprint, height, canEdit, 
                                 step="0.5"
                                 value={heightText}
                                 onChange={(e) => setHeightText(e.target.value)}
-                                className="w-32 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]"
+                                className="w-32 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-[rgba(var(--div-accent-rgb),0.5)] focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                                 aria-invalid={points.length > 0 && !heightValid}
                             />
                         </label>

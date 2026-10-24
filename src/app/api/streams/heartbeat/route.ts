@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
         ffmpegManager.heartbeat(cameraId);
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed heartbeat:', error);
         return NextResponse.json({ error: 'Gagal memperbarui heartbeat stream' }, { status: 500 });
     }

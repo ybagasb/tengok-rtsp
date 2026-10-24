@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import StatusLog from '@/models/StatusLog';
-import Camera from '@/models/Camera';
+// Side-effect import: registers the Camera model (needed for populate / refs)
+import '@/models/Camera';
 import { requireAuth } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
         // Get all logs since midnight, sorted by camera + time
         const logs = await StatusLog.find({
             timestamp: { $gte: startOfDay },
-        }).sort({ cameraId: 1, timestamp: 1 }).lean() as any[];
+        }).sort({ cameraId: 1, timestamp: 1 }).lean<Array<{ cameraId: { toString(): string }; status: string; timestamp: Date }>>();
 
         // Group by cameraId
         const byCam: Record<string, { status: string; timestamp: Date }[]> = {};
@@ -53,8 +54,8 @@ export async function GET(req: NextRequest) {
         }
 
         return NextResponse.json({ success: true, data: map });
-    } catch (err: any) {
-        console.error('[offline-today] Error:', err?.message);
+    } catch (err) {
+        console.error('[offline-today] Error:', err instanceof Error ? err.message : undefined);
         return NextResponse.json({ error: 'Gagal memuat data kamera offline' }, { status: 500 });
     }
 }

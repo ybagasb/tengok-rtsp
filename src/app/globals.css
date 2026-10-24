@@ -1,5 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
+
+/* Font dimuat lewat next/font (layout.tsx) → variabel CSS di <html>. */
+@theme inline {
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-orbitron: var(--font-orbitron), ui-sans-serif, sans-serif;
+  --font-rajdhani: var(--font-rajdhani), ui-sans-serif, sans-serif;
+}
 
 /* Tailwind v4: aktifkan dark mode berbasis class <html class="dark">.
    Default (tanpa .dark) = tema terang. */
@@ -47,9 +53,30 @@
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Safe-area (iPhone notch / home indicator). Butuh viewport-fit=cover. */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Indikator fokus keyboard global untuk elemen interaktif yang belum
+   punya style fokus sendiri (Tailwind ring/outline tetap menimpa ini). */
+:where(a, button, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid #eab308;
+  outline-offset: 2px;
 }
 
 @layer utilities {
@@ -79,11 +106,19 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #94a3b8;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+:where(.dark) ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+:where(.dark) ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
 
@@ -97,11 +132,19 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #94a3b8;
   border-radius: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+:where(.dark) .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+:where(.dark) .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
 
@@ -119,6 +162,16 @@ body {
 
 .leaflet-tooltip-top:before {
   border-top-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:where(.dark) .leaflet-tooltip.custom-tooltip {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #e2e8f0 !important;
+}
+
+:where(.dark) .leaflet-tooltip-top:before {
+  border-top-color: rgba(15, 23, 42, 0.92) !important;
 }
 
 /* Pulsing Animation for Online Markers */
@@ -183,4 +236,52 @@ body {
 
 .pulse-emerald {
   animation: pulse-emerald 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+/* Watermark logo: melayang pelan + bernapas + kilau menyapu. */
+@keyframes watermark-float {
+  0%, 100% { transform: translateY(-4%) rotate(-1.5deg); }
+  50%      { transform: translateY(4%) rotate(1.5deg); }
+}
+@keyframes watermark-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+@keyframes watermark-sweep {
+  0%   { -webkit-mask-position: 160% 0; mask-position: 160% 0; }
+  100% { -webkit-mask-position: -60% 0; mask-position: -60% 0; }
+}
+.watermark-float {
+  animation: watermark-float 9s ease-in-out infinite;
+}
+.watermark-logo {
+  animation: watermark-breathe 7s ease-in-out infinite;
+}
+/* Kilau: lapisan kedua yang sama, opacity naik hanya pada pita yang menyapu */
+.watermark-logo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("/abipraya_mark.svg") center / contain no-repeat;
+  filter: brightness(2.2) saturate(1.2);
+  -webkit-mask-image: linear-gradient(105deg, transparent 40%, #000 50%, transparent 60%);
+  mask-image: linear-gradient(105deg, transparent 40%, #000 50%, transparent 60%);
+  -webkit-mask-size: 250% 100%;
+  mask-size: 250% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: watermark-sweep 9s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .watermark-float, .watermark-logo, .watermark-logo::after { animation: none; }
+  .watermark-logo::after { display: none; }
+}
+
+/* Performa: backdrop-filter dihitung ulang tiap frame di atas peta/video/3D.
+   Di perangkat sentuh (GPU terbatas) matikan; panel sudah 80-95% opak sehingga
+   tampilannya nyaris sama. */
+@media (pointer: coarse) {
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
 }

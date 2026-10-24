@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
-import Camera from '@/models/Camera';
+// Side-effect import: registers the Camera model so populate('cameras') works
+import '@/models/Camera';
 import { logAudit } from '@/lib/adminAuditLog';
 import { requireAuth, requireAdmin, getAuditActor } from '@/lib/apiAuth';
 
 import '@/lib/cameraStatusChecker';
 
-// Prevent tree-shaking of the Camera model
-const _models = [Camera, Location];
 
 // Field yang boleh ditulis lewat create/update lokasi. Allowlist ini SENGAJA
 // tidak memuat picSubs (field kontrol akses, hanya diset oleh route PIC yang
@@ -52,14 +51,25 @@ function pickEditableFields(body: Record<string, unknown>): Record<string, unkno
 /**
  * Strip streamUrl from populated camera objects to avoid credential leakage.
  */
-function sanitizeCameras(obj: any) {
+function sanitizeCameras<T extends { cameras?: unknown }>(obj: T): T {
     if (obj?.cameras && Array.isArray(obj.cameras)) {
-        obj.cameras = obj.cameras.map((cam: any) => {
-            const { streamUrl, ...safe } = cam;
-            return safe;
-        });
+        obj.cameras = obj.cameras.map((cam: Record<string, unknown>) =>
+            // Drop streamUrl (copy of all other own props, same as rest-destructuring)
+            Object.fromEntries(Object.entries(cam).filter(([key]) => key !== 'streamUrl'))
+        );
     }
     return obj;
+}
+
+interface LocationWithCamerasLean {
+    cameras?: Array<{ status?: string }>;
+    [key: string]: unknown;
+}
+
+interface ValidationLikeError {
+    name?: string;
+    message?: string;
+    errors?: Record<string, { message?: string } | undefined>;
 }
 
 export async function GET(req: NextRequest) {
@@ -84,16 +94,16 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ success: true, data: sanitizeCameras(location) });
         }
 
-        const query: Record<string, any> = {};
+        const query: Record<string, string> = {};
         if (category) query.category = category;
         if (division) query.division = division;
         if (projectType) query.projectType = projectType;
-        const locations = await Location.find(query).populate('cameras').lean() as any;
+        const locations = await Location.find(query).populate('cameras').lean<LocationWithCamerasLean[]>();
 
         // Calculate online/offline counts and strip credentials
-        const enhancedLocations = locations.map((loc: any) => {
-            const onlineCount = loc.cameras?.filter((c: any) => c.status === 'online').length || 0;
-            const offlineCount = loc.cameras?.filter((c: any) => c.status === 'offline').length || 0;
+        const enhancedLocations = locations.map((loc) => {
+            const onlineCount = loc.cameras?.filter((c) => c.status === 'online').length || 0;
+            const offlineCount = loc.cameras?.filter((c) => c.status === 'offline').length || 0;
             return {
                 ...sanitizeCameras(loc),
                 onlineCount,
@@ -102,18 +112,19 @@ export async function GET(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, data: enhancedLocations });
-    } catch (error: any) {
-        console.error('[Locations GET] Error:', error?.message);
+    } catch (error) {
+        console.error('[Locations GET] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ success: false, error: 'Gagal memuat data lokasi' }, { status: 500 });
     }
 }
 
 // Return a user-friendly message for Mongoose validation errors (field-level,
 // safe to show), otherwise a generic message. Never leak internal error text.
-function errorResponse(error: any, fallback: string, status = 500) {
-    console.error(`[Locations] ${fallback}:`, error?.message);
-    if (error?.name === 'ValidationError') {
-        const first = Object.values(error.errors || {})[0] as any;
+function errorResponse(error: unknown, fallback: string, status = 500) {
+    const err = error as ValidationLikeError | null | undefined;
+    console.error(`[Locations] ${fallback}:`, err?.message);
+    if (err?.name === 'ValidationError') {
+        const first = Object.values(err.errors || {})[0];
         const msg = first?.message || 'Data tidak valid';
         return NextResponse.json({ success: false, error: msg }, { status: 400 });
     }
@@ -143,7 +154,7 @@ export async function POST(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, data: location }, { status: 201 });
-    } catch (error: any) {
+    } catch (error) {
         return errorResponse(error, 'Gagal menyimpan lokasi', 400);
     }
 }
@@ -179,7 +190,7 @@ export async function DELETE(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, data: {} }, { status: 200 });
-    } catch (error: any) {
+    } catch (error) {
         return errorResponse(error, 'Gagal menghapus lokasi');
     }
 }
@@ -220,7 +231,7 @@ export async function PUT(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, data: location });
-    } catch (error: any) {
+    } catch (error) {
         return errorResponse(error, 'Gagal memperbarui lokasi', 400);
     }
 }

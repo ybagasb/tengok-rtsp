@@ -15,6 +15,8 @@ interface OptimizedVideoPlayerProps {
 const BACKOFF_DELAYS = [1000, 2000, 5000, 10000, 30000];
 const MAX_RETRIES = 10;
 
+const FOCUS_RING = 'focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none';
+
 function getBackoffDelay(attempt: number): number {
     const idx = Math.min(attempt, BACKOFF_DELAYS.length - 1);
     return BACKOFF_DELAYS[idx];
@@ -36,7 +38,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
     const [isPlaying, setIsPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [retryAttempt, setRetryAttempt] = useState(0);
+    const [, setRetryAttempt] = useState(0);
 
     // ── Zoom & Pan (hanya aktif saat layar penuh) ───────────────────────────
     // Transform: translate(x,y) scale(s) dengan origin di tengah wadah.
@@ -428,8 +430,8 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                     onStatusChange?.('online');
                 }).catch(() => {});
             }
-        } catch (err: any) {
-            console.warn(`[Player] Stream fetch failed for ${cameraId}:`, err.message);
+        } catch (err: unknown) {
+            console.warn(`[Player] Stream fetch failed for ${cameraId}:`, err instanceof Error ? err.message : err);
             if (retryCountRef.current < MAX_RETRIES) {
                 scheduleRetry(retryCountRef.current);
                 retryCountRef.current++;
@@ -478,7 +480,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
     };
 
     return (
-        <div ref={containerRef} className="w-full h-full relative bg-slate-950 group">
+        <div ref={containerRef} className="w-full h-full relative bg-black group">
             {/* Video element - always present in DOM */}
             <video
                 ref={videoRef}
@@ -500,8 +502,8 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
             {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
                     <div className="flex flex-col items-center gap-2">
-                        <Loader2 className="w-7 h-7 animate-spin text-yellow-500" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Menghubungkan...</span>
+                        <Loader2 aria-hidden="true" className="w-7 h-7 animate-spin text-yellow-500" />
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Menghubungkan...</span>
                     </div>
                 </div>
             )}
@@ -509,12 +511,12 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
             {/* Error / Offline State */}
             {error && !isLoading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm gap-3">
-                    <WifiOff className="w-8 h-8 text-rose-400 opacity-70" />
-                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider text-center px-4">{error}</span>
+                    <WifiOff aria-hidden="true" className="w-8 h-8 text-rose-400 opacity-70" />
+                    <span role="status" className="text-[11px] font-bold text-rose-400 uppercase tracking-wider text-center px-4">{error}</span>
                     {error === 'Kamera Offline' && (
                         <button
                             onClick={() => { retryCountRef.current = 0; setRetryAttempt(0); setError(null); initPlayer(); }}
-                            className="mt-1 px-4 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-300 uppercase tracking-wider transition-all"
+                            className={`${FOCUS_RING} mt-1 min-h-10 px-4 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] font-bold text-slate-300 uppercase tracking-wider transition-all`}
                             aria-label="Coba lagi koneksi kamera"
                         >
                             Coba Lagi
@@ -528,27 +530,27 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                 <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm group-hover:bg-black/40 transition-colors">
                     <button
                         onClick={() => manager.register(cameraId, initPlayer, destroyPlayer)}
-                        className="w-14 h-14 rounded-full bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 flex items-center justify-center transition-all border border-yellow-500/40 hover:scale-110 active:scale-95"
+                        className={`${FOCUS_RING} w-14 h-14 rounded-full bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 flex items-center justify-center transition-all border border-yellow-500/40 hover:scale-110 active:scale-95`}
                         aria-label="Putar stream kamera"
                     >
-                        <Play className="w-6 h-6 ml-1" />
+                        <Play className="w-6 h-6 ml-1" aria-hidden="true" />
                     </button>
                 </div>
             )}
 
             {/* Overlay buttons: Fullscreen */}
             {isPlaying && (
-                <div className={`absolute bottom-3 right-3 flex items-center gap-2 transition-opacity ${isFullscreen ? 'opacity-100 z-[60]' : 'opacity-0 group-hover:opacity-100'}`}>
+                <div className={`absolute bottom-3 right-3 flex items-center gap-2 transition-opacity ${isFullscreen ? 'opacity-100 z-[60]' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100'}`}>
                     {isFullscreen && (
                         <div className="flex items-center gap-1 p-1 bg-black/60 rounded-xl backdrop-blur-md border border-white/10 shadow-xl">
                             <button
                                 onClick={(e) => { e.stopPropagation(); zoomTo(transformRef.current.scale / BUTTON_ZOOM_STEP); }}
                                 disabled={transform.scale <= MIN_SCALE}
-                                className="p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                                className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
                                 title="Perkecil"
                                 aria-label="Perkecil tampilan"
                             >
-                                <ZoomOut className="w-5 h-5" />
+                                <ZoomOut className="w-5 h-5" aria-hidden="true" />
                             </button>
                             <span className="min-w-[3rem] text-center text-xs font-bold text-white tabular-nums" aria-live="polite">
                                 {transform.scale.toFixed(1)}×
@@ -556,30 +558,30 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                             <button
                                 onClick={(e) => { e.stopPropagation(); zoomTo(transformRef.current.scale * BUTTON_ZOOM_STEP); }}
                                 disabled={transform.scale >= MAX_SCALE}
-                                className="p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                                className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
                                 title="Perbesar"
                                 aria-label="Perbesar tampilan"
                             >
-                                <ZoomIn className="w-5 h-5" />
+                                <ZoomIn className="w-5 h-5" aria-hidden="true" />
                             </button>
                             <button
                                 onClick={(e) => { e.stopPropagation(); resetZoom(); }}
                                 disabled={transform.scale === 1}
-                                className="p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                                className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
                                 title="Reset zoom"
                                 aria-label="Reset zoom"
                             >
-                                <RotateCcw className="w-5 h-5" />
+                                <RotateCcw className="w-5 h-5" aria-hidden="true" />
                             </button>
                         </div>
                     )}
                     <button
                         onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
-                        className="p-2 bg-black/60 hover:bg-black/80 rounded-xl text-white backdrop-blur-md transition-all shadow-xl border border-white/10 group/btn"
+                        className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2 bg-black/60 hover:bg-black/80 rounded-xl text-white backdrop-blur-md transition-all shadow-xl border border-white/10 group/btn`}
                         title="Layar Penuh"
-                        aria-label="Tampilkan layar penuh"
+                        aria-label={isFullscreen ? 'Keluar dari layar penuh' : 'Tampilkan layar penuh'}
                     >
-                        <Maximize2 className="w-5 h-5 drop-shadow-md group-hover/btn:scale-110 transition-transform" />
+                        <Maximize2 aria-hidden="true" className="w-5 h-5 drop-shadow-md group-hover/btn:scale-110 transition-transform" />
                     </button>
                 </div>
             )}
@@ -587,6 +589,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
             {/* Fullscreen Brand Watermark */}
             {isFullscreen && (
                 <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal (SVG), tidak perlu optimasi next/image */}
                     <img
                         src="/abipraya_original.svg"
                         alt=""

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
         const action = searchParams.get('action');
         const search = searchParams.get('search')?.trim();
 
-        const query: Record<string, any> = {};
+        const query: Record<string, unknown> = {};
         if (entity) query.entity = entity;
         if (action) query.action = action;
         if (search) {
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
                 totalPages: Math.ceil(total / limit) || 1,
             },
         });
-    } catch (error: any) {
+    } catch (error) {
         console.error('[audit-log] API error:', error);
         return NextResponse.json({ success: false, error: 'Gagal memuat audit log' }, { status: 500 });
     }

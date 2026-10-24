@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
             count: inserted.length,
             data: inserted,
         }, { status: 201 });
-    } catch (error: any) {
+    } catch (error) {
         console.error('[bulk-create] Error:', error);
         return NextResponse.json({ success: false, error: 'Gagal menyimpan data massal' }, { status: 500 });
     }
@@ -99,7 +99,7 @@ export async function DELETE(req: NextRequest) {
             success: true,
             deletedCount: result.deletedCount,
         });
-    } catch (error: any) {
+    } catch (error) {
         console.error('[bulk-delete] Error:', error);
         return NextResponse.json({ success: false, error: 'Gagal menghapus massal' }, { status: 500 });
     }
@@ -147,7 +147,7 @@ export async function PATCH(req: NextRequest) {
             success: true,
             message: `Berhasil menambahkan ${cameraIds.length} kamera ke lokasi ${location.name}`,
         });
-    } catch (error: any) {
+    } catch (error) {
         console.error('[bulk-assign] Error:', error);
         return NextResponse.json({ success: false, error: 'Gagal menghubungkan kamera' }, { status: 500 });
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
-import { Loader2, Activity, Filter, MapPin, ChevronDown, ChevronUp, Search, MonitorPlay, AlertTriangle } from 'lucide-react';
+import { Loader2, Activity, MapPin, ChevronDown, ChevronUp, MonitorPlay } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { containerVariants, cardVariants } from '@/components/admin/shared';
 import { PageHeader, EmptyState, SearchBar } from '@/components/admin/AdminUI';
@@ -141,14 +141,15 @@ export default function UptimePage() {
     };
 
     const getUptimeColorClasses = (pct: number) => {
-        if (pct === -1) return { bg: 'bg-slate-700', text: 'text-slate-500 dark:text-slate-400', bar: 'bg-slate-600', border: 'border-slate-700/50' };
-        if (pct >= 90) return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', bar: 'bg-emerald-500', border: 'border-emerald-500/20' };
-        if (pct >= 70) return { bg: 'bg-yellow-500/10', text: 'text-yellow-500', bar: 'bg-yellow-500', border: 'border-yellow-500/20' };
-        return { bg: 'bg-rose-500/10', text: 'text-rose-400', bar: 'bg-rose-500', border: 'border-rose-500/20' };
+        if (pct === -1) return { bg: 'bg-slate-200 dark:bg-slate-700', text: 'text-slate-500 dark:text-slate-400', bar: 'bg-slate-400 dark:bg-slate-600', border: 'border-slate-300 dark:border-slate-700/50' };
+        if (pct >= 90) return { bg: 'bg-emerald-500/10', text: 'text-emerald-700 dark:text-emerald-400', bar: 'bg-emerald-500', border: 'border-emerald-500/20' };
+        if (pct >= 70) return { bg: 'bg-yellow-500/10', text: 'text-yellow-700 dark:text-yellow-500', bar: 'bg-yellow-500', border: 'border-yellow-500/20' };
+        return { bg: 'bg-rose-500/10', text: 'text-rose-700 dark:text-rose-400', bar: 'bg-rose-500', border: 'border-rose-500/20' };
     };
 
     const formatRelativeTime = (iso: string | null) => {
         if (!iso) return '-';
+        // eslint-disable-next-line react-hooks/purity -- label waktu relatif memang bergantung pada jam saat render
         const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
         if (diff < 60) return 'Baru saja';
         if (diff < 3600) return `${Math.floor(diff / 60)}m lalu`;
@@ -158,8 +159,8 @@ export default function UptimePage() {
 
     if (loading) {
         return (
-            <div className="flex h-[80vh] items-center justify-center">
-                <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
+            <div role="status" aria-label="Memuat data uptime" className="flex h-[80dvh] items-center justify-center">
+                <Loader2 aria-hidden="true" className="w-8 h-8 text-yellow-700 dark:text-yellow-500 animate-spin motion-reduce:animate-none" />
             </div>
         );
     }
@@ -173,15 +174,16 @@ export default function UptimePage() {
                     title="Kendali Uptime"
                     subtitle="Pantau stabilitas sistem dan konektivitas CCTV di setiap lokasi proyek secara keseluruhan."
                     actions={
-                        <div className="flex items-center bg-white/70 dark:bg-slate-900/60 rounded-2xl border border-black/10 dark:border-white/10 p-1 gap-1">
+                        <div role="group" aria-label="Periode uptime" className="flex items-center bg-white/70 dark:bg-slate-900/60 rounded-2xl border border-black/10 dark:border-white/10 p-1 gap-1">
                             {[7, 14, 30].map(d => (
                                 <button
                                     key={d}
                                     onClick={() => setDays(d)}
-                                    className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${days === d
+                                    aria-pressed={days === d}
+                                    className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${days === d
                                         ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/20'
                                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
-                                    }`}
+                                    } min-h-10`}
                                 >
                                     {d} Hari
                                 </button>
@@ -205,14 +207,14 @@ export default function UptimePage() {
                     <motion.div variants={cardVariants} initial="hidden" animate="show"
                         className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-emerald-500/20 rounded-3xl p-6 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-bl-full blur-2xl" />
-                        <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-2 relative z-10">Kamera Stabil</p>
-                        <h2 className="text-3xl font-black text-emerald-400 relative z-10">{summary.stable}</h2>
+                        <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-2 relative z-10">Kamera Stabil</p>
+                        <h2 className="text-3xl font-black text-emerald-700 dark:text-emerald-400 relative z-10">{summary.stable}</h2>
                     </motion.div>
                     <motion.div variants={cardVariants} initial="hidden" animate="show"
                         className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-rose-500/20 rounded-3xl p-6 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/10 rounded-bl-full blur-2xl" />
-                        <p className="text-[11px] font-bold text-rose-400 uppercase tracking-wider mb-2 relative z-10">Kritis (&lt;70%)</p>
-                        <h2 className="text-3xl font-black text-rose-400 relative z-10">{summary.critical}</h2>
+                        <p className="text-[11px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider mb-2 relative z-10">Kritis (&lt;70%)</p>
+                        <h2 className="text-3xl font-black text-rose-700 dark:text-rose-400 relative z-10">{summary.critical}</h2>
                     </motion.div>
                 </div>
 
@@ -223,10 +225,11 @@ export default function UptimePage() {
                             <button
                                 key={cat}
                                 onClick={() => setFilterCategory(cat)}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all ${filterCategory === cat
-                                    ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                                aria-pressed={filterCategory === cat}
+                                className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all ${filterCategory === cat
+                                    ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-500 border-yellow-500/30'
                                     : 'bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 border-transparent hover:border-black/10 dark:hover:border-white/10'
-                                }`}
+                                } min-h-10`}
                             >
                                 {cat === 'all' ? 'Semua Kategori' : cat}
                             </button>
@@ -263,22 +266,24 @@ export default function UptimePage() {
                                     {/* Location Header - Click to expand */}
                                     <button 
                                         onClick={() => toggleExpand(group.locationName)}
-                                        className="w-full px-6 py-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-left group/btn"
+                                        aria-expanded={isExpanded}
+                                        aria-label={`${group.locationName}, uptime ${group.avgUptime === -1 ? 'tidak tersedia' : group.avgUptime + ' persen'}, ${group.cameras.length} kamera`}
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full px-6 py-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-left group/btn"
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className={`p-3 rounded-2xl ${style.bg} ${style.text} transition-colors`}>
-                                                <MapPin className="w-6 h-6" />
+                                                <MapPin aria-hidden="true" className="w-6 h-6" />
                                             </div>
                                             <div>
-                                                <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover/btn:text-yellow-400 transition-colors tracking-wide">
+                                                <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover/btn:text-yellow-700 dark:group-hover/btn:text-yellow-400 transition-colors tracking-wide">
                                                     {group.locationName}
                                                 </h3>
                                                 <div className="flex items-center gap-3 mt-1">
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                                                         {group.category}
                                                     </span>
-                                                    <span className="w-1 h-1 rounded-full bg-slate-700" />
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                                    <span aria-hidden="true" className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-700" />
+                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                                                         {group.cameras.length} Kamera
                                                     </span>
                                                 </div>
@@ -286,9 +291,9 @@ export default function UptimePage() {
                                         </div>
 
                                         <div className="w-full md:w-auto flex items-center justify-between md:justify-end gap-6 pl-14 md:pl-0">
-                                            <div className="flex flex-col items-start md:items-end w-32 shrink-0">
+                                            <div className="flex flex-col items-start md:items-end w-28 sm:w-32 shrink-0">
                                                 <div className="flex items-center justify-between w-full mb-1">
-                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Uptime</span>
+                                                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Uptime</span>
                                                     <span className={`text-sm font-bold ${style.text}`}>
                                                         {group.avgUptime === -1 ? 'N/A' : `${group.avgUptime}%`}
                                                     </span>
@@ -303,8 +308,8 @@ export default function UptimePage() {
                                                 </div>
                                             </div>
                                             
-                                            <div className="text-slate-500 group-hover/btn:text-white transition-colors p-2 bg-black/[0.04] dark:bg-white/5 rounded-full">
-                                                {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                            <div className="text-slate-500 group-hover/btn:text-slate-900 dark:group-hover/btn:text-white transition-colors p-2 bg-black/[0.04] dark:bg-white/5 rounded-full">
+                                                {isExpanded ? <ChevronUp aria-hidden="true" className="w-5 h-5" /> : <ChevronDown aria-hidden="true" className="w-5 h-5" />}
                                             </div>
                                         </div>
                                     </button>
@@ -325,17 +330,18 @@ export default function UptimePage() {
                                                         
                                                         return (
                                                             <div key={cam.cameraId} className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-black/[0.04] dark:bg-white/5 border border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="relative">
-                                                                        <MonitorPlay className={`w-5 h-5 ${isOnline ? 'text-emerald-400' : 'text-slate-500'}`} />
-                                                                        <div className={`absolute -right-1 -bottom-1 w-2.5 h-2.5 rounded-full border-2 border-slate-900 ${isOnline ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                                                <div className="flex items-center gap-3 min-w-0">
+                                                                    <div className="relative shrink-0">
+                                                                        <MonitorPlay aria-hidden="true" className={`w-5 h-5 ${isOnline ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}`} />
+                                                                        <span className="sr-only">{isOnline ? 'Online' : 'Offline'}</span>
+                                                                        <div aria-hidden="true" className={`absolute -right-1 -bottom-1 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${isOnline ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                                                                     </div>
                                                                     <div>
-                                                                        <div className="text-sm font-bold text-slate-900 dark:text-white tracking-wide truncate max-w-[150px] sm:max-w-[200px]">{cam.cameraName}</div>
-                                                                        <div className="text-[9px] font-medium text-slate-500 mt-0.5 flex flex-col gap-0.5">
+                                                                        <div className="text-sm font-bold text-slate-900 dark:text-white tracking-wide truncate max-w-[120px] min-[400px]:max-w-[150px] sm:max-w-[200px]">{cam.cameraName}</div>
+                                                                        <div className="text-[11px] font-medium text-slate-500 mt-0.5 flex flex-col gap-0.5">
                                                                             <span>Cek: {formatRelativeTime(cam.lastCheckedAt)}</span>
                                                                             {!isOnline && (
-                                                                                <span className="text-yellow-500/80 font-semibold">
+                                                                                <span className="text-yellow-700 dark:text-yellow-500/80 font-semibold">
                                                                                     Terakhir Online: {cam.lastOnlineAt ? formatRelativeTime(cam.lastOnlineAt) : 'Belum terekam'}
                                                                                 </span>
                                                                             )}
@@ -347,7 +353,7 @@ export default function UptimePage() {
                                                                     <div className={`text-sm font-bold ${camStyle.text} tabular-nums`}>
                                                                         {cam.uptimePercent === -1 ? 'N/A' : `${cam.uptimePercent}%`}
                                                                     </div>
-                                                                    <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mt-0.5">
+                                                                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-0.5">
                                                                         {cam.totalChecks > 0 ? `${cam.onlineChecks}/${cam.totalChecks} UP` : 'No Data'}
                                                                     </div>
                                                                 </div>
@@ -370,18 +376,20 @@ export default function UptimePage() {
                         <button 
                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                             disabled={currentPage === 1}
-                            className="px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                            aria-label="Halaman sebelumnya"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors min-h-10"
                         >
                             Prev
                         </button>
                         <div className="flex items-center gap-1 px-4">
-                            <span className="text-sm font-bold text-yellow-500">{currentPage}</span>
+                            <span className="text-sm font-bold text-yellow-700 dark:text-yellow-500">{currentPage}</span>
                             <span className="text-sm text-slate-500 font-medium">/ {totalPages}</span>
                         </div>
                         <button 
                             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                             disabled={currentPage === totalPages}
-                            className="px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                            aria-label="Halaman berikutnya"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors min-h-10"
                         >
                             Next
                         </button>

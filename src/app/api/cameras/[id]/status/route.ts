@@ -31,11 +31,11 @@ export async function PATCH(
         const now = new Date();
 
         // Get current status to check if changed
-        const camera = await Camera.findById(id).select('status').lean() as any;
+        const camera = await Camera.findById(id).select('status').lean<{ status?: string }>();
         const previousStatus = camera?.status;
 
         // Update DB with status and timestamp
-        const updateFields: Record<string, any> = { status, lastCheckedAt: now };
+        const updateFields: Record<string, unknown> = { status, lastCheckedAt: now };
         if (status === 'online') {
             updateFields.lastOnlineAt = now;
         }
@@ -54,8 +54,8 @@ export async function PATCH(
         });
 
         return NextResponse.json({ success: true, id, status });
-    } catch (error: any) {
-        console.error('[camera status] Error:', error?.message);
+    } catch (error) {
+        console.error('[camera status] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ error: 'Gagal memperbarui status kamera' }, { status: 500 });
     }
 }

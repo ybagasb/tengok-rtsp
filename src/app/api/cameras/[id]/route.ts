@@ -43,7 +43,7 @@ export async function DELETE(
         });
 
         return NextResponse.json({ success: true, data: {} });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ success: false, error: 'Failed to delete camera' }, { status: 400 });
     }
 }
@@ -82,7 +82,7 @@ export async function PUT(
         });
 
         return NextResponse.json({ success: true, data: camera });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ success: false, error: 'Failed to update camera' }, { status: 400 });
     }
 }

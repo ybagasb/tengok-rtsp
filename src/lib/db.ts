@@ -1,5 +1,4 @@
 
-// @ts-ignore
 import mongoose from 'mongoose';
 
 
@@ -34,7 +33,7 @@ async function dbConnect() {
       bufferCommands: false,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose: any) => {
+    cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
       return mongoose.connection;
     });
   }

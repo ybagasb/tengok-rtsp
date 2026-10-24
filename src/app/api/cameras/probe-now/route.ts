@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
             console.log(`[ProbeNow] Testing full HLS pipeline for ${cameras.length} cameras (batch=${BATCH_SIZE})...`);
 
             for (let i = 0; i < cameras.length; i += BATCH_SIZE) {
-                const batch = (cameras as any[]).slice(i, i + BATCH_SIZE);
+                const batch = cameras.slice(i, i + BATCH_SIZE);
 
-                await Promise.all(batch.map(async (cam: any) => {
+                await Promise.all(batch.map(async (cam) => {
                     // Already streaming = confirmed live → mark online immediately
                     if (ffmpegManager.isStreaming(cam._id.toString())) {
                         const now = new Date();
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
 
                     // Write to DB immediately
                     const now = new Date();
-                    const updateFields: Record<string, any> = { status, lastCheckedAt: now };
+                    const updateFields: Record<string, unknown> = { status, lastCheckedAt: now };
                     if (status === 'online') {
                         updateFields.lastOnlineAt = now;
                     }
@@ -98,8 +98,8 @@ export async function POST(req: NextRequest) {
             }
 
             console.log(`[ProbeNow] Done.`);
-        } catch (err: any) {
-            console.error('[ProbeNow] Error:', err.message);
+        } catch (err) {
+            console.error('[ProbeNow] Error:', err instanceof Error ? err.message : undefined);
         } finally {
             isProbing = false;
         }

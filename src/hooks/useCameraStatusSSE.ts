@@ -31,7 +31,7 @@ export function useCameraStatusSSE() {
                         });
                     }
                 }
-            } catch (err) {
+            } catch {
                 // Silently ignore ping or parse errors string parsing
             }
         };

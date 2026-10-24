@@ -193,6 +193,7 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
             timersRef.current.forEach(clearTimeout);
             timersRef.current = [];
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dismissed/seen sengaja tidak jadi dependensi (dibaca ulang dari sessionStorage); menambahkannya memicu ulang antrean
     }, [config, hidden, activeNotices]);
 
     const reopenAll = useCallback(() => {
@@ -321,10 +322,11 @@ function NoticeCard({
                 </div>
                 <button
                     onClick={onDismiss}
-                    className="absolute top-3 right-3 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-white p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto"
+                    className="absolute top-1 right-1 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-white p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto min-w-10 min-h-10 flex items-center justify-center focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     title="Tutup"
+                    aria-label="Tutup pemberitahuan"
                 >
-                    <CloseIcon className="w-4 h-4" />
+                    <CloseIcon className="w-4 h-4" aria-hidden="true" />
                 </button>
             </div>
 

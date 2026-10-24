@@ -147,7 +147,7 @@ export default function RolesPage() {
                     subtitle="Kelola super-admin TENGOK"
                 />
                 <div className="max-w-md mx-auto text-center py-16 flex flex-col items-center gap-4 text-slate-500">
-                    <Lock className="w-10 h-10 text-rose-400" />
+                    <Lock aria-hidden="true" className="w-10 h-10 text-rose-700 dark:text-rose-400" />
                     <p className="text-lg font-bold text-slate-900 dark:text-white">Anda bukan super-admin</p>
                     <p className="text-sm">Hanya super-admin yang dapat mengelola hak akses. Hubungi super-admin TENGOK untuk meminta akses.</p>
                 </div>
@@ -166,14 +166,15 @@ export default function RolesPage() {
             {/* Tambah super-admin via pencarian direktori SSO */}
             <section className="mb-10 p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                 <div className="flex items-center gap-2 mb-4">
-                    <UserPlus className="w-4 h-4 text-yellow-500" />
+                    <UserPlus aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" />
                     <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Tambah Super-admin</h2>
                 </div>
 
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 dark:text-slate-400 pointer-events-none" />
                     <input
                         type="text"
+                        aria-label="Cari user SSO"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Cari user SSO (nama, username, email)..."
@@ -181,24 +182,25 @@ export default function RolesPage() {
                     />
                     {query && (
                         <button
+                            type="button"
                             onClick={() => setQuery('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                            aria-label="Bersihkan"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                            aria-label="Bersihkan pencarian"
                         >
-                            <X className="w-4 h-4" />
+                            <X aria-hidden="true" className="w-4 h-4" />
                         </button>
                     )}
                 </div>
 
                 {searchError && (
-                    <div className="mt-3 flex items-center gap-2 text-xs font-medium text-amber-600 dark:text-amber-400">
-                        <AlertTriangle className="w-4 h-4 shrink-0" /> {searchError}
+                    <div role="alert" className="mt-3 flex items-center gap-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+                        <AlertTriangle aria-hidden="true" className="w-4 h-4 shrink-0" /> {searchError}
                     </div>
                 )}
 
                 {searching && (
-                    <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Mencari...
+                    <div role="status" className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                        <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Mencari...
                     </div>
                 )}
 
@@ -208,8 +210,9 @@ export default function RolesPage() {
                             <button
                                 key={u.cognitoSub}
                                 onClick={() => addAdmin(u.cognitoSub)}
+                                aria-label={`Tambahkan ${u.fullName || u.username} sebagai super-admin`}
                                 disabled={adding === u.cognitoSub}
-                                className="w-full flex items-center justify-between gap-3 p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-yellow-500/10 border border-transparent hover:border-yellow-500/20 transition-colors text-left disabled:opacity-60"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full flex items-center justify-between gap-3 p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-yellow-500/10 border border-transparent hover:border-yellow-500/20 transition-colors text-left disabled:opacity-60 min-h-10"
                             >
                                 <div className="min-w-0">
                                     <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{u.fullName || u.username}</div>
@@ -218,8 +221,8 @@ export default function RolesPage() {
                                     </div>
                                 </div>
                                 {adding === u.cognitoSub
-                                    ? <Loader2 className="w-4 h-4 animate-spin text-yellow-500 shrink-0" />
-                                    : <UserPlus className="w-4 h-4 text-slate-400 shrink-0" />}
+                                    ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin text-yellow-700 dark:text-yellow-500 shrink-0" />
+                                    : <UserPlus aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />}
                             </button>
                         ))}
                     </div>
@@ -236,9 +239,9 @@ export default function RolesPage() {
                 {admins.length === 0 ? (
                     <EmptyState icon={ShieldCheck} title="Belum ada super-admin" subtitle="Tambahkan super-admin lewat pencarian di atas." />
                 ) : (
-                    <div className="space-y-2">
+                    <ul className="space-y-2" aria-label="Daftar super-admin">
                         {admins.map((a) => (
-                            <motion.div
+                            <motion.li
                                 key={a.cognitoSub}
                                 initial={{ opacity: 0, y: 8 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -246,13 +249,13 @@ export default function RolesPage() {
                             >
                                 <div className="min-w-0 flex items-center gap-3">
                                     <div className="w-9 h-9 rounded-xl bg-yellow-500/10 flex items-center justify-center shrink-0">
-                                        <ShieldCheck className="w-4 h-4 text-yellow-500" />
+                                        <ShieldCheck aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" />
                                     </div>
                                     <div className="min-w-0">
                                         <div className="text-sm font-bold text-slate-900 dark:text-white truncate flex items-center gap-2">
                                             {adminLabel(a)}
                                             {a.isBootstrap && (
-                                                <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-sky-500/30 bg-sky-500/10 text-sky-500">Bootstrap</span>
+                                                <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-500">Bootstrap</span>
                                             )}
                                         </div>
                                         <div className="text-[11px] text-slate-500 truncate">
@@ -263,18 +266,19 @@ export default function RolesPage() {
                                 {a.removable ? (
                                     <button
                                         onClick={() => removeAdmin(a)}
-                                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/15 text-slate-500 hover:text-rose-500 text-xs font-bold transition-colors shrink-0"
+                                        aria-label={`Cabut akses super-admin ${adminLabel(a)}`}
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/15 text-slate-500 hover:text-rose-700 dark:hover:text-rose-500 text-xs font-bold transition-colors shrink-0 min-h-10"
                                     >
-                                        <Trash2 className="w-3.5 h-3.5" /> Cabut
+                                        <Trash2 aria-hidden="true" className="w-3.5 h-3.5" /> Cabut
                                     </button>
                                 ) : (
-                                    <span className="flex items-center gap-1.5 px-3 py-2 text-slate-400 text-xs font-bold shrink-0">
-                                        <Lock className="w-3.5 h-3.5" /> Terkunci
+                                    <span className="flex items-center gap-1.5 px-3 py-2 text-slate-500 dark:text-slate-400 text-xs font-bold shrink-0">
+                                        <Lock aria-hidden="true" className="w-3.5 h-3.5" /> Terkunci
                                     </span>
                                 )}
-                            </motion.div>
+                            </motion.li>
                         ))}
-                    </div>
+                    </ul>
                 )}
             </section>
 

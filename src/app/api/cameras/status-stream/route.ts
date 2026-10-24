@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import { cameraStatusEmitter } from '@/lib/cameraStatusEmitter';
 import { requireAuth } from '@/lib/apiAuth';
 

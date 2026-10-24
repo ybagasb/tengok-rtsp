@@ -27,6 +27,7 @@ export default function CountUp({
     const raf = useRef(0);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- sinkronisasi nilai akhir saat reduced-motion; mengubahnya berisiko mengubah perilaku animasi
         if (reduce) { setDisplay(value); return; }
         const start = performance.now();
         const from = 0;

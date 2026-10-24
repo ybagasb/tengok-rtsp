@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
             .lean();
 
         return NextResponse.json({ success: true, data: cameras });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ success: false, error: 'Failed to fetch statuses' }, { status: 500 });
     }
 }

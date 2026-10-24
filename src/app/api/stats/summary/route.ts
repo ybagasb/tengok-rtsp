@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
             { $group: { _id: { $ifNull: ['$page', 'app'] }, count: { $sum: 1 } } },
             { $sort: { count: -1 } },
         ]);
-        const visitsBySource = bySourceAgg.map((s: any) => ({
+        const visitsBySource = bySourceAgg.map((s: { _id: string | null; count: number }) => ({
             page: s._id,
             label: pageLabel(s._id),
             count: s.count,
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
             { $sort: { '_id.date': 1 } },
         ]);
 
-        const dailyVisitsSummary = dailyVisits.map((d: any) => ({
+        const dailyVisitsSummary = dailyVisits.map((d: { _id: { date: string }; views: number; uniqueIps: unknown[] }) => ({
             date: d._id.date.substring(5), // Keep MM-DD
             views: d.views,
             unique: d.uniqueIps.length
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
             { $limit: 3 },
         ]);
         const popularLinks = await Promise.all(
-            popularTokensAgg.map(async (item: any) => {
+            popularTokensAgg.map(async (item: { _id: string; views: number }) => {
                 const link = await ShareLink.findOne({ token: item._id }).select('label');
                 return {
                     name: link?.label || item._id,
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
             data: {
                 summary: { totalVisits, uniqueVisitors, liveVisitors },
                 visitsBySource,
-                deviceStats: deviceStats.map((d: any) => ({
+                deviceStats: deviceStats.map((d: { _id: string; count: number }) => ({
                     name: d._id.charAt(0).toUpperCase() + d._id.slice(1),
                     value: d.count,
                 })),
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
                 popularLinks,
             },
         });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to fetch stats summary:', error);
         return NextResponse.json({ success: false, error: 'Failed to fetch stats' }, { status: 500 });
     }

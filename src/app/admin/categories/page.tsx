@@ -11,8 +11,8 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
-import { containerVariants, cardVariants, inputCls } from '@/components/admin/shared';
-import { PageHeader, SectionHeader, FormField, EmptyState, FullPageLoading, SearchBar, useConfirm, CountBadge } from '@/components/admin/AdminUI';
+import { containerVariants, cardVariants, inputCls, getApiError } from '@/components/admin/shared';
+import { PageHeader, SectionHeader, FormField, EmptyState, FullPageLoading, SearchBar, useConfirm } from '@/components/admin/AdminUI';
 import CoordinateInput from '@/components/admin/CoordinateInput';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
@@ -32,6 +32,11 @@ interface Category {
     createdAt?: string;
 }
 
+type LeafletModule = typeof import('leaflet');
+type LeafletMouseEvent = import('leaflet').LeafletMouseEvent;
+type ReactLeafletModule = typeof import('react-leaflet');
+// Peta nama ikon -> komponen Lucide (nama ikon berasal dari data kategori)
+const ICON_MAP = LucideIcons as unknown as Record<string, React.ElementType>;
 interface LocationCount {
     [identifier: string]: number;
 }
@@ -59,8 +64,8 @@ const DEFAULT_ZOOM = 5;
 // PENTING: komponen ini hanya di-render di dalam cabang `RL && L`, jadi RL
 // dijamin sudah termuat. useMapEvents dipanggil tanpa syarat (tidak ada early
 // return sebelum hook) agar urutan hook stabil antar render.
-function MapClickHandler({ onPick, RL }: { onPick: (lat: number, lng: number) => void; RL: any }) {
-    RL.useMapEvents({ click(e: any) { onPick(e.latlng.lat, e.latlng.lng); } });
+function MapClickHandler({ onPick, RL }: { onPick: (lat: number, lng: number) => void; RL: ReactLeafletModule }) {
+    RL.useMapEvents({ click(e: LeafletMouseEvent) { onPick(e.latlng.lat, e.latlng.lng); } });
     return null;
 }
 
@@ -71,8 +76,8 @@ export default function AdminCategories() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showForm, setShowForm] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [L, setL] = useState<any>(null);
-    const [RL, setRL] = useState<any>(null);
+    const [L, setL] = useState<LeafletModule | null>(null);
+    const [RL, setRL] = useState<ReactLeafletModule | null>(null);
     const { confirm, ConfirmDialog } = useConfirm();
 
     const [formData, setFormData] = useState<Partial<Category>>({
@@ -93,7 +98,7 @@ export default function AdminCategories() {
                 const LMod = leaf.default;
                 setL(LMod);
                 setRL(rLeaf);
-                delete (LMod.Icon.Default.prototype as any)._getIconUrl;
+                delete (LMod.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
                 LMod.Icon.Default.mergeOptions({
                     iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
                     iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -116,11 +121,11 @@ export default function AdminCategories() {
             // Count locations per category
             const counts: LocationCount = {};
             const locations = locRes.data.data || [];
-            locations.forEach((loc: any) => {
+            locations.forEach((loc: { category: string }) => {
                 counts[loc.category] = (counts[loc.category] || 0) + 1;
             });
             setLocationCounts(counts);
-        } catch (error) {
+        } catch {
             toast.error('Gagal mengambil data kategori');
         } finally {
             setLoading(false);
@@ -153,8 +158,8 @@ export default function AdminCategories() {
             }
             handleReset();
             fetchData();
-        } catch (error: any) {
-            toast.error(error.response?.data?.error || 'Gagal menyimpan kategori');
+        } catch (error: unknown) {
+            toast.error(getApiError(error) || 'Gagal menyimpan kategori');
         } finally {
             setIsSubmitting(false);
         }
@@ -175,7 +180,7 @@ export default function AdminCategories() {
             await axios.delete(`/api/categories/${id}`);
             toast.success('Kategori dihapus');
             fetchData();
-        } catch (error) {
+        } catch {
             toast.error('Gagal menghapus kategori');
         }
     };
@@ -219,9 +224,10 @@ export default function AdminCategories() {
                             whileHover={{ y: showForm ? 0 : -2 }}
                             whileTap={{ scale: 0.97 }}
                             onClick={() => { if (showForm) handleReset(); else setShowForm(true); }}
-                            className={`px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-sm uppercase tracking-wider ${showForm ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-black/5 dark:border-white/5 hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white' : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-950 shadow-[0_4px_20px_rgba(234,179,8,0.4)]'}`}
+                            aria-expanded={showForm}
+                            className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-5 py-3 sm:px-8 sm:py-3.5 rounded-2xl font-bold transition-all flex items-center gap-2 text-sm uppercase tracking-wider ${showForm ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-black/5 dark:border-white/5 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white' : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-slate-950 shadow-[0_4px_20px_rgba(234,179,8,0.4)]'}`}
                         >
-                            {showForm ? 'Batal' : <><Plus className="w-5 h-5" /><span className="hidden sm:inline">Buat Kategori</span><span className="sm:hidden">Tambah</span></>}
+                            {showForm ? 'Batal' : <><Plus aria-hidden="true" className="w-5 h-5" /><span className="hidden sm:inline">Buat Kategori</span><span className="sm:hidden">Tambah</span></>}
                         </motion.button>
                     }
                 />
@@ -233,7 +239,7 @@ export default function AdminCategories() {
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: -20, scale: 0.98 }}
                             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                            className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl p-8 rounded-3xl border border-black/10 dark:border-white/10 mb-12 shadow-[0_30px_60px_rgba(0,0,0,0.4)] overflow-hidden relative group"
+                            className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl p-5 sm:p-8 rounded-3xl border border-black/10 dark:border-white/10 mb-12 shadow-[0_30px_60px_rgba(15,23,42,0.15)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.4)] overflow-hidden relative group"
                         >
                             <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/5 blur-[100px] pointer-events-none" />
                             <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/5 blur-[80px] pointer-events-none" />
@@ -246,7 +252,7 @@ export default function AdminCategories() {
                                         <FormField label="Nama Kategori" required>
                                             <input required type="text" value={formData.name} onChange={handleNameChange} className={inputCls()} placeholder="Contoh: Sekolah Dasar" />
                                         </FormField>
-                                        <FormField label="URL Identifier" required icon={<LinkIcon className="w-4 h-4" />}>
+                                        <FormField label="URL Identifier" required icon={<LinkIcon aria-hidden="true" className="w-4 h-4" />}>
                                             <input required type="text" value={formData.identifier} onChange={e => setFormData({ ...formData, identifier: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} className={inputCls(true)} placeholder="sekolah-dasar" />
                                         </FormField>
                                         <div className="md:col-span-2">
@@ -265,7 +271,7 @@ export default function AdminCategories() {
                                         <FormField label="Pilih Icon" required>
                                             <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
                                                 {AVAILABLE_ICONS.map(iconName => {
-                                                    const IconComp = (LucideIcons as any)[iconName];
+                                                    const IconComp = ICON_MAP[iconName];
                                                     const isSelected = formData.icon === iconName;
                                                     return (
                                                         <motion.button
@@ -274,10 +280,12 @@ export default function AdminCategories() {
                                                             whileHover={{ scale: 1.08 }}
                                                             whileTap={{ scale: 0.95 }}
                                                             onClick={() => setFormData({ ...formData, icon: iconName })}
-                                                            className={`p-4 rounded-xl flex items-center justify-center transition-all ${isSelected ? 'bg-yellow-500 text-slate-900 shadow-[0_0_20px_rgba(234,179,8,0.4)] ring-2 ring-yellow-500 ring-offset-2 ring-offset-slate-950 z-10' : 'bg-black/50 text-slate-500 dark:text-slate-400 hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white border border-black/10 dark:border-white/10'}`}
+                                                            className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-4 rounded-xl flex items-center justify-center transition-all ${isSelected ? 'bg-yellow-500 text-slate-900 shadow-[0_0_20px_rgba(234,179,8,0.4)] ring-2 ring-yellow-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-950 z-10' : 'bg-black/[0.04] dark:bg-black/50 text-slate-500 dark:text-slate-400 hover:bg-black/10 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white border border-black/10 dark:border-white/10'}`}
                                                             title={iconName}
+                                                            aria-label={`Ikon ${iconName}`}
+                                                            aria-pressed={isSelected}
                                                         >
-                                                            {IconComp && <IconComp className="w-6 h-6" />}
+                                                            {IconComp && <IconComp aria-hidden="true" className="w-6 h-6" />}
                                                         </motion.button>
                                                     )
                                                 })}
@@ -296,9 +304,10 @@ export default function AdminCategories() {
                                                             whileHover={{ scale: 1.03 }}
                                                             whileTap={{ scale: 0.97 }}
                                                             onClick={() => setFormData({ ...formData, color: color.value })}
-                                                            className={`p-4 rounded-xl flex items-center gap-3 transition-all text-left ${isSelected ? 'ring-2 ring-yellow-500 ring-offset-2 ring-offset-slate-950 bg-slate-200 dark:bg-slate-800 shadow-[0_0_15px_rgba(234,179,8,0.15)]' : 'bg-black/50 hover:bg-slate-800 border border-black/10 dark:border-white/10'}`}
+                                                            aria-pressed={isSelected}
+                                                            className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-4 rounded-xl flex items-center gap-3 transition-all text-left ${isSelected ? 'ring-2 ring-yellow-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-950 bg-slate-200 dark:bg-slate-800 shadow-[0_0_15px_rgba(234,179,8,0.15)]' : 'bg-black/[0.04] dark:bg-black/50 hover:bg-black/10 dark:hover:bg-slate-800 border border-black/10 dark:border-white/10'}`}
                                                         >
-                                                            <div className={`w-8 h-8 rounded-lg shadow-inner ${color.class}`} />
+                                                            <div aria-hidden="true" className={`w-8 h-8 rounded-lg shadow-inner ${color.class}`} />
                                                             <span className={`text-sm font-bold ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>{color.label}</span>
                                                         </motion.button>
                                                     )
@@ -307,27 +316,29 @@ export default function AdminCategories() {
                                         </FormField>
 
                                         {/* Live Preview */}
-                                        <div className="md:col-span-2 mt-4 p-8 bg-black/[0.03] dark:bg-black/30 rounded-2xl border border-black/5 dark:border-white/5 flex flex-col items-center justify-center">
-                                            <label className="text-[10px] font-bold text-slate-600 uppercase mb-6 tracking-wider">— Live Preview Card —</label>
+                                        <div className="md:col-span-2 mt-4 p-4 sm:p-8 bg-black/[0.03] dark:bg-black/30 rounded-2xl border border-black/5 dark:border-white/5 flex flex-col items-center justify-center">
+                                            <span className="text-[11px] font-bold text-slate-500 uppercase mb-6 tracking-wider">— Live Preview Card —</span>
                                             <motion.button
                                                 layout
                                                 type="button"
+                                                tabIndex={-1}
+                                                aria-hidden="true"
                                                 className="group/preview relative w-full max-w-[360px] h-52 rounded-[2.5rem] overflow-hidden bg-white/60 dark:bg-slate-900/40 backdrop-blur-xl border border-black/5 dark:border-white/5 hover:border-yellow-500/30 transition-all duration-500 text-left p-6 sm:p-8 shadow-2xl flex flex-col justify-between"
                                             >
                                                 <div className={`absolute -top-10 -right-10 w-32 h-32 sm:w-40 sm:h-40 bg-gradient-to-br ${formData.color} opacity-10 blur-3xl group-hover/preview:opacity-20 transition-opacity duration-500`} />
                                                 <div className="relative z-10 flex justify-between items-start">
                                                     <div className={`p-4 rounded-3xl bg-gradient-to-br ${formData.color} shadow-lg`}>
-                                                        {formData.icon && (LucideIcons as any)[formData.icon] &&
-                                                            (() => { const PreviewIcon = (LucideIcons as any)[formData.icon]; return <PreviewIcon className="w-6 h-6 text-slate-900 dark:text-white stroke-[2.5]" />; })()
+                                                        {formData.icon && ICON_MAP[formData.icon] &&
+                                                            (() => { const PreviewIcon = ICON_MAP[formData.icon]; return <PreviewIcon aria-hidden="true" className="w-6 h-6 text-slate-900 dark:text-white stroke-[2.5]" />; })()
                                                         }
                                                     </div>
-                                                    <ArrowRight className="w-6 h-6 text-slate-700" />
+                                                    <ArrowRight aria-hidden="true" className="w-6 h-6 text-slate-500" />
                                                 </div>
                                                 <div className="relative z-10 mt-auto">
                                                     <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight uppercase mb-2">
                                                         {formData.name || 'Nama Kategori'}
                                                     </h2>
-                                                    <p className="text-slate-500 dark:text-slate-400 text-[10px] sm:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed line-clamp-2">
+                                                    <p className="text-slate-500 dark:text-slate-400 text-[11px] sm:text-xs font-bold uppercase tracking-wider opacity-60 leading-relaxed line-clamp-2">
                                                         {formData.description || 'Deskripsi kategori akan tampil di sini'}
                                                     </p>
                                                 </div>
@@ -363,7 +374,7 @@ export default function AdminCategories() {
                                                     )}
                                                 </MapContainer>
                                             ) : (
-                                                <Loader2 className="animate-spin text-slate-700" />
+                                                <Loader2 aria-hidden="true" className="animate-spin text-slate-500" />
                                             )}
                                         </div>
                                         {/* Manual inputs */}
@@ -394,7 +405,7 @@ export default function AdminCategories() {
                                                     <button
                                                         type="button"
                                                         onClick={() => setFormData(prev => ({ ...prev, defaultLat: undefined, defaultLng: undefined, defaultZoom: undefined }))}
-                                                        className="text-[11px] text-slate-500 hover:text-red-400 transition-colors uppercase tracking-wider font-bold"
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-[11px] text-slate-500 hover:text-red-700 dark:hover:text-red-400 transition-colors uppercase tracking-wider font-bold"
                                                     >
                                                         Reset ke Default Indonesia
                                                     </button>
@@ -411,9 +422,9 @@ export default function AdminCategories() {
                                         whileTap={{ scale: 0.97 }}
                                         type="submit"
                                         disabled={isSubmitting}
-                                        className="flex-1 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-900 font-bold py-4 rounded-xl transition-all shadow-[0_10px_30px_rgba(234,179,8,0.3)] flex items-center justify-center gap-2 uppercase tracking-wider text-sm disabled:opacity-50"
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex-1 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-900 font-bold py-4 rounded-xl transition-all shadow-[0_10px_30px_rgba(234,179,8,0.3)] flex items-center justify-center gap-2 uppercase tracking-wider text-sm disabled:opacity-50"
                                     >
-                                        {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                                        {isSubmitting ? <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" /> : <Save aria-hidden="true" className="w-5 h-5" />}
                                         Simpan Kategori
                                     </motion.button>
                                     <motion.button
@@ -421,9 +432,11 @@ export default function AdminCategories() {
                                         whileTap={{ scale: 0.95 }}
                                         type="button"
                                         onClick={handleReset}
-                                        className="px-6 bg-slate-200 dark:bg-slate-800 hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl transition-all flex items-center justify-center border border-black/10 dark:border-white/10"
+                                        aria-label="Reset formulir"
+                                        title="Reset formulir"
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-6 min-w-12 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-900 dark:text-white rounded-xl transition-all flex items-center justify-center border border-black/10 dark:border-white/10"
                                     >
-                                        <RotateCcw className="w-5 h-5 transition-transform duration-500" />
+                                        <RotateCcw aria-hidden="true" className="w-5 h-5 transition-transform duration-500" />
                                     </motion.button>
                                 </div>
                             </form>
@@ -448,45 +461,45 @@ export default function AdminCategories() {
                 ) : (
                     <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-24">
                         {filteredCategories.map((cat) => {
-                            const IconComp = (LucideIcons as any)[cat.icon] || LayoutGrid;
+                            const IconComp = ICON_MAP[cat.icon] || LayoutGrid;
                             const locCount = locationCounts[cat.identifier] || 0;
 
                             return (
                                 <motion.div
                                     variants={cardVariants}
                                     key={cat._id}
-                                    className="group relative bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.06)] transition-all overflow-hidden flex flex-col h-[300px]"
+                                    className="group relative bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 hover:border-yellow-500/30 hover:shadow-[0_20px_40px_rgba(234,179,8,0.06)] transition-all overflow-hidden flex flex-col min-h-[300px]"
                                 >
                                     <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${cat.color} opacity-20 blur-3xl pointer-events-none group-hover:opacity-40 transition-opacity duration-500`} />
 
                                     <div className="flex justify-between items-start mb-4 relative z-10">
                                         <div className={`p-4 rounded-2xl bg-gradient-to-br ${cat.color} text-slate-900 dark:text-white shadow-lg`}>
-                                            <IconComp className="w-6 h-6" />
+                                            <IconComp aria-hidden="true" className="w-6 h-6" />
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => handleEdit(cat)} className="p-2.5 bg-black/[0.04] dark:bg-black/40 hover:bg-yellow-500/20 text-slate-500 dark:text-slate-400 hover:text-yellow-400 rounded-xl transition-all border border-black/5 dark:border-white/5 hover:border-yellow-500/30">
-                                                <Edit2 className="w-4 h-4" />
+                                            <button type="button" onClick={() => handleEdit(cat)} aria-label={`Edit kategori ${cat.name}`} title="Edit" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2.5 bg-black/[0.04] dark:bg-black/40 hover:bg-yellow-500/20 text-slate-500 dark:text-slate-400 hover:text-yellow-800 dark:hover:text-yellow-400 rounded-xl transition-all border border-black/5 dark:border-white/5 hover:border-yellow-500/30 min-w-10 min-h-10 inline-flex items-center justify-center">
+                                                <Edit2 aria-hidden="true" className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => handleDelete(cat._id, cat.name)} className="p-2.5 bg-black/[0.04] dark:bg-black/40 hover:bg-red-500/20 text-slate-500 dark:text-slate-400 hover:text-red-400 rounded-xl transition-all border border-black/5 dark:border-white/5 hover:border-red-500/30">
-                                                <Trash2 className="w-4 h-4" />
+                                            <button type="button" onClick={() => handleDelete(cat._id, cat.name)} aria-label={`Hapus kategori ${cat.name}`} title="Hapus" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2.5 bg-black/[0.04] dark:bg-black/40 hover:bg-red-500/20 text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 rounded-xl transition-all border border-black/5 dark:border-white/5 hover:border-red-500/30 min-w-10 min-h-10 inline-flex items-center justify-center">
+                                                <Trash2 aria-hidden="true" className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
 
                                     <div className="mt-auto relative z-10">
-                                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1 uppercase tracking-wider group-hover:text-yellow-400 transition-colors">{cat.name}</h3>
+                                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1 uppercase tracking-wider group-hover:text-yellow-700 dark:group-hover:text-yellow-400 transition-colors">{cat.name}</h3>
                                         <p className="text-xs font-mono text-slate-500 mb-3 bg-black/[0.03] dark:bg-black/30 w-fit px-2 py-1 rounded-md border border-black/5 dark:border-white/5">/{cat.identifier}</p>
                                         <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mb-4">{cat.description}</p>
 
                                         {/* Location count + Map defaults badge */}
                                         <div className="flex items-center gap-3 pt-3 border-t border-black/5 dark:border-white/5">
-                                            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                                <MapPin className="w-3 h-3" />
+                                            <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                                                <MapPin aria-hidden="true" className="w-3 h-3" />
                                                 {locCount} Proyek
                                             </span>
                                             {cat.defaultLat && (
-                                                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-500/60">
-                                                    <Navigation className="w-3 h-3" />
+                                                <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400/80">
+                                                    <Navigation aria-hidden="true" className="w-3 h-3" />
                                                     Custom Map
                                                 </span>
                                             )}

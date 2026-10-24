@@ -1,7 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Inter, Orbitron, Rajdhani } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import { ThemeProvider } from "@/components/ThemeProvider";
+
+const inter = Inter({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"], variable: "--font-inter", display: "swap" });
+const orbitron = Orbitron({ subsets: ["latin"], weight: ["500", "700", "900"], variable: "--font-orbitron", display: "swap" });
+const rajdhani = Rajdhani({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-rajdhani", display: "swap" });
 
 export const metadata: Metadata = {
   title: "TENGOK – Surveillance Integration System",
@@ -13,6 +18,20 @@ export const metadata: Metadata = {
   },
 };
 
+// viewport-fit=cover mengaktifkan env(safe-area-inset-*) di iPhone berponi.
+// theme-color per skema warna; ThemeProvider menyinkronkannya saat pengguna
+// memilih tema manual.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f1f5f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+  ],
+};
+
 // Script anti-flash: set kelas tema di <html> SEBELUM paint pertama,
 // berdasarkan pilihan tersimpan atau preferensi OS (prefers-color-scheme).
 const themeInitScript = `
@@ -21,8 +40,12 @@ const themeInitScript = `
     var saved = localStorage.getItem('tengok-theme');
     var dark = saved === 'dark' || (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     var c = dark ? 'dark' : 'light';
-    document.documentElement.classList.add(c);
-    document.documentElement.style.colorScheme = c;
+    var d = document.documentElement;
+    d.classList.add(c);
+    d.style.colorScheme = c;
+    var color = dark ? '#0f172a' : '#f1f5f9';
+    var m = document.querySelectorAll('meta[name="theme-color"]');
+    for (var i = 0; i < m.length; i++) m[i].setAttribute('content', color);
   } catch (e) {
     document.documentElement.classList.add('dark');
   }
@@ -35,14 +58,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="id"
+      className={`${inter.variable} ${orbitron.variable} ${rajdhani.variable}`}
+      suppressHydrationWarning
+    >
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap"
-          rel="stylesheet"
-        />
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="font-sans" suppressHydrationWarning>

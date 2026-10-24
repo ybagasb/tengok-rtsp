@@ -13,7 +13,7 @@ export default function IntroRedirectPage() {
     const router = useRouter();
     useEffect(() => { router.replace('/categories'); }, [router]);
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
+        <div className="min-h-dvh flex items-center justify-center bg-slate-100 dark:bg-slate-950">
             <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
         </div>
     );

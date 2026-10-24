@@ -1,12 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import StatusLog from '@/models/StatusLog';
-import Camera from '@/models/Camera';
+// Side-effect import: registers the Camera model (needed for populate / refs)
+import '@/models/Camera';
 import Location from '@/models/Location';
 import { requireAuth } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+interface StatusLogLean {
+    cameraId: { toString(): string };
+    status: string;
+}
+
+interface PopulatedCamera {
+    _id: { toString(): string };
+    name?: string;
+    status?: string;
+    lastCheckedAt?: Date | string;
+    lastOnlineAt?: Date | string;
+}
+
+interface UptimeLocationLean {
+    name?: string;
+    category?: string;
+    cameras?: PopulatedCamera[];
+}
+
+interface UptimeResult {
+    cameraId: string;
+    cameraName?: string;
+    locationName?: string;
+    category?: string;
+    currentStatus: string;
+    lastCheckedAt: Date | string | null;
+    lastOnlineAt: Date | string | null;
+    uptimePercent: number;
+    totalChecks: number;
+    onlineChecks: number;
+}
 
 export async function GET(req: NextRequest) {
     // Require authentication
@@ -23,30 +56,30 @@ export async function GET(req: NextRequest) {
         const locations = await Location.find()
             .select('name category cameras')
             .populate('cameras', 'name status lastCheckedAt lastOnlineAt')
-            .lean();
+            .lean<UptimeLocationLean[]>();
 
         // Get all status logs in the date range
         const logs = await StatusLog.find({ timestamp: { $gte: sinceDate } })
             .sort({ timestamp: 1 })
-            .lean();
+            .lean<StatusLogLean[]>();
 
         // Group logs by cameraId
-        const logsByCamera: Record<string, any[]> = {};
-        logs.forEach((log: any) => {
+        const logsByCamera: Record<string, StatusLogLean[]> = {};
+        logs.forEach((log) => {
             const id = log.cameraId.toString();
             if (!logsByCamera[id]) logsByCamera[id] = [];
             logsByCamera[id].push(log);
         });
 
         // Calculate uptime per camera
-        const results: any[] = [];
+        const results: UptimeResult[] = [];
 
-        locations.forEach((loc: any) => {
-            (loc.cameras || []).forEach((cam: any) => {
+        locations.forEach((loc) => {
+            (loc.cameras || []).forEach((cam) => {
                 const camId = cam._id.toString();
                 const cameraLogs = logsByCamera[camId] || [];
                 const totalChecks = cameraLogs.length;
-                const onlineChecks = cameraLogs.filter((l: any) => l.status === 'online').length;
+                const onlineChecks = cameraLogs.filter((l) => l.status === 'online').length;
                 const uptimePercent = totalChecks > 0 ? Math.round((onlineChecks / totalChecks) * 100) : -1;
 
                 results.push({
@@ -72,8 +105,8 @@ export async function GET(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, days, data: results });
-    } catch (error: any) {
-        console.error('[Uptime API] Error:', error.message);
+    } catch (error) {
+        console.error('[Uptime API] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ error: 'Failed to fetch uptime data' }, { status: 500 });
     }
 }

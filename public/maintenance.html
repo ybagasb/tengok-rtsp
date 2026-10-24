@@ -5,15 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maintenance — Tengok Monitoring</title>
     <link rel="icon" href="/favicon.ico">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <meta name="color-scheme" content="light dark">
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #020617;
             color: #e2e8f0;
             min-height: 100vh;
+            min-height: 100dvh;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -228,6 +229,29 @@
             text-transform: uppercase;
             letter-spacing: 0.2em;
             color: #64748b;
+        }
+
+        /* ── Tema terang (ikut preferensi OS) ── */
+        @media (prefers-color-scheme: light) {
+            body { background: #f1f5f9; color: #0f172a; }
+            .grid-pattern {
+                background-image:
+                    linear-gradient(rgba(15,23,42,0.05) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(15,23,42,0.05) 1px, transparent 1px);
+            }
+            h1 { background: linear-gradient(135deg, #d97706, #b45309); -webkit-background-clip: text; background-clip: text; }
+            .subtitle { color: #334155; }
+            .description { color: #475569; }
+            .status-card { background: rgba(255,255,255,0.8); border-color: rgba(15,23,42,0.1); }
+            .status-text { color: #a16207; }
+            .progress-bar { background: rgba(15,23,42,0.1); }
+            .footer { opacity: 0.6; }
+            .footer-divider { background: rgba(15,23,42,0.25); }
+            .footer-text { color: #475569; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation: none !important; }
         }
 
         /* ── Responsive ── */

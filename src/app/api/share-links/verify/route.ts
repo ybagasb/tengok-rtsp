@@ -51,7 +51,7 @@ export async function POST(req: Request) {
                 duration: link.duration,
             }
         });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to verify share link:', error);
         return NextResponse.json({ valid: false, error: 'Gagal memverifikasi tautan. Silakan coba lagi.' }, { status: 500 });
     }

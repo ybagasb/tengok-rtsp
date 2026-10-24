@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import Category from '@/models/Category';
 import { logAudit } from '@/lib/adminAuditLog';
@@ -52,7 +51,7 @@ export async function POST(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, category: savedCategory }, { status: 201 });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Error creating category:', error);
         return NextResponse.json(
             { error: 'Gagal membuat kategori' },

@@ -23,7 +23,7 @@ export default function RouteError({ error, reset, title, backHref = '/categorie
     }, [error, title]);
 
     return (
-        <div role="alert" className="min-h-screen bg-slate-100 dark:bg-slate-950 flex items-center justify-center p-6">
+        <div role="alert" className="min-h-dvh bg-slate-100 dark:bg-slate-950 flex items-center justify-center p-6">
             <div className="max-w-md w-full text-center p-8 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-black/5 dark:border-white/10">
                 <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
                     <AlertTriangle className="w-8 h-8 text-rose-500" aria-hidden="true" />
@@ -41,7 +41,7 @@ export default function RouteError({ error, reset, title, backHref = '/categorie
                     </a>
                     <button
                         onClick={() => reset()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-sm font-bold transition-colors"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-sm font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     >
                         <RefreshCw className="w-4 h-4" aria-hidden="true" /> Coba Lagi
                     </button>

@@ -67,13 +67,15 @@ export default function ResourceMonitor() {
             {/* Header row */}
             <button
                 onClick={() => setCollapsed(p => !p)}
-                className="flex items-center gap-2 px-3 py-2 w-full text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors group"
+                className="flex items-center gap-2 px-3 py-2 w-full text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors group min-h-10 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                aria-expanded={!collapsed}
+                aria-label={collapsed ? "Tampilkan monitor sumber daya" : "Sembunyikan monitor sumber daya"}
             >
                 <div className="relative">
-                    <Activity className="w-3.5 h-3.5 text-yellow-500" />
+                    <Activity className="w-3.5 h-3.5 text-yellow-500" aria-hidden="true" />
                     <div className="absolute inset-0 bg-yellow-500 blur-sm opacity-40 animate-pulse" />
                 </div>
-                <span className="text-[10px] font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                     Resources
                 </span>
                 {collapsed
@@ -86,9 +88,9 @@ export default function ResourceMonitor() {
             {!collapsed && (
                 <div className="px-3 pb-3 pt-1 space-y-2.5 min-w-[160px]">
                     {error ? (
-                        <p className="text-[9px] text-rose-400 uppercase tracking-wider">Unavailable</p>
+                        <p className="text-[11px] text-rose-400 uppercase tracking-wider">Unavailable</p>
                     ) : !stats ? (
-                        <p className="text-[9px] text-slate-500 uppercase tracking-wider animate-pulse">Loading...</p>
+                        <p className="text-[11px] text-slate-500 uppercase tracking-wider animate-pulse">Loading...</p>
                     ) : (
                         <>
                             {/* Process CPU */}
@@ -96,14 +98,14 @@ export default function ResourceMonitor() {
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-1.5">
                                         <Cpu className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                                        <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">CPU</span>
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">CPU</span>
                                     </div>
-                                    <span className={`text-[10px] font-bold tabular-nums ${getColor(cpuPct)}`}>
+                                    <span className={`text-[11px] font-bold tabular-nums ${getColor(cpuPct)}`}>
                                         {cpuPct.toFixed(1)}%
                                     </span>
                                 </div>
                                 <Bar pct={cpuPct} />
-                                <div className="text-[8px] text-slate-600 tabular-nums">
+                                <div className="text-[11px] text-slate-600 tabular-nums">
                                     Load avg: {stats.cpu.systemLoad.toFixed(2)}
                                 </div>
                             </div>
@@ -113,14 +115,14 @@ export default function ResourceMonitor() {
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-1.5">
                                         <HardDrive className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                                        <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">Heap</span>
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">Heap</span>
                                     </div>
-                                    <span className={`text-[10px] font-bold tabular-nums ${getColor(heapPct)}`}>
+                                    <span className={`text-[11px] font-bold tabular-nums ${getColor(heapPct)}`}>
                                         {formatBytes(stats.memory.heapUsed)}
                                     </span>
                                 </div>
                                 <Bar pct={heapPct} />
-                                <div className="text-[8px] text-slate-600 tabular-nums">
+                                <div className="text-[11px] text-slate-600 tabular-nums">
                                     of {formatBytes(stats.memory.heapTotal)}
                                 </div>
                             </div>
@@ -129,21 +131,21 @@ export default function ResourceMonitor() {
                             <div className="space-y-1">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-1.5">
-                                        <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">RAM</span>
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-bold">RAM</span>
                                     </div>
-                                    <span className={`text-[10px] font-bold tabular-nums ${getColor(ramPct)}`}>
+                                    <span className={`text-[11px] font-bold tabular-nums ${getColor(ramPct)}`}>
                                         {Math.round(ramPct)}%
                                     </span>
                                 </div>
                                 <Bar pct={ramPct} />
-                                <div className="text-[8px] text-slate-600 tabular-nums">
+                                <div className="text-[11px] text-slate-600 tabular-nums">
                                     {formatBytes(ramUsed)} / {formatBytes(stats.system.totalMemory)}
                                 </div>
                             </div>
 
                             {/* Process RSS */}
                             <div className="pt-1 border-t border-black/5 dark:border-white/5">
-                                <div className="text-[8px] text-slate-600 tabular-nums">
+                                <div className="text-[11px] text-slate-600 tabular-nums">
                                     Process RSS: {formatBytes(stats.memory.rss)}
                                 </div>
                             </div>

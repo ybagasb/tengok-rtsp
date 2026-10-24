@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
         );
 
         return NextResponse.json({ success: true, results });
-    } catch (error: any) {
-        console.error('[probe] Error:', error.message);
+    } catch (error) {
+        console.error('[probe] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ error: 'Gagal memeriksa stream' }, { status: 500 });
     }
 }

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
             .sort({ createdAt: -1 })
             .lean();
         return NextResponse.json({ success: true, data: links });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to fetch share links:', error);
         return NextResponse.json({ error: 'Gagal memuat share link' }, { status: 500 });
     }
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
             .lean();
 
         return NextResponse.json({ success: true, data: populated }, { status: 201 });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Failed to create share link:', error);
         return NextResponse.json({ error: 'Gagal membuat share link' }, { status: 500 });
     }

@@ -51,10 +51,10 @@ export async function POST(req: NextRequest) {
         const hlsUrl = await ffmpegManager.startStream(cameraId, camera.streamUrl);
 
         return NextResponse.json({ success: true, hlsUrl });
-    } catch (error: any) {
+    } catch (error) {
         // Log full detail server-side (may contain ffmpeg stderr with the RTSP
         // URL + credentials) but NEVER leak it to the client.
-        console.error('Failed to start stream:', error?.message || error);
+        console.error('Failed to start stream:', error instanceof Error ? error.message : error);
         return NextResponse.json(
             { success: false, error: 'Gagal memulai stream. Silakan coba lagi.' },
             { status: 500 }

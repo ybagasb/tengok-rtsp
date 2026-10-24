@@ -1,22 +1,22 @@
 "use client";
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import useSWR, { mutate } from 'swr';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import axios from 'axios';
 import { 
-    Trash2, Plus, Monitor, Loader2, Pencil, X, Check, Camera, ShieldCheck, 
-    PlayCircle, FileDown, ArrowUpAZ, ArrowDownAZ, Link, Wifi, WifiOff, 
-    Upload, Download, Layers, CheckSquare, Square, RefreshCw, Eye, 
+    Trash2, Plus, Monitor, Loader2, Pencil, X, Check, Camera, 
+    PlayCircle, ArrowUpAZ, ArrowDownAZ, Link, Wifi, WifiOff, 
+    Upload, Download, CheckSquare, Square, 
     AlertTriangle, Radio, Activity, Copy, CheckCheck, FolderPlus, MapPin
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ICameraData } from '@/models/Camera';
-import { containerVariants, itemVariants, inputCls } from '@/components/admin/shared';
-import { PageHeader, FormField, EmptyState, LoadingState, SearchBar, CountBadge, useConfirm } from '@/components/admin/AdminUI';
+import { containerVariants, itemVariants, inputCls, getApiError, getErrorMessage } from '@/components/admin/shared';
+import { PageHeader, FormField, EmptyState, LoadingState, SearchBar, useConfirm } from '@/components/admin/AdminUI';
 import OptimizedVideoPlayer from '@/components/OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
 import { swrFetcher } from '@/lib/swrFetcher';
@@ -28,6 +28,22 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
+// Bentuk minimal data lokasi (hasil /api/locations) yang dipakai halaman ini
+interface LocationOption {
+    _id: string;
+    name: string;
+    category: string;
+    cameras?: (string | { _id?: string })[];
+}
+
+// Escape menutup modal
+function useEscapeClose(onClose: () => void) {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+}
 
 // ── Live Stream Preview Modal ────────────────────────────────────────────────
 function LivePreviewModal({
@@ -37,6 +53,7 @@ function LivePreviewModal({
     camera: ICameraData;
     onClose: () => void;
 }) {
+    useEscapeClose(onClose);
     const streamManager = useStreamManager();
     const [copied, setCopied] = useState(false);
 
@@ -54,7 +71,10 @@ function LivePreviewModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
+                role="dialog"
+ aria-modal="true"
+ aria-label="Pratinjau live kamera"
+ className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
                 onClick={onClose}
             >
                 <motion.div
@@ -62,33 +82,35 @@ function LivePreviewModal({
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                    className="bg-white dark:bg-slate-900 border border-white/15 rounded-3xl w-full max-w-2xl shadow-[0_30px_70px_rgba(0,0,0,0.8)] overflow-hidden relative"
+                    className="bg-white dark:bg-slate-900 border border-black/10 dark:border-white/15 rounded-3xl w-full max-w-2xl shadow-[0_30px_70px_rgba(15,23,42,0.3)] dark:shadow-[0_30px_70px_rgba(0,0,0,0.8)] overflow-hidden relative"
                     onClick={(e) => e.stopPropagation()}
                 >
                     {/* Modal Header */}
                     <div className="flex items-center justify-between px-6 py-4 border-b border-black/10 dark:border-white/10 bg-white/70 dark:bg-slate-950/60">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-500">
-                                <Radio className="w-5 h-5 animate-pulse" />
+                            <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-700 dark:text-yellow-500">
+                                <Radio aria-hidden="true" className="w-5 h-5 animate-pulse motion-reduce:animate-none" />
                             </div>
                             <div>
                                 <h3 className="font-bold text-slate-900 dark:text-white text-base">{camera.name}</h3>
                                 <div className="flex items-center gap-2 mt-0.5">
-                                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                        camera.status === 'online' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                                        camera.status === 'online' ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-700 dark:text-rose-400'
                                     }`}>
-                                        <span className={`w-1.5 h-1.5 rounded-full ${camera.status === 'online' ? 'bg-emerald-400 animate-ping' : 'bg-rose-400'}`} />
+                                        <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${camera.status === 'online' ? 'bg-emerald-400 animate-ping motion-reduce:animate-none' : 'bg-rose-400'}`} />
                                         {camera.status === 'online' ? 'LIVE' : 'OFFLINE'}
                                     </span>
-                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">ID: {camera._id}</span>
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">ID: {camera._id}</span>
                                 </div>
                             </div>
                         </div>
                         <button 
+                            type="button"
                             onClick={onClose} 
-                            className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                            aria-label="Tutup pratinjau"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                         >
-                            <X className="w-5 h-5" />
+                            <X aria-hidden="true" className="w-5 h-5" />
                         </button>
                     </div>
 
@@ -111,16 +133,17 @@ function LivePreviewModal({
                                 <span>RTSP / HLS Stream URL:</span>
                                 <button
                                     onClick={handleCopyUrl}
-                                    className="flex items-center gap-1 text-yellow-500 hover:text-yellow-400 font-bold transition-colors"
+                                    type="button"
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1 text-yellow-700 dark:text-yellow-500 hover:text-yellow-800 dark:hover:text-yellow-400 font-bold transition-colors"
                                 >
-                                    {copied ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                    {copied ? <CheckCheck aria-hidden="true" className="w-3.5 h-3.5" /> : <Copy aria-hidden="true" className="w-3.5 h-3.5" />}
                                     {copied ? 'Tersalin' : 'Salin URL'}
                                 </button>
                             </div>
-                            <div className="p-2.5 rounded-xl bg-black/60 border border-black/5 dark:border-white/5 font-mono text-[11px] text-slate-600 dark:text-slate-300 break-all select-all">
+                            <div className="p-2.5 rounded-xl bg-black/[0.04] dark:bg-black/60 border border-black/5 dark:border-white/5 font-mono text-[11px] text-slate-600 dark:text-slate-300 break-all select-all">
                                 {maskStreamUrl(camera.streamUrl) || 'URL tidak tersedia'}
                             </div>
-                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Kata sandi disamarkan. Gunakan "Salin URL" untuk mengambil URL lengkap.</p>
+                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Kata sandi disamarkan. Gunakan &quot;Salin URL&quot; untuk mengambil URL lengkap.</p>
                         </div>
                     </div>
                 </motion.div>
@@ -137,6 +160,7 @@ function CameraFormModal({
     camera?: ICameraData | null;
     onClose: () => void;
 }) {
+    useEscapeClose(onClose);
     const isEdit = !!camera;
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
@@ -176,10 +200,10 @@ function CameraFormModal({
                 });
                 toast.error('Stream RTSP tidak dapat dijangkau');
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             setTestResult({
                 success: false,
-                message: err.response?.data?.error || err.message || 'Error saat testing stream',
+                message: getApiError(err) || getErrorMessage(err) || 'Error saat testing stream',
             });
             toast.error('Gagal menguji koneksi stream');
         } finally {
@@ -200,8 +224,8 @@ function CameraFormModal({
             mutate('/api/cameras?includeStreamUrl=1');
             mutate('/api/locations');
             onClose();
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Gagal menyimpan data kamera');
+        } catch (err: unknown) {
+            toast.error(getApiError(err) || 'Gagal menyimpan data kamera');
         } finally {
             setIsSaving(false);
         }
@@ -213,7 +237,10 @@ function CameraFormModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" 
+                role="dialog"
+ aria-modal="true"
+ aria-label="Form kamera"
+ className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" 
                 onClick={onClose}
             >
                 <motion.div
@@ -221,24 +248,24 @@ function CameraFormModal({
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
                     transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                    className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-lg shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden relative"
+                    className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-lg shadow-[0_30px_60px_rgba(15,23,42,0.25)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.6)] max-h-[92dvh] overflow-y-auto relative"
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="absolute -top-32 -right-32 w-64 h-64 bg-yellow-500/20 rounded-full blur-[80px] pointer-events-none" />
                     
-                    <div className="flex items-center justify-between px-8 pt-6 pb-5 border-b border-black/5 dark:border-white/5 relative z-10">
+                    <div className="flex items-center justify-between px-5 sm:px-8 pt-6 pb-5 border-b border-black/5 dark:border-white/5 relative z-10">
                         <h2 className="text-xl font-bold flex items-center gap-3 text-slate-900 dark:text-white">
-                            <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-500">
-                                {isEdit ? <Pencil className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                            <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-700 dark:text-yellow-500">
+                                {isEdit ? <Pencil aria-hidden="true" className="w-5 h-5" /> : <Plus aria-hidden="true" className="w-5 h-5" />}
                             </div>
                             {isEdit ? 'Edit Kamera' : 'Daftarkan Kamera Baru'}
                         </h2>
-                        <button onClick={onClose} className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                            <X className="w-5 h-5" />
+                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                            <X aria-hidden="true" className="w-5 h-5" />
                         </button>
                     </div>
 
-                    <form onSubmit={handleSubmit(onSubmit)} className="p-8 space-y-6 relative z-10">
+                    <form onSubmit={handleSubmit(onSubmit)} className="p-5 sm:p-8 space-y-6 relative z-10">
                         <FormField label="Nama Perangkat CCTV" error={errors.name?.message}>
                             <input 
                                 {...register('name')} 
@@ -253,32 +280,34 @@ function CameraFormModal({
                                     <div className="flex gap-2">
                                         <input 
                                             {...register('streamUrl')} 
-                                            className={`flex-1 ${inputCls()}`} 
+                                            aria-label="Stream URL (RTSP / HLS)"
+                                            className={`flex-1 min-w-0 ${inputCls()}`} 
                                             placeholder="rtsp://admin:pass@ip:port/stream" 
                                         />
                                         <button
                                             type="button"
                                             onClick={handleTestStream}
                                             disabled={isTesting}
-                                            className="px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-700 border border-black/10 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
+                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 min-h-10 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 border border-black/10 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
                                             title="Uji jangkauan stream dengan FFprobe"
                                         >
-                                            {isTesting ? <Loader2 className="w-4 h-4 animate-spin text-yellow-500" /> : <Activity className="w-4 h-4 text-yellow-500" />}
+                                            {isTesting ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin text-yellow-700 dark:text-yellow-500" /> : <Activity aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" />}
                                             Test
                                         </button>
                                     </div>
 
                                     {testResult && (
                                         <motion.div
+                                            role="status"
                                             initial={{ opacity: 0, y: -4 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             className={`p-3 rounded-xl border text-xs flex items-center gap-2 font-medium ${
                                                 testResult.success 
-                                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
-                                                    : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300' 
+                                                    : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
                                             }`}
                                         >
-                                            {testResult.success ? <Check className="w-4 h-4 shrink-0 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />}
+                                            {testResult.success ? <Check aria-hidden="true" className="w-4 h-4 shrink-0 text-emerald-700 dark:text-emerald-400" /> : <AlertTriangle aria-hidden="true" className="w-4 h-4 shrink-0 text-rose-700 dark:text-rose-400" />}
                                             <span>{testResult.message}</span>
                                         </motion.div>
                                     )}
@@ -290,7 +319,7 @@ function CameraFormModal({
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="flex-1 py-4 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all text-xs uppercase tracking-wider"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex-1 py-4 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all text-xs uppercase tracking-wider"
                             >
                                 Batal
                             </button>
@@ -299,9 +328,9 @@ function CameraFormModal({
                                 whileTap={{ scale: 0.97 }}
                                 type="submit"
                                 disabled={isSaving}
-                                className="flex-1 py-4 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-950 font-bold transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] disabled:opacity-50 flex items-center justify-center gap-2 text-xs uppercase tracking-wider"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex-1 py-4 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-950 font-bold transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] disabled:opacity-50 flex items-center justify-center gap-2 text-xs uppercase tracking-wider"
                             >
-                                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5" /> {isEdit ? 'Perbarui' : 'Daftarkan'}</>}
+                                {isSaving ? <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" /> : <><Check aria-hidden="true" className="w-5 h-5" /> {isEdit ? 'Perbarui' : 'Daftarkan'}</>}
                             </motion.button>
                         </div>
                     </form>
@@ -317,6 +346,7 @@ function ImportCSVModal({
 }: {
     onClose: () => void;
 }) {
+    useEscapeClose(onClose);
     const [parsedData, setParsedData] = useState<Array<{ name: string; streamUrl: string }>>([]);
     const [fileName, setFileName] = useState('');
     const [isUploading, setIsUploading] = useState(false);
@@ -388,8 +418,8 @@ function ImportCSVModal({
                 mutate('/api/cameras?includeStreamUrl=1');
                 onClose();
             }
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Gagal mengimpor data massal');
+        } catch (err: unknown) {
+            toast.error(getApiError(err) || 'Gagal mengimpor data massal');
         } finally {
             setIsUploading(false);
         }
@@ -401,23 +431,26 @@ function ImportCSVModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                role="dialog"
+ aria-modal="true"
+ aria-label="Import kamera dari CSV"
+ className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                 onClick={onClose}
             >
                 <motion.div
                     initial={{ scale: 0.95, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    className="bg-white dark:bg-slate-900 border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden"
+                    className="bg-white dark:bg-slate-900 border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-xl shadow-[0_30px_60px_rgba(15,23,42,0.25)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.6)] max-h-[92dvh] overflow-y-auto"
                     onClick={e => e.stopPropagation()}
                 >
                     <div className="flex items-center justify-between px-6 py-5 border-b border-black/10 dark:border-white/10">
                         <h3 className="font-bold text-slate-900 dark:text-white text-lg flex items-center gap-2">
-                            <Upload className="w-5 h-5 text-yellow-500" />
+                            <Upload aria-hidden="true" className="w-5 h-5 text-yellow-700 dark:text-yellow-500" />
                             Import Kamera dari CSV
                         </h3>
-                        <button onClick={onClose} className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
-                            <X className="w-5 h-5" />
+                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                            <X aria-hidden="true" className="w-5 h-5" />
                         </button>
                     </div>
 
@@ -425,22 +458,26 @@ function ImportCSVModal({
                         {/* Download Template Banner */}
                         <div className="flex items-center justify-between p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/20">
                             <div>
-                                <h4 className="text-xs font-bold text-yellow-400 uppercase tracking-wider">Format CSV</h4>
+                                <h4 className="text-xs font-bold text-yellow-700 dark:text-yellow-400 uppercase tracking-wider">Format CSV</h4>
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Kolom wajib: <code className="text-slate-900 dark:text-white font-mono">name,streamUrl</code></p>
                             </div>
                             <button
                                 type="button"
                                 onClick={handleDownloadTemplate}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-bold uppercase tracking-wider shadow-sm hover:bg-yellow-400 transition-colors"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-bold uppercase tracking-wider shadow-sm hover:bg-yellow-400 transition-colors min-h-10"
                             >
-                                <Download className="w-3.5 h-3.5" /> Template
+                                <Download aria-hidden="true" className="w-3.5 h-3.5" /> Template
                             </button>
                         </div>
 
                         {/* File Upload Box */}
                         <div 
                             onClick={() => fileInputRef.current?.click()}
-                            className="border-2 border-dashed border-white/15 hover:border-yellow-500/50 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-white/60 dark:bg-slate-950/40 group"
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+                            role="button"
+                            tabIndex={0}
+                            aria-label="Pilih file CSV untuk diimpor"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none border-2 border-dashed border-black/15 dark:border-white/15 hover:border-yellow-500/50 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-white/60 dark:bg-slate-950/40 group"
                         >
                             <input 
                                 ref={fileInputRef} 
@@ -448,8 +485,10 @@ function ImportCSVModal({
                                 accept=".csv" 
                                 onChange={handleFileChange} 
                                 className="hidden" 
+                                aria-hidden="true"
+                                tabIndex={-1}
                             />
-                            <Upload className="w-8 h-8 text-slate-500 group-hover:text-yellow-500 mx-auto mb-3 transition-colors" />
+                            <Upload aria-hidden="true" className="w-8 h-8 text-slate-500 group-hover:text-yellow-700 dark:group-hover:text-yellow-500 mx-auto mb-3 transition-colors" />
                             <p className="text-sm font-bold text-slate-900 dark:text-white">{fileName || 'Klik atau tarik file CSV ke sini'}</p>
                             <p className="text-xs text-slate-500 mt-1">Mendukung format file .csv UTF-8</p>
                         </div>
@@ -459,17 +498,17 @@ function ImportCSVModal({
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
                                     <span>Pratinjau Data ({parsedData.length} baris):</span>
-                                    <span className="text-emerald-400">Valid</span>
+                                    <span className="text-emerald-700 dark:text-emerald-400">Valid</span>
                                 </div>
                                 <div className="max-h-48 overflow-y-auto rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-slate-950/60 p-2 space-y-1.5 custom-scrollbar">
                                     {parsedData.slice(0, 10).map((item, idx) => (
                                         <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-black/[0.04] dark:bg-white/5 text-xs">
-                                            <span className="font-bold text-slate-900 dark:text-white truncate max-w-[150px]">{item.name}</span>
-                                            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[280px]">{item.streamUrl}</span>
+                                            <span className="font-bold text-slate-900 dark:text-white truncate max-w-[40%] shrink-0">{item.name}</span>
+                                            <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate min-w-0 ml-2">{item.streamUrl}</span>
                                         </div>
                                     ))}
                                     {parsedData.length > 10 && (
-                                        <p className="text-center text-[10px] text-slate-500 py-1">...dan {parsedData.length - 10} kamera lainnya</p>
+                                        <p className="text-center text-[11px] text-slate-500 py-1">...dan {parsedData.length - 10} kamera lainnya</p>
                                     )}
                                 </div>
                             </div>
@@ -480,7 +519,7 @@ function ImportCSVModal({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 py-3 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white text-xs uppercase tracking-wider"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex-1 py-3 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white text-xs uppercase tracking-wider"
                         >
                             Batal
                         </button>
@@ -489,9 +528,9 @@ function ImportCSVModal({
                             whileTap={{ scale: 0.97 }}
                             onClick={handleImportSubmit}
                             disabled={isUploading || parsedData.length === 0}
-                            className="flex-1 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex-1 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
                         >
-                            {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> Import Sekarang</>}
+                            {isUploading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <><Check aria-hidden="true" className="w-4 h-4" /> Import Sekarang</>}
                         </motion.button>
                     </div>
                 </motion.div>
@@ -507,9 +546,10 @@ function BulkAssignModal({
     onClose,
 }: {
     cameraIds: string[];
-    locations: any[];
+    locations: LocationOption[];
     onClose: () => void;
 }) {
+    useEscapeClose(onClose);
     const [selectedLocationId, setSelectedLocationId] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -531,8 +571,8 @@ function BulkAssignModal({
                 mutate('/api/cameras?includeStreamUrl=1');
                 onClose();
             }
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Gagal memasangkan kamera');
+        } catch (err: unknown) {
+            toast.error(getApiError(err) || 'Gagal memasangkan kamera');
         } finally {
             setIsSubmitting(false);
         }
@@ -544,23 +584,26 @@ function BulkAssignModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                role="dialog"
+ aria-modal="true"
+ aria-label="Tautkan kamera ke lokasi"
+ className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                 onClick={onClose}
             >
                 <motion.div
                     initial={{ scale: 0.95, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    className="bg-white dark:bg-slate-900 border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-md shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden"
+                    className="bg-white dark:bg-slate-900 border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-md shadow-[0_30px_60px_rgba(15,23,42,0.25)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.6)] max-h-[92dvh] overflow-y-auto"
                     onClick={e => e.stopPropagation()}
                 >
                     <div className="flex items-center justify-between px-6 py-5 border-b border-black/10 dark:border-white/10">
                         <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
-                            <FolderPlus className="w-5 h-5 text-yellow-500" />
+                            <FolderPlus aria-hidden="true" className="w-5 h-5 text-yellow-700 dark:text-yellow-500" />
                             Tautkan ke Lokasi ({cameraIds.length} Kamera)
                         </h3>
-                        <button onClick={onClose} className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
-                            <X className="w-5 h-5" />
+                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                            <X aria-hidden="true" className="w-5 h-5" />
                         </button>
                     </div>
 
@@ -589,7 +632,7 @@ function BulkAssignModal({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 py-3 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white text-xs uppercase tracking-wider"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex-1 py-3 rounded-xl border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white text-xs uppercase tracking-wider"
                         >
                             Batal
                         </button>
@@ -598,9 +641,9 @@ function BulkAssignModal({
                             whileTap={{ scale: 0.97 }}
                             onClick={handleSubmit}
                             disabled={isSubmitting || !selectedLocationId}
-                            className="flex-1 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex-1 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
                         >
-                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4" /> Pasangkan</>}
+                            {isSubmitting ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <><Check aria-hidden="true" className="w-4 h-4" /> Pasangkan</>}
                         </motion.button>
                     </div>
                 </motion.div>
@@ -628,20 +671,19 @@ export default function CamerasPage() {
     const [filterCategory, setFilterCategory] = useState<'all' | 'online' | 'offline' | 'unassigned' | 'assigned'>('all');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isProbingBulk, setIsProbingBulk] = useState(false);
-    const [isExportingPDF, setIsExportingPDF] = useState(false);
 
     const ITEMS_PER_PAGE = 8;
     const { confirm, ConfirmDialog } = useConfirm();
 
-    const rawCameras: ICameraData[] = cameraData?.data || [];
-    const locations: any[] = locationData?.data || [];
+    const rawCameras = useMemo<ICameraData[]>(() => cameraData?.data || [], [cameraData]);
+    const locations = useMemo<LocationOption[]>(() => locationData?.data || [], [locationData]);
 
     // Map each camera ID to its assigned locations
     const cameraToLocationMap = useMemo(() => {
         const map = new Map<string, { id: string; name: string; category: string }[]>();
         locations.forEach(loc => {
             if (Array.isArray(loc.cameras)) {
-                loc.cameras.forEach((cam: any) => {
+                loc.cameras.forEach((cam) => {
                     const cid = typeof cam === 'string' ? cam : cam._id;
                     if (cid) {
                         const existing = map.get(cid) || [];
@@ -873,25 +915,25 @@ export default function CamerasPage() {
                                 whileHover={{ y: -2 }}
                                 whileTap={{ scale: 0.97 }}
                                 onClick={() => handleExportCSV(false)}
-                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-10"
                             >
-                                <Download className="w-4 h-4" /> Export CSV
+                                <Download aria-hidden="true" className="w-4 h-4" /> Export CSV
                             </motion.button>
                             <motion.button
                                 whileHover={{ y: -2 }}
                                 whileTap={{ scale: 0.97 }}
                                 onClick={() => setShowImportModal(true)}
-                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-10"
                             >
-                                <Upload className="w-4 h-4" /> Import CSV
+                                <Upload aria-hidden="true" className="w-4 h-4" /> Import CSV
                             </motion.button>
                             <motion.button
                                 whileHover={{ y: -2 }}
                                 whileTap={{ scale: 0.97 }}
                                 onClick={() => setShowAddModal(true)}
-                                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-950 font-bold transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] text-xs uppercase tracking-wider"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-950 font-bold transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] text-xs uppercase tracking-wider min-h-10"
                             >
-                                <Plus className="w-4 h-4" /> Tambah Kamera
+                                <Plus aria-hidden="true" className="w-4 h-4" /> Tambah Kamera
                             </motion.button>
                         </div>
                     }
@@ -910,7 +952,7 @@ export default function CamerasPage() {
 
                         {/* Sort Options */}
                         <div className="md:col-span-5 flex items-center justify-start md:justify-end gap-1">
-                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mr-1">Urutan:</span>
+                            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mr-1">Urutan:</span>
                             {([
                                 { val: 'name-asc', icon: ArrowUpAZ, label: 'A-Z' },
                                 { val: 'name-desc', icon: ArrowDownAZ, label: 'Z-A' },
@@ -920,13 +962,15 @@ export default function CamerasPage() {
                                 <button
                                     key={val}
                                     onClick={() => { setSortBy(val); setCurrentPage(1); }}
-                                    className={`flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                                    aria-pressed={sortBy === val}
+                                    aria-label={`Urutkan ${label}`}
+                                    className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                                         sortBy === val
-                                            ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30'
+                                            ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border border-yellow-500/30'
                                             : 'bg-white/70 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-black/5 dark:border-white/5'
-                                    }`}
+                                    } min-h-10`}
                                 >
-                                    <Icon className="w-3.5 h-3.5" />
+                                    <Icon aria-hidden="true" className="w-3.5 h-3.5" />
                                     {label}
                                 </button>
                             ))}
@@ -945,20 +989,21 @@ export default function CamerasPage() {
                             <button
                                 key={val}
                                 onClick={() => { setFilterCategory(val); setCurrentPage(1); }}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shrink-0 border ${
+                                aria-pressed={filterCategory === val}
+                                className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shrink-0 border ${
                                     filterCategory === val
-                                        ? val === 'online' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
-                                        : val === 'offline' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm'
-                                        : val === 'unassigned' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                                        ? val === 'online' ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 shadow-sm'
+                                        : val === 'offline' ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/40 shadow-sm'
+                                        : val === 'unassigned' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 shadow-sm'
                                         : 'bg-yellow-500 text-slate-950 border-yellow-500 shadow-sm'
                                         : 'bg-white/70 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20 hover:text-slate-900 dark:hover:text-white'
-                                }`}
+                                } min-h-10`}
                             >
-                                {val === 'online' && <Wifi className="w-3.5 h-3.5 text-emerald-400" />}
-                                {val === 'offline' && <WifiOff className="w-3.5 h-3.5 text-rose-400" />}
-                                {val === 'unassigned' && <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
+                                {val === 'online' && <Wifi aria-hidden="true" className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />}
+                                {val === 'offline' && <WifiOff aria-hidden="true" className="w-3.5 h-3.5 text-rose-700 dark:text-rose-400" />}
+                                {val === 'unassigned' && <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />}
                                 {label}
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                                <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-mono ${
                                     filterCategory === val
                                         ? val === 'all' ? 'bg-black/[0.03] dark:bg-black/20 text-slate-950 font-bold' : 'bg-black/[0.06] dark:bg-white/10'
                                         : 'bg-black/[0.04] dark:bg-white/5 text-slate-500'
@@ -985,9 +1030,10 @@ export default function CamerasPage() {
                         <div className="flex items-center justify-between px-4 py-2 bg-white/60 dark:bg-slate-900/40 border border-black/5 dark:border-white/5 rounded-2xl text-xs">
                             <button
                                 onClick={handleSelectAll}
-                                className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold transition-colors"
+                                aria-pressed={isAllSelected}
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-bold transition-colors"
                             >
-                                {isAllSelected ? <CheckSquare className="w-4 h-4 text-yellow-500" /> : <Square className="w-4 h-4 text-slate-500" />}
+                                {isAllSelected ? <CheckSquare aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" /> : <Square aria-hidden="true" className="w-4 h-4 text-slate-500" />}
                                 <span>Pilih Semua di Halaman Ini ({paginatedCameras.length})</span>
                             </button>
                             <span className="text-slate-500 text-[11px]">
@@ -1015,20 +1061,21 @@ export default function CamerasPage() {
                                             className={`bg-white/75 dark:bg-slate-900/70 backdrop-blur-xl border p-5 rounded-2xl transition-all relative overflow-hidden group ${
                                                 isSelected 
                                                     ? 'border-yellow-500/50 bg-yellow-500/[0.04] shadow-[0_10px_30px_rgba(234,179,8,0.1)]' 
-                                                    : 'border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20 hover:bg-slate-900/90'
+                                                    : 'border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20 hover:bg-white dark:hover:bg-slate-900/90'
                                             }`}
                                         >
                                             <div className="flex items-start gap-3.5">
                                                 {/* Selection Checkbox */}
                                                 <button
                                                     onClick={() => handleToggleSelect(cam._id as string)}
-                                                    className="mt-1 text-slate-500 hover:text-yellow-400 transition-colors shrink-0"
-                                                    aria-label="Pilih kamera"
+                                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none mt-1 text-slate-500 hover:text-yellow-800 dark:hover:text-yellow-400 transition-colors shrink-0"
+                                                    aria-label={`Pilih kamera ${cam.name}`}
+                                                    aria-pressed={isSelected}
                                                 >
                                                     {isSelected ? (
-                                                        <CheckSquare className="w-5 h-5 text-yellow-500" />
+                                                        <CheckSquare aria-hidden="true" className="w-5 h-5 text-yellow-700 dark:text-yellow-500" />
                                                     ) : (
-                                                        <Square className="w-5 h-5" />
+                                                        <Square aria-hidden="true" className="w-5 h-5" />
                                                     )}
                                                 </button>
 
@@ -1037,15 +1084,15 @@ export default function CamerasPage() {
                                                     <div className="flex items-start justify-between gap-2">
                                                         <div>
                                                             <div className="flex items-center gap-2">
-                                                                <h3 className="font-bold text-slate-900 dark:text-white text-base tracking-tight truncate group-hover:text-yellow-400 transition-colors">
+                                                                <h3 className="font-bold text-slate-900 dark:text-white text-base tracking-tight truncate group-hover:text-yellow-700 dark:group-hover:text-yellow-400 transition-colors">
                                                                     {cam.name}
                                                                 </h3>
-                                                                <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 ${
+                                                                <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 ${
                                                                     cam.status === 'online' 
-                                                                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
-                                                                        : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30' 
+                                                                        : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
                                                                 }`}>
-                                                                    <span className={`w-1.5 h-1.5 rounded-full ${cam.status === 'online' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                                                                    <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${cam.status === 'online' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
                                                                     {cam.status}
                                                                 </span>
                                                             </div>
@@ -1060,15 +1107,15 @@ export default function CamerasPage() {
                                                     {/* Location Badge */}
                                                     <div className="flex items-center gap-2 pt-1 border-t border-black/5 dark:border-white/5">
                                                         {isAssigned ? (
-                                                            <div className="flex items-center gap-1 text-[11px] text-blue-400 font-semibold truncate">
-                                                                <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                                            <div className="flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-400 font-semibold truncate">
+                                                                <MapPin aria-hidden="true" className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400 shrink-0" />
                                                                 <span className="truncate">
                                                                     {assignedLocations.map(l => l.name).join(', ')}
                                                                 </span>
                                                             </div>
                                                         ) : (
-                                                            <div className="flex items-center gap-1 text-[11px] text-amber-400/90 font-medium">
-                                                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                                            <div className="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400/90 font-medium">
+                                                                <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
                                                                 <span>Belum dipasangkan ke lokasi</span>
                                                             </div>
                                                         )}
@@ -1078,24 +1125,27 @@ export default function CamerasPage() {
                                                     <div className="flex items-center gap-2 pt-2">
                                                         <button
                                                             onClick={() => setPreviewCamera(cam)}
-                                                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-xs font-bold transition-all"
+                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1 px-3 py-1.5 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs font-bold transition-all min-h-10"
                                                             title="Buka Live Preview Modal"
+                                                            aria-label={`Pratinjau live ${cam.name}`}
                                                         >
-                                                            <PlayCircle className="w-3.5 h-3.5" /> Preview
+                                                            <PlayCircle aria-hidden="true" className="w-3.5 h-3.5" /> Preview
                                                         </button>
                                                         <button
                                                             onClick={() => setEditingCamera(cam)}
-                                                            className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-xs"
+                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-xs min-w-10 min-h-10 inline-flex items-center justify-center"
                                                             title="Edit Konfigurasi"
+                                                            aria-label={`Edit kamera ${cam.name}`}
                                                         >
-                                                            <Pencil className="w-3.5 h-3.5" />
+                                                            <Pencil aria-hidden="true" className="w-3.5 h-3.5" />
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteSingle(cam._id as string, cam.name)}
-                                                            className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/20 text-slate-500 dark:text-slate-400 hover:text-rose-400 transition-all text-xs"
+                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/20 text-slate-500 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 transition-all text-xs min-w-10 min-h-10 inline-flex items-center justify-center"
                                                             title="Hapus Kamera"
+                                                            aria-label={`Hapus kamera ${cam.name}`}
                                                         >
-                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                            <Trash2 aria-hidden="true" className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1116,14 +1166,16 @@ export default function CamerasPage() {
                                     <button
                                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                         disabled={currentPage <= 1}
-                                        className="px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                        aria-label="Halaman sebelumnya"
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all min-h-10"
                                     >
                                         ← Sebelumnya
                                     </button>
                                     <button
                                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                         disabled={currentPage >= totalPages}
-                                        className="px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                        aria-label="Halaman berikutnya"
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all min-h-10"
                                     >
                                         Selanjutnya →
                                     </button>
@@ -1141,10 +1193,10 @@ export default function CamerasPage() {
                         initial={{ opacity: 0, y: 50 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 50 }}
-                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/40 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] px-5 py-3.5 flex items-center gap-4 flex-wrap max-w-2xl"
+                        className="fixed bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] sm:w-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-yellow-500/40 rounded-2xl shadow-[0_20px_50px_rgba(15,23,42,0.2)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.8)] px-5 py-3.5 flex items-center gap-4 flex-wrap max-w-2xl"
                     >
-                        <div className="flex items-center gap-2 pr-2 border-r border-black/10 dark:border-white/10">
-                            <span className="w-2 h-2 rounded-full bg-yellow-500 animate-ping" />
+                        <div role="status" className="flex items-center gap-2 pr-2 border-r border-black/10 dark:border-white/10">
+                            <span aria-hidden="true" className="w-2 h-2 rounded-full bg-yellow-500 animate-ping motion-reduce:animate-none" />
                             <span className="text-xs font-bold text-slate-900 dark:text-white">{selectedIds.length} Dipilih</span>
                         </div>
 
@@ -1152,41 +1204,42 @@ export default function CamerasPage() {
                             <button
                                 onClick={handleBulkProbe}
                                 disabled={isProbingBulk}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-900 dark:text-white text-xs font-bold transition-all disabled:opacity-50"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-900 dark:text-white text-xs font-bold transition-all disabled:opacity-50 min-h-10"
                             >
-                                {isProbingBulk ? <Loader2 className="w-3.5 h-3.5 animate-spin text-yellow-400" /> : <Activity className="w-3.5 h-3.5 text-yellow-400" />}
+                                {isProbingBulk ? <Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin text-yellow-700 dark:text-yellow-400" /> : <Activity aria-hidden="true" className="w-3.5 h-3.5 text-yellow-700 dark:text-yellow-400" />}
                                 Cek Status
                             </button>
 
                             <button
                                 onClick={() => setShowAssignModal(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-xs font-bold border border-blue-500/30 transition-all"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-500/30 transition-all min-h-10"
                             >
-                                <FolderPlus className="w-3.5 h-3.5 text-blue-400" />
+                                <FolderPlus aria-hidden="true" className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
                                 Tautkan ke Lokasi
                             </button>
 
                             <button
                                 onClick={() => handleExportCSV(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all min-h-10"
                             >
-                                <Download className="w-3.5 h-3.5" /> CSV
+                                <Download aria-hidden="true" className="w-3.5 h-3.5" /> CSV
                             </button>
 
                             <button
                                 onClick={handleBulkDelete}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold border border-rose-500/30 transition-all"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold border border-rose-500/30 transition-all min-h-10"
                             >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Hapus
+                                <Trash2 aria-hidden="true" className="w-3.5 h-3.5 text-rose-700 dark:text-rose-400" /> Hapus
                             </button>
                         </div>
 
                         <button
                             onClick={() => setSelectedIds([])}
-                            className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white ml-auto"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white ml-auto min-w-10 min-h-10 inline-flex items-center justify-center"
                             title="Batal Pilih"
+                            aria-label="Batalkan pilihan kamera"
                         >
-                            <X className="w-4 h-4" />
+                            <X aria-hidden="true" className="w-4 h-4" />
                         </button>
                     </motion.div>
                 )}

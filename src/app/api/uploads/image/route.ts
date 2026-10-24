@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
         const url = await putPublicObject(key, buffer, file.type);
 
         return NextResponse.json({ success: true, url, key });
-    } catch (error: any) {
-        console.error('[Upload Image] Error:', error?.message);
+    } catch (error) {
+        console.error('[Upload Image] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ success: false, error: 'Gagal mengunggah gambar' }, { status: 500 });
     }
 }

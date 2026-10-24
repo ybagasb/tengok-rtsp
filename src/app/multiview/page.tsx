@@ -22,6 +22,9 @@ import { useStreamManager } from '@/lib/StreamManager';
 import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 import BrandLoader from '@/components/BrandLoader';
 import { getDivisionCssVars } from '@/lib/divisionTheme';
+import ThemeToggle from '@/components/ThemeToggle';
+
+const FOCUS_RING = 'focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none';
 
 interface MultiViewCamera {
     _id: string;
@@ -313,7 +316,7 @@ function MultiViewContent() {
     }
 
     return (
-        <div style={pageStyle} className="h-screen bg-slate-950 flex overflow-hidden">
+        <div style={pageStyle} className="h-dvh bg-slate-100 dark:bg-slate-950 flex overflow-hidden">
             {/* Sidebar selection */}
             <AnimatePresence mode="wait">
                 {isSidebarOpen && (
@@ -333,33 +336,36 @@ function MultiViewContent() {
                             animate={{ x: 0, opacity: 1 }}
                             exit={{ x: -400, opacity: 0 }}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                            className="fixed inset-y-0 left-0 w-[85%] sm:w-80 bg-slate-900/95 backdrop-blur-3xl border-r border-white/5 flex flex-col z-[100] sm:relative sm:z-50 shrink-0 overflow-hidden"
+                            className="fixed inset-y-0 left-0 w-[85%] sm:w-80 bg-white/95 dark:bg-slate-900/95 shadow-xl dark:shadow-none backdrop-blur-3xl border-r border-black/10 dark:border-white/5 flex flex-col z-[100] sm:relative sm:z-50 shrink-0 overflow-hidden"
                         >
                             <div className="w-full sm:w-80 h-full flex flex-col">
                                 {/* Sidebar Header */}
-                                <div className="p-6 border-b border-white/5 bg-slate-900/40">
-                                    <div className="flex items-center justify-between mb-6">
+                                <div className="p-6 border-b border-black/10 dark:border-white/5 bg-slate-50 dark:bg-slate-900/40">
+                                    <div className="flex items-center justify-between gap-1 mb-6">
                                         <button
                                             onClick={() => router.back()}
-                                            className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors"
+                                            className={`min-h-10 min-w-10 flex items-center justify-center p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-slate-600 dark:text-slate-400 transition-colors ${FOCUS_RING}`}
                                             aria-label="Kembali"
                                         >
                                             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
                                         </button>
-                                        <h2 className="text-lg font-bold text-white tracking-tight uppercase">Pilih Lokasi</h2>
-                                        <button
-                                            onClick={() => setIsSidebarOpen(false)}
-                                            className="p-2 hover:bg-white/5 rounded-xl text-slate-400 transition-colors group"
-                                            title="Tutup panel pilihan"
-                                            aria-label="Tutup panel pilihan lokasi"
-                                        >
-                                            <PanelLeftClose className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                                        </button>
+                                        <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight uppercase truncate">Pilih Lokasi</h2>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <ThemeToggle className="!px-2" />
+                                            <button
+                                                onClick={() => setIsSidebarOpen(false)}
+                                                className={`min-h-10 min-w-10 flex items-center justify-center p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-slate-600 dark:text-slate-400 transition-colors group ${FOCUS_RING}`}
+                                                title="Tutup panel pilihan"
+                                                aria-label="Tutup panel pilihan lokasi"
+                                            >
+                                                <PanelLeftClose className="w-5 h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {/* Scope filter: ikuti proyek yang dibuka vs semua proyek */}
                                     <div className="mb-4">
-                                        <div className="flex items-center gap-2 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                        <div className="flex items-center gap-2 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-500">
                                             <Filter className="w-3.5 h-3.5" />
                                             Tampilkan
                                         </div>
@@ -368,10 +374,10 @@ function MultiViewContent() {
                                             <button
                                                 onClick={() => switchFilterMode('context')}
                                                 disabled={!hasCategory}
-                                                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                className={`${FOCUS_RING} min-h-10 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'context'
                                                         ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
-                                                        : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                                                        : 'bg-black/[0.03] dark:bg-white/5 border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10'
                                                 } ${!hasCategory ? 'opacity-40 cursor-not-allowed' : ''}`}
                                                 title={hasCategory ? 'Hanya kategori yang dibuka' : 'Tidak ada kategori konteks'}
                                             >
@@ -382,10 +388,10 @@ function MultiViewContent() {
                                             <button
                                                 onClick={() => switchFilterMode('division')}
                                                 disabled={!hasDivision}
-                                                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                className={`${FOCUS_RING} min-h-10 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'division'
                                                         ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
-                                                        : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                                                        : 'bg-black/[0.03] dark:bg-white/5 border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10'
                                                 } ${!hasDivision ? 'opacity-40 cursor-not-allowed' : ''}`}
                                                 title={hasDivision ? `Semua kategori di ${contextDivision}` : 'Tidak ada divisi konteks'}
                                             >
@@ -395,10 +401,10 @@ function MultiViewContent() {
                                             {/* 3. Semua proyek (lintas divisi) */}
                                             <button
                                                 onClick={() => switchFilterMode('all')}
-                                                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                className={`${FOCUS_RING} min-h-10 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'all'
                                                         ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
-                                                        : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                                                        : 'bg-black/[0.03] dark:bg-white/5 border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10'
                                                 }`}
                                                 title="Semua proyek Brantas Abipraya (lintas divisi)"
                                             >
@@ -407,20 +413,21 @@ function MultiViewContent() {
                                             </button>
                                         </div>
                                         {filterMode !== 'all' && hasContext && (
-                                            <p className="mt-2 text-[10px] text-slate-500 font-medium truncate">
+                                            <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-500 font-medium truncate">
                                                 {scopeLabel}
                                             </p>
                                         )}
                                     </div>
 
                                     <div className="relative group">
-                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[var(--div-accent)] transition-colors" />
+                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[var(--div-accent)] transition-colors" aria-hidden="true" />
                                         <input
                                             type="text"
+                                            aria-label="Cari lokasi"
                                             placeholder="Cari lokasi..."
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full bg-slate-950/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)] transition-all"
+                                            className="w-full min-h-10 bg-white dark:bg-slate-950/50 border border-black/10 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)] transition-all"
                                         />
                                     </div>
                                 </div>
@@ -428,7 +435,7 @@ function MultiViewContent() {
                                 {/* Location List */}
                                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
                                     {filteredLocations.length === 0 ? (
-                                        <div className={`py-12 px-2 text-center text-xs font-bold tracking-wider ${fetchError ? 'text-rose-400' : 'text-slate-400 uppercase'}`} role={fetchError ? 'alert' : undefined}>
+                                        <div className={`py-12 px-2 text-center text-xs font-bold tracking-wider ${fetchError ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400 uppercase'}`} role={fetchError ? 'alert' : undefined}>
                                             {fetchError ? 'Gagal memuat daftar lokasi. Mencoba lagi otomatis.' : 'Tidak ada lokasi'}
                                         </div>
                                     ) : filteredLocations.map(loc => {
@@ -437,19 +444,20 @@ function MultiViewContent() {
                                             <button
                                                 key={loc._id}
                                                 onClick={() => toggleLocation(loc._id)}
-                                                className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border hover:shadow-lg hover:-translate-y-0.5 active:scale-95 ${isSelected
+                                                aria-pressed={isSelected}
+                                                className={`${FOCUS_RING} w-full min-h-10 flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border hover:shadow-lg hover:-translate-y-0.5 active:scale-95 ${isSelected
                                                     ? 'bg-[rgba(var(--div-accent-rgb),0.1)] border-[rgba(var(--div-accent-rgb),0.3)] shadow-[rgba(var(--div-accent-rgb),0.05)]'
-                                                    : 'bg-white/5 border-transparent hover:bg-white/10'
+                                                    : 'bg-black/[0.03] dark:bg-white/5 border-transparent hover:bg-black/5 dark:hover:bg-white/10'
                                                     }`}
                                             >
-                                                <div className={`shrink-0 ${isSelected ? 'div-accent-text' : 'text-slate-600'}`}>
-                                                    {isSelected ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                                                <div className={`shrink-0 ${isSelected ? 'div-accent-text' : 'text-slate-500 dark:text-slate-600'}`}>
+                                                    {isSelected ? <CheckSquare className="w-5 h-5" aria-hidden="true" /> : <Square className="w-5 h-5" aria-hidden="true" />}
                                                 </div>
                                                 <div className="text-left min-w-0 flex-1">
-                                                    <div className={`text-sm font-bold tracking-tight uppercase truncate ${isSelected ? 'text-white' : 'text-slate-300'}`}>
+                                                    <div className={`text-sm font-bold tracking-tight uppercase truncate ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
                                                         {loc.name}
                                                     </div>
-                                                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
+                                                    <div className="text-[11px] text-slate-600 dark:text-slate-500 font-bold uppercase tracking-wider mt-0.5">
                                                         {loc.cameras.length} KAMERA • {loc.category}
                                                     </div>
                                                 </div>
@@ -459,9 +467,9 @@ function MultiViewContent() {
                                 </div>
 
                                 {/* Sidebar Footer */}
-                                <div className="p-6 bg-slate-900/60 border-t border-white/5">
+                                <div className="p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] bg-slate-50 dark:bg-slate-900/60 border-t border-black/10 dark:border-white/5">
                                     <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
-                                        <span className="text-slate-500">Dipilih</span>
+                                        <span className="text-slate-600 dark:text-slate-500">Dipilih</span>
                                         <span className="div-accent-text">{selectedLocationIds.length} Lokasi</span>
                                     </div>
                                 </div>
@@ -473,7 +481,7 @@ function MultiViewContent() {
 
 
             {/* Main Content Area */}
-            <main className="flex-1 flex flex-col relative overflow-hidden bg-[radial-gradient(circle_at_50%_50%,rgba(15,23,42,1)_0%,rgba(2,6,23,1)_100%)]">
+            <main className="flex-1 min-w-0 flex flex-col relative overflow-hidden bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,1)_0%,rgba(226,232,240,1)_100%)] dark:bg-[radial-gradient(circle_at_50%_50%,rgba(15,23,42,1)_0%,rgba(2,6,23,1)_100%)]">
                 {/* ── Dekorasi HUD command-center (murni visual, mengikuti tema divisi) ── */}
                 {/* Grid radar halus beraksen divisi */}
                 <div
@@ -490,7 +498,7 @@ function MultiViewContent() {
                 {/* Scanline tipis */}
                 <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 z-0"
+                    className="pointer-events-none absolute inset-0 z-0 hidden dark:block"
                     style={{
                         background:
                             'repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px)',
@@ -519,55 +527,60 @@ function MultiViewContent() {
                         {!isSidebarOpen && (
                             <button
                                 onClick={() => setIsSidebarOpen(true)}
-                                className="p-2.5 sm:p-3 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl text-white hover:bg-slate-800 transition-all shadow-2xl group"
+                                className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2.5 sm:p-3 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all shadow-lg dark:shadow-2xl group`}
                                 title="Buka Sidebar"
                                 aria-label="Buka sidebar pemilihan lokasi"
                             >
-                                <PanelLeftOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                <PanelLeftOpen className="w-5 h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
                             </button>
                         )}
-                        <div className="p-2.5 sm:p-3.5 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex items-center gap-3 sm:gap-4 flex-1 sm:flex-initial">
-                            <div className="p-1.5 sm:p-2 bg-[rgba(var(--div-accent-rgb),0.1)] rounded-xl">
-                                <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5 div-accent-text" />
+                        <div className="p-2.5 sm:p-3.5 min-w-0 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl shadow-lg dark:shadow-2xl flex items-center gap-3 sm:gap-4 flex-1 sm:flex-initial">
+                            <div className="p-1.5 sm:p-2 bg-[rgba(var(--div-accent-rgb),0.1)] rounded-xl shrink-0">
+                                <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5 div-accent-text" aria-hidden="true" />
                             </div>
-                            <div>
-                                <h2 className="text-sm sm:text-lg font-bold text-white tracking-tight uppercase leading-none">Multi-View</h2>
+                            <div className="min-w-0">
+                                <h2 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight uppercase leading-none">Multi-View</h2>
                                 <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
-                                    <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase tracking-wider">{activeStreamCount} Aktif</span>
-                                    <span className="text-[10px] sm:text-xs text-slate-500">•</span>
-                                    <span className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider truncate max-w-[120px] sm:max-w-[200px]">{scopeLabel}</span>
+                                    <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                    <span className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap">{activeStreamCount} Aktif</span>
+                                    <span className="text-[11px] sm:text-xs text-slate-500" aria-hidden="true">•</span>
+                                    <span className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-500 font-bold uppercase tracking-wider truncate max-w-[120px] sm:max-w-[200px]">{scopeLabel}</span>
                                 </div>
                             </div>
                         </div>
+                        <ThemeToggle className="sm:hidden shrink-0 bg-white/90 dark:bg-slate-900/80" />
                     </div>
 
                     <div className="flex items-center gap-3 pointer-events-auto hidden sm:flex">
-                        <div className="px-5 py-3.5 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl">
-                            <img src="/abipraya_original.svg" alt="Logo" className="h-4 sm:h-6" />
+                        <ThemeToggle className="bg-white/90 dark:bg-slate-900/80 !py-3.5" />
+                        <div className="px-5 py-3.5 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl shadow-lg dark:shadow-2xl">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal (SVG), tidak perlu optimasi next/image */}
+                            <img src="/abipraya_blue.svg" alt="" aria-hidden="true" className="h-4 sm:h-6 block dark:hidden" />
+                            {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal (SVG), tidak perlu optimasi next/image */}
+                            <img src="/abipraya_original.svg" alt="" aria-hidden="true" className="h-4 sm:h-6 hidden dark:block" />
                         </div>
                     </div>
                 </header>
 
                 {/* Grid Content */}
-                <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar p-6 pt-24">
+                <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 pt-28 sm:pt-24 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
                     <AnimatePresence mode="popLayout">
                         {selectedCameras.length > 0 ? (
                             <>
                                 {fetchError && (
                                     <div role="alert" className="mb-4 px-5 py-3 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center justify-between gap-3 text-sm">
-                                        <span className="text-rose-300 font-semibold">Gagal memperbarui daftar lokasi. Mencoba lagi otomatis.</span>
+                                        <span className="text-rose-700 dark:text-rose-300 font-semibold">Gagal memperbarui daftar lokasi. Mencoba lagi otomatis.</span>
                                     </div>
                                 )}
                                 {/* Warning if cameras were capped */}
                                 {totalSelectedCameras > MAX_CAMERAS && (
                                     <div className="mb-4 px-5 py-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-sm">
-                                        <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <svg aria-hidden="true" className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                                         </svg>
-                                        <span className="text-amber-300 font-semibold">
+                                        <span className="text-amber-800 dark:text-amber-300 font-semibold">
                                             Menampilkan {MAX_CAMERAS} dari {totalSelectedCameras} kamera.
-                                            <span className="text-amber-400/80 font-normal ml-1">Kamera di urutan akhir tidak ditampilkan. Kurangi pilihan lokasi untuk melihat semuanya.</span>
+                                            <span className="text-amber-700 dark:text-amber-400/80 font-normal ml-1">Kamera di urutan akhir tidak ditampilkan. Kurangi pilihan lokasi untuk melihat semuanya.</span>
                                         </span>
                                     </div>
                                 )}
@@ -599,7 +612,7 @@ function MultiViewContent() {
                                                 <span className="text-[11px] font-bold text-white uppercase tracking-tight truncate leading-tight drop-shadow-md">
                                                     {cam.name}
                                                 </span>
-                                                <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider truncate">
+                                                <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider truncate">
                                                     {cam.locationName}
                                                 </span>
                                             </div>
@@ -607,7 +620,7 @@ function MultiViewContent() {
                                                 isOnline ? 'bg-emerald-900/50 border-emerald-500/40' : 'bg-rose-900/50 border-rose-500/40'
                                             }`}>
                                                 <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                                                <span className="text-[10px] font-bold text-white uppercase tracking-wider">
+                                                <span className="text-[11px] font-bold text-white uppercase tracking-wider">
                                                     {isOnline ? 'Live' : 'Offline'}
                                                 </span>
                                             </div>
@@ -628,21 +641,21 @@ function MultiViewContent() {
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="h-full flex flex-col items-center justify-center text-center px-12"
+                                className="h-full flex flex-col items-center justify-center text-center px-6 sm:px-12"
                             >
-                                <div className="w-24 h-24 rounded-[2.5rem] bg-slate-900/50 border border-white/5 flex items-center justify-center mb-8 shadow-2xl">
-                                    <LayoutGrid className="w-10 h-10 text-slate-600 opacity-50" />
+                                <div className="w-24 h-24 rounded-[2.5rem] bg-white/80 dark:bg-slate-900/50 border border-black/10 dark:border-white/5 flex items-center justify-center mb-8 shadow-lg dark:shadow-2xl">
+                                    <LayoutGrid className="w-10 h-10 text-slate-500 dark:text-slate-600 opacity-50" aria-hidden="true" />
                                 </div>
-                                <h2 className="text-3xl font-bold text-white tracking-tight uppercase mb-4">Belum Ada Kamera Dipilih</h2>
-                                <p className="text-slate-500 text-sm max-w-md font-medium opacity-70 leading-relaxed">
+                                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight uppercase mb-4">Belum Ada Kamera Dipilih</h2>
+                                <p className="text-slate-600 dark:text-slate-500 text-sm max-w-md font-medium dark:opacity-70 leading-relaxed">
                                     Pilih lokasi dari panel sebelah kiri untuk mulai memantau beberapa aliran kamera secara bersamaan.
                                 </p>
                                 {!isSidebarOpen && (
                                     <button
                                         onClick={() => setIsSidebarOpen(true)}
-                                        className="mt-10 px-8 py-4 div-accent-solid hover:brightness-110 text-slate-950 font-bold uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-[rgba(var(--div-accent-rgb),0.2)] active:scale-95 flex items-center gap-3"
+                                        className={`${FOCUS_RING} mt-10 min-h-10 px-8 py-4 div-accent-solid hover:brightness-110 text-slate-950 font-bold uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-[rgba(var(--div-accent-rgb),0.2)] active:scale-95 flex items-center gap-3`}
                                     >
-                                        <PanelLeftOpen className="w-5 h-5" />
+                                        <PanelLeftOpen className="w-5 h-5" aria-hidden="true" />
                                         Buka Filter Lokasi
                                     </button>
                                 )}

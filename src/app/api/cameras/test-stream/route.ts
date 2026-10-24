@@ -42,7 +42,7 @@ function probeStream(streamUrl: string): Promise<{ success: boolean; codec?: str
             if (code === 0 && stdout) {
                 try {
                     const parsed = JSON.parse(stdout);
-                    const videoStream = parsed.streams?.find((s: any) => s.codec_type === 'video');
+                    const videoStream = parsed.streams?.find((s: { codec_type?: string }) => s.codec_type === 'video');
                     const codec = videoStream ? `${videoStream.codec_name} (${videoStream.width}x${videoStream.height})` : 'Audio/Other';
                     resolve({ success: true, codec });
                 } catch {
@@ -88,8 +88,8 @@ export async function POST(req: NextRequest) {
 
         const result = await probeStream(streamUrl.trim());
         return NextResponse.json(result);
-    } catch (error: any) {
-        console.error('[test-stream] Error:', error?.message);
+    } catch (error) {
+        console.error('[test-stream] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ success: false, error: 'Gagal menguji stream' }, { status: 500 });
     }
 }

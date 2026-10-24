@@ -99,13 +99,13 @@ export default function CoordinateInput({
                 <div className="p-2 rounded-lg bg-yellow-500/10">
                     <Compass className="w-4 h-4 text-yellow-400" />
                 </div>
-                <span className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wider">Koordinat Titik Pantau</span>
+                <span className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wider">Koordinat Titik Pantau</span>
             </div>
 
             {/* Paste pair */}
             <div className="space-y-1.5">
-                <label className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1.5">
-                    <ClipboardPaste className="w-3 h-3" /> Tempel Koordinat (lat, lng)
+                <label className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1.5">
+                    <ClipboardPaste className="w-3 h-3" aria-hidden="true" /> Tempel Koordinat (lat, lng)
                 </label>
                 <input
                     type="text"
@@ -114,52 +114,55 @@ export default function CoordinateInput({
                     onPaste={e => { const t = e.clipboardData.getData('text'); if (t) { e.preventDefault(); applyPaste(t); } }}
                     onBlur={() => pasteStr && applyPaste(pasteStr)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyPaste(pasteStr); } }}
-                    className="w-full bg-white dark:bg-slate-900 border border-white/15 focus:border-yellow-500 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 dark:text-white tracking-wider outline-none"
+                    className="w-full bg-white dark:bg-slate-900 border border-white/15 focus:border-yellow-500 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 dark:text-white tracking-wider focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     placeholder="-6.200000, 106.816666"
+                    aria-label="Tempel koordinat (lat, lng)"
                 />
-                <p className="text-[9px] text-slate-500">Tempel dari Google Maps, lalu lat &amp; lng terisi otomatis.</p>
+                <p className="text-[11px] text-slate-500">Tempel dari Google Maps, lalu lat &amp; lng terisi otomatis.</p>
             </div>
 
             {/* Latitude */}
             <div className="space-y-1.5">
-                <label className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-bold flex items-center justify-between">
+                <label className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold flex items-center justify-between">
                     <span>Latitude</span>
-                    <span className="text-[9px] text-slate-500 font-mono">Contoh: -6.200000</span>
+                    <span className="text-[11px] text-slate-500 font-mono">Contoh: -6.200000</span>
                 </label>
                 <input
                     type="number" step="any" min={-90} max={90}
                     value={latStr}
                     onChange={e => { setLatStr(e.target.value); onChange(parseNum(e.target.value), lngNum); }}
-                    className={`w-full bg-white dark:bg-slate-900 border rounded-xl px-3 py-2 text-sm font-mono text-slate-900 dark:text-white tracking-wider outline-none ${latErr ? 'border-rose-500/60 focus:border-rose-500' : 'border-white/15 focus:border-yellow-500'}`}
+                    className={`w-full bg-white dark:bg-slate-900 border rounded-xl px-3 py-2 text-sm font-mono text-slate-900 dark:text-white tracking-wider focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${latErr ? 'border-rose-500/60 focus:border-rose-500' : 'border-white/15 focus:border-yellow-500'}`}
                     placeholder="-6.200000"
+                    aria-label="Latitude"
                 />
-                {latErr && <p className="text-[10px] text-rose-400 font-medium">{latErr}</p>}
+                {latErr && <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">{latErr}</p>}
             </div>
 
             {/* Longitude */}
             <div className="space-y-1.5">
-                <label className="text-[10px] uppercase text-slate-500 dark:text-slate-400 font-bold flex items-center justify-between">
+                <label className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-bold flex items-center justify-between">
                     <span>Longitude</span>
-                    <span className="text-[9px] text-slate-500 font-mono">Contoh: 106.816666</span>
+                    <span className="text-[11px] text-slate-500 font-mono">Contoh: 106.816666</span>
                 </label>
                 <input
                     type="number" step="any" min={-180} max={180}
                     value={lngStr}
                     onChange={e => { setLngStr(e.target.value); onChange(latNum, parseNum(e.target.value)); }}
-                    className={`w-full bg-white dark:bg-slate-900 border rounded-xl px-3 py-2 text-sm font-mono text-slate-900 dark:text-white tracking-wider outline-none ${lngErr ? 'border-rose-500/60 focus:border-rose-500' : 'border-white/15 focus:border-yellow-500'}`}
+                    className={`w-full bg-white dark:bg-slate-900 border rounded-xl px-3 py-2 text-sm font-mono text-slate-900 dark:text-white tracking-wider focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${lngErr ? 'border-rose-500/60 focus:border-rose-500' : 'border-white/15 focus:border-yellow-500'}`}
                     placeholder="106.816666"
+                    aria-label="Longitude"
                 />
-                {lngErr && <p className="text-[10px] text-rose-400 font-medium">{lngErr}</p>}
+                {lngErr && <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">{lngErr}</p>}
             </div>
 
             {swapWarn && (
-                <div className="flex items-start gap-2 text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <span className="text-[10px] leading-relaxed">{swapWarn} Periksa kembali urutannya.</span>
+                <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                    <span className="text-[11px] leading-relaxed">{swapWarn} Periksa kembali urutannya.</span>
                 </div>
             )}
 
-            <p className="text-[10px] text-slate-500 leading-relaxed pt-1">
+            <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
                 * Klik pada peta untuk pinpoint, tempel pasangan koordinat, atau isi manual.
             </p>
         </div>

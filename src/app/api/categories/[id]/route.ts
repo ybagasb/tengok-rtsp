@@ -8,7 +8,7 @@ import { pickCategoryFields } from '@/lib/categoryFields';
 
 export const dynamic = 'force-dynamic';
 
-export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> | any }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
     // Only admin can update categories
     const authError = await requireAdmin(req);
     if (authError) return authError;
@@ -54,7 +54,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         });
 
         return NextResponse.json({ success: true, category: updatedCategory });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Error updating category:', error);
         return NextResponse.json(
             { error: 'Gagal memperbarui kategori' },
@@ -63,7 +63,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     }
 }
 
-export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> | any }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
     // Only admin can delete categories
     const authError = await requireAdmin(req);
     if (authError) return authError;
@@ -92,7 +92,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
         });
 
         return NextResponse.json({ success: true, message: 'Category deleted successfully' });
-    } catch (error: any) {
+    } catch (error) {
         console.error('Error deleting category:', error);
         return NextResponse.json(
             { error: 'Gagal menghapus kategori' },

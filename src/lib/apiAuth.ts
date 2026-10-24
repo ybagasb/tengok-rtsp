@@ -51,6 +51,7 @@ export async function requireAuth(req: NextRequest): Promise<NextResponse | null
  * with the PIN could hit admin APIs directly, bypassing the /admin page guard
  * in middleware. This mirrors the intended design: PIN = viewer, SSO = admin.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- `req` kept for call-site signature compatibility (SSO-only check does not read the request)
 export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
     // SSO session is the only path to admin. Deliberately does NOT accept the
     // PIN cookie (unlike requireAuth).

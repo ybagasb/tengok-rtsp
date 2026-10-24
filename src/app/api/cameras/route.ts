@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
         const cameras = await query.lean();
         return NextResponse.json({ success: true, data: cameras });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ success: false, error: 'Failed to fetch cameras' }, { status: 500 });
     }
 }
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
         });
 
         return NextResponse.json({ success: true, data: camera }, { status: 201 });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ success: false, error: 'Failed to create camera' }, { status: 400 });
     }
 }

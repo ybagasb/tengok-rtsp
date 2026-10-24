@@ -117,7 +117,7 @@ class FfmpegManager {
         try {
             const urlObj = new URL(rtspUrl);
             safeRtspUrl = urlObj.href;
-        } catch (e) {
+        } catch {
             // Fallback to original URL
         }
 
@@ -175,10 +175,10 @@ class FfmpegManager {
             await this.waitForFile(m3u8Path, 15000, cameraId, ffmpeg);
             console.log(`[FFmpegManager] Stream ${cameraId} READY → ${streamPath}`);
             return streamPath;
-        } catch (e: any) {
-            console.error(`[FFmpegManager] Stream ${cameraId} FAILED: ${e.message}`);
+        } catch (e) {
+            console.error(`[FFmpegManager] Stream ${cameraId} FAILED: ${e instanceof Error ? e.message : undefined}`);
             this.stopStream(cameraId);
-            throw new Error(`Stream initialization failed: ${e.message}`);
+            throw new Error(`Stream initialization failed: ${e instanceof Error ? e.message : undefined}`);
         }
     }
 

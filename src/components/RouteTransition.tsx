@@ -42,6 +42,7 @@ export default function RouteTransition() {
         prevPath.current = pathname;
 
         if (!shouldShow(pathname)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- overlay transisi dikendalikan oleh perubahan pathname; tidak bisa diturunkan saat render tanpa mengubah perilaku
             setVisible(false);
             return;
         }

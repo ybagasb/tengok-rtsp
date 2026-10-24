@@ -33,8 +33,8 @@ export async function logAudit(opts: LogAuditOptions): Promise<void> {
             detail:     opts.detail,
             timestamp:  new Date(),
         });
-    } catch (err: any) {
+    } catch (err) {
         // Non-blocking — audit failure should never break the admin operation
-        console.warn('[AuditLog] Failed to write audit log:', err.message);
+        console.warn('[AuditLog] Failed to write audit log:', err instanceof Error ? err.message : undefined);
     }
 }

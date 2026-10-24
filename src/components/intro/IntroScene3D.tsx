@@ -46,6 +46,8 @@ export interface IntroScene3DProps {
   divisionColors: readonly string[];
   /** Status CCTV per divisi (urutan sesuai ORDER) */
   divisionStatus?: Array<{ total: number; online: number }>;
+  /** Tema UI aktif. Mengubah latar, kabut, cahaya, dan bintang tanpa membangun ulang scene. */
+  theme?: "light" | "dark";
   /** Apakah mode reduced-motion aktif (durasi singkat ~0.4s, tanpa rotasi acak) */
   reducedMotion?: boolean;
   /** Dipanggil saat pengguna klik model HQ */
@@ -71,6 +73,7 @@ export default function IntroScene3D({
   hoveredDiv,
   divisionColors,
   divisionStatus,
+  theme = "dark",
   reducedMotion = false,
   onBuildingClick,
   onExplodeComplete,
@@ -82,6 +85,9 @@ export default function IntroScene3D({
   className = "",
 }: IntroScene3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
+  // Diisi oleh effect utama; dipanggil effect tema agar scene tidak dibangun ulang.
+  const applyThemeRef = useRef<((t: "light" | "dark") => void) | null>(null);
+  const themeRef = useRef(theme);
 
   // Refs untuk props agar loop animasi selalu baca nilai terkini tanpa rebuild scene
   const stateRef = useRef({ phase, selectedDiv, hoveredDiv, reducedMotion, divisionStatus });
@@ -94,6 +100,11 @@ export default function IntroScene3D({
   useEffect(() => {
     cbRef.current = { onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onReady, onError, onMounted };
   }, [onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onReady, onError, onMounted]);
+
+  useEffect(() => {
+    themeRef.current = theme;
+    applyThemeRef.current?.(theme);
+  }, [theme]);
 
   // Effect utama: bangun scene & jalankan loop. Hanya berjalan sekali.
   useEffect(() => {
@@ -112,10 +123,19 @@ export default function IntroScene3D({
 
     const cam = new THREE.PerspectiveCamera(40, W() / H(), 0.1, 400);
 
-    let currentPr = Math.min(window.devicePixelRatio || 1, 2);
+    // Perangkat sentuh / layar kecil: batasi resolusi render & detail dekorasi.
+    const lowPower =
+      window.matchMedia("(pointer: coarse)").matches ||
+      Math.min(window.innerWidth, window.innerHeight) < 600;
+    let currentPr = Math.min(window.devicePixelRatio || 1, lowPower ? 1.5 : 2);
     let ren: THREE.WebGLRenderer;
     try {
-      ren = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      // MSAA tidak perlu di layar high-DPI (piksel sudah rapat) & mahal di GPU lemah.
+      ren = new THREE.WebGLRenderer({
+        antialias: currentPr < 2 && !lowPower,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
     } catch (err) {
       console.warn("[Intro3D] Gagal membuat WebGLRenderer:", err);
       cbRef.current.onError?.();
@@ -123,7 +143,7 @@ export default function IntroScene3D({
     }
     ren.setPixelRatio(currentPr);
     ren.setSize(W(), H());
-    ren.setClearColor(0x070d18, 1);
+    ren.setClearColor(0x070d18, 0); // transparan: latar & watermark diatur CSS di belakang canvas
     mount.appendChild(ren.domElement);
 
     // resource tracking untuk dispose saat unmount
@@ -134,7 +154,8 @@ export default function IntroScene3D({
     };
 
     // ---- Cahaya (persis prototipe) ----------------------------------------
-    scene.add(new THREE.HemisphereLight(0xaec6ff, 0x1a2233, 0.85));
+    const hemi = new THREE.HemisphereLight(0xaec6ff, 0x1a2233, 0.85);
+    scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xffe2b0, 0.9);
     sun.position.set(20, 40, 30);
     scene.add(sun);
@@ -394,10 +415,11 @@ export default function IntroScene3D({
     scene.add(grid);
     disposables.push(grid.geometry, ...gridMats);
 
+    let stars: THREE.Points | null = null;
     // ---- Bintang ~500 titik -----------------------------------------------
     {
       const p: number[] = [];
-      for (let i = 0; i < 500; i++)
+      for (let i = 0; i < (lowPower ? 220 : 500); i++)
         p.push(
           (Math.random() - 0.5) * 260,
           Math.random() * 90 + 5,
@@ -405,7 +427,8 @@ export default function IntroScene3D({
         );
       const geo = track(new THREE.BufferGeometry());
       geo.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
-      scene.add(new THREE.Points(geo, track(new THREE.PointsMaterial({ color: 0xaec6ff, size: 0.5, transparent: true, opacity: 0.6 }))));
+      stars = new THREE.Points(geo, track(new THREE.PointsMaterial({ color: 0xaec6ff, size: 0.5, transparent: true, opacity: 0.6 })));
+      scene.add(stars);
     }
 
     // ---- Platform helper (disc + ring + scan ring) ------------------------
@@ -427,6 +450,26 @@ export default function IntroScene3D({
       scene.add(g);
       return g;
     }
+
+    // ---- Tema terang/gelap: ubah lingkungan saja (model & aksen tetap) ----
+    const applyTheme = (t: "light" | "dark") => {
+      const light = t === "light";
+      const bg = light ? 0xe9eef5 : 0x070d18;
+      ren.setClearColor(bg, 0);
+      if (scene.fog) (scene.fog as THREE.FogExp2).color.setHex(light ? 0xe9eef5 : 0x0a1220);
+      (scene.fog as THREE.FogExp2).density = light ? 0.0075 : 0.011;
+      hemi.color.setHex(light ? 0xffffff : 0xaec6ff);
+      hemi.groundColor.setHex(light ? 0xaab4c4 : 0x1a2233);
+      hemi.intensity = light ? 1.0 : 0.85;
+      sun.color.setHex(light ? 0xfff1d6 : 0xffe2b0);
+      sun.intensity = light ? 1.05 : 0.9;
+      if (stars) stars.visible = !light;
+      gridMats.forEach((m) => {
+        (m as THREE.LineBasicMaterial).opacity = light ? 0.4 : 0.22;
+      });
+    };
+    applyThemeRef.current = applyTheme;
+    applyTheme(themeRef.current);
 
     // ---- HQ model + platform amber ----------------------------------------
     const hqW = fit(hq(), 19, 0xf59e0b);
@@ -596,6 +639,7 @@ export default function IntroScene3D({
     }
 
     const onPtrMove = (e: PointerEvent) => {
+      lastActivity = performance.now();
       updatePt(e);
       const { phase: ph } = stateRef.current;
       if (ph === "hq") {
@@ -610,6 +654,7 @@ export default function IntroScene3D({
       }
     };
     const onPtrDown = (e: PointerEvent) => {
+      lastActivity = performance.now();
       updatePt(e);
       const { phase: ph } = stateRef.current;
       if (ph === "hq" && pickFrom([hqW])) {
@@ -648,6 +693,15 @@ export default function IntroScene3D({
     let kids: Shard[] = [];
     let t0 = 0;
     let lastPhase = phase;
+    // Throttle saat diam: setelah 4 dtk tanpa interaksi/perubahan state, render ~30 fps
+    // (grid & cincin scan tetap bergerak, GPU/baterai jauh lebih hemat).
+    const IDLE_AFTER_MS = 4000;
+    const IDLE_FRAME_MS = 32;
+    let lastActivity = performance.now();
+    let lastRenderAt = 0;
+    let seenPhase = phase;
+    let seenSel = selectedDiv;
+    let seenHov = hoveredDiv;
     let last = performance.now();
     let raf = 0;
     let isDisposed = false;
@@ -707,12 +761,33 @@ export default function IntroScene3D({
       }
       raf = requestAnimationFrame(loop);
 
+      const stNow = stateRef.current;
+      if (stNow.phase !== seenPhase || stNow.selectedDiv !== seenSel || stNow.hoveredDiv !== seenHov) {
+        seenPhase = stNow.phase;
+        seenSel = stNow.selectedDiv;
+        seenHov = stNow.hoveredDiv;
+        lastActivity = now;
+      }
+      if (
+        hasReportedReady &&
+        stNow.phase !== "explode" &&
+        now - lastActivity > IDLE_AFTER_MS &&
+        now - lastRenderAt < IDLE_FRAME_MS
+      ) {
+        return; // lewati frame ini (mode hemat saat diam)
+      }
+      lastRenderAt = now;
+
       // 2b. Ukur durasi frame untuk adaptasi pixel ratio
       const frameDuration = now - lastFrameTime;
       lastFrameTime = now;
 
       // Mulai mengukur hanya setelah scene siap (hasReportedReady === true)
-      if (hasReportedReady) {
+      if (hasReportedReady && now - lastActivity > IDLE_AFTER_MS) {
+        // Mode hemat sengaja ~30 fps: jangan dianggap lambat & reset sampel.
+        frameDurations.length = 0;
+        slowWindowsCount = 0;
+      } else if (hasReportedReady) {
         // Buang frame > 100 ms (jangan tambahkan ke hitungan maupun jumlah)
         if (frameDuration <= 100) {
           frameDurations.push(frameDuration);
@@ -1079,6 +1154,7 @@ export default function IntroScene3D({
 
     // ---- Cleanup penuh (zero memory leak) --------------------------------
     return () => {
+      applyThemeRef.current = null;
       isDisposed = true;
       stopLoop();
       document.removeEventListener("visibilitychange", onVis);

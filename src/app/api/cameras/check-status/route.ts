@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ status: 'online' });
         }
         return NextResponse.json({ status: 'offline' });
-    } catch (error) {
+    } catch {
         return NextResponse.json({ status: 'offline' });
     }
 }
