@@ -3,6 +3,8 @@ import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
 import { requireAdmin, requireProjectAccess, getAuditActor, getSessionIdentity, isSuperAdmin, matchProjectPic } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
+import { derivedFromLaporan } from '@/lib/projectReport';
+import { loadDeriveSource, syncLegacy } from '@/lib/projectSync';
 import { getPresignedUrl, deleteObject, isStorageConfigured } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +39,12 @@ const EDITABLE_FIELDS = [
 ] as const;
 
 
+// Field lama yang bisa diturunkan dari laporan bulanan (lihat derivedFromLaporan).
+const DERIVED_KEYS = [
+    'cpi', 'spi', 'tagihanBruto', 'hasilUsaha', 'pu', 'bk', 'lk',
+    'cashIn', 'cashOut', 'progressPercent', 'progressRencana', 'progressDeviasi',
+] as const;
+
 const MAX_TEXT_LENGTH = 10000;
 
 // Label ramah untuk pesan validasi.
@@ -47,6 +55,30 @@ const FIELD_LABELS: Record<string, string> = {
     saldoHutang: 'Saldo hutang', bad: 'BAD', piutang: 'Piutang',
     bebanKonstruksi: 'Beban konstruksi', pu: 'PU', bk: 'BK',
 };
+
+// Shape of the lean project document as used by GET (other fields pass through).
+interface ProjectLean {
+    _id: unknown;
+    name?: string;
+    picSubs?: string[];
+    contractFileKey?: string;
+    gallery?: Record<string, unknown>[];
+    documents?: Record<string, unknown>[];
+    [key: string]: unknown;
+}
+
+// Working copy of the (unvalidated) PATCH body fields; validated/sanitized below.
+interface ProjectUpdateDraft {
+    status?: string;
+    division?: string;
+    projectType?: string;
+    startDate?: string | number | Date;
+    endDate?: string | number | Date;
+    hasilUsaha?: { pendapatan?: unknown; biaya?: unknown; laba?: unknown };
+    monitoringPengadaan?: Array<{ nama?: unknown; persentase?: unknown }>;
+    changeManagement?: Array<{ jenis?: string } | null | undefined>;
+    [key: string]: unknown;
+}
 
 async function sign(key?: string): Promise<string | null> {
     if (!key || !isStorageConfigured()) return null;
@@ -73,7 +105,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     try {
         const loc = await Location.findById(id)
             .populate('cameras', 'name status lastCheckedAt lastOnlineAt')
-            .lean() as any;
+            .lean<ProjectLean>();
         if (!loc) {
             return NextResponse.json({ success: false, error: 'Proyek tidak ditemukan' }, { status: 404 });
         }
@@ -146,8 +178,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
                 access: { canEdit, isSuperAdmin: superAdmin, isPic },
             },
         });
-    } catch (error: any) {
-        console.error('[Project GET] Error:', error?.message);
+    } catch (error) {
+        console.error('[Project GET] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ success: false, error: 'Gagal memuat detail proyek' }, { status: 500 });
     }
 }
@@ -165,9 +197,17 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
     try {
         const body = await req.json();
-        const update: Record<string, any> = {};
+        const update: ProjectUpdateDraft = {};
         for (const field of EDITABLE_FIELDS) {
             if (field in body) update[field] = body[field];
+        }
+
+        // Field yang diturunkan dari Laporan Bulanan terbaru TIDAK boleh ditulis
+        // langsung (satu sumber kebenaran). Dibuang diam-diam karena klien yang
+        // benar sudah tidak mengirimnya; klien lama/basi tak bisa menimpa laporan.
+        if (DERIVED_KEYS.some((k) => k in update)) {
+            const src = await loadDeriveSource(id);
+            for (const k of Object.keys(derivedFromLaporan(src ?? undefined))) delete update[k];
         }
 
         // Validasi: nilai SALAH ditolak 400 dengan pesan jelas (bukan dibuang
@@ -192,13 +232,13 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             if (!isBlank(update.contractValue) && (!Number.isFinite(v) || v < 0)) invalid.push('Nilai kontrak harus angka ≥ 0');
             update.contractValue = Number.isFinite(v) && v >= 0 && !isBlank(update.contractValue) ? v : undefined;
         }
-        if ('status' in update && !['planning', 'ongoing', 'completed'].includes(update.status)) {
+        if ('status' in update && !['planning', 'ongoing', 'completed'].includes(update.status as string)) {
             invalid.push('Status proyek tidak valid');
         }
-        if ('division' in update && !['DIVISI 1', 'DIVISI 2', 'DIVISI 3'].includes(update.division)) {
+        if ('division' in update && !['DIVISI 1', 'DIVISI 2', 'DIVISI 3'].includes(update.division as string)) {
             invalid.push('Divisi tidak valid');
         }
-        if ('projectType' in update && !['JO', 'NON_JO'].includes(update.projectType)) {
+        if ('projectType' in update && !['JO', 'NON_JO'].includes(update.projectType as string)) {
             invalid.push('Tipe proyek tidak valid');
         }
         // CPI/SPI: angka index (umumnya 0..~2). Wajar 0..5; di luar itu ditolak.
@@ -249,7 +289,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             } else if (!Array.isArray(fp) || fp.length < 3 || fp.length > 200) {
                 invalid.push('Footprint harus berisi 3 sampai 200 titik');
             } else {
-                const pts = fp.map((q: any) => ({ lng: Number(q?.lng), lat: Number(q?.lat) }));
+                const pts = fp.map((q: { lng?: unknown; lat?: unknown } | null | undefined) => ({ lng: Number(q?.lng), lat: Number(q?.lat) }));
                 if (pts.some((q) => !Number.isFinite(q.lng) || !Number.isFinite(q.lat) || Math.abs(q.lat) > 90 || Math.abs(q.lng) > 180)) {
                     invalid.push('Koordinat footprint tidak valid');
                 } else {
@@ -304,8 +344,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         // Monitoring pengadaan: sanitasi persentase 0..100.
         if ('monitoringPengadaan' in update && Array.isArray(update.monitoringPengadaan)) {
             update.monitoringPengadaan = update.monitoringPengadaan
-                .filter((m: any) => m && typeof m.nama === 'string' && m.nama.trim())
-                .map((m: any) => {
+                .filter((m) => m && typeof m.nama === 'string' && m.nama.trim())
+                .map((m) => {
                     const pct = Number(m.persentase);
                     return {
                         nama: String(m.nama).trim(),
@@ -316,7 +356,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         // Change management: validasi jenis enum (fallback LAINNYA).
         if ('changeManagement' in update && Array.isArray(update.changeManagement)) {
             const JENIS = ['PERUBAHAN_HARGA', 'PERUBAHAN_LINGKUP', 'KLAIM', 'LEGAL_ISSUE', 'LAINNYA'];
-            update.changeManagement = update.changeManagement.map((c: any) => {
+            update.changeManagement = update.changeManagement.map((c) => {
                 if (c && typeof c === 'object' && c.jenis && !JENIS.includes(c.jenis)) {
                     return { ...c, jenis: 'LAINNYA' };
                 }
@@ -324,24 +364,27 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             });
         }
 
-        const loc = await Location.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true }).lean() as any;
+        const loc = await Location.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true }).lean<ProjectLean>();
         if (!loc) {
             return NextResponse.json({ success: false, error: 'Proyek tidak ditemukan' }, { status: 404 });
         }
+
+        // Nilai kontrak menjadi basis persen progres fisik turunan → hitung ulang.
+        if ('contractValue' in update) await syncLegacy(id);
 
         const actor = await getAuditActor(req);
         await logAudit({
             action: 'UPDATE',
             entity: 'Project',
             entityId: id,
-            entityName: loc.name,
+            entityName: loc.name ?? '',
             by: actor,
             detail: `Memperbarui detail proyek: ${loc.name} (field: ${Object.keys(update).join(', ') || '-'})`,
         });
 
         return NextResponse.json({ success: true, data: loc });
-    } catch (error: any) {
-        console.error('[Project PATCH] Error:', error?.message);
+    } catch (error) {
+        console.error('[Project PATCH] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ success: false, error: 'Gagal memperbarui proyek' }, { status: 400 });
     }
 }
@@ -386,8 +429,8 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
         });
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        console.error('[Project DELETE] Error:', error?.message);
+    } catch (error) {
+        console.error('[Project DELETE] Error:', error instanceof Error ? error.message : undefined);
         return NextResponse.json({ success: false, error: 'Gagal menghapus file' }, { status: 500 });
     }
 }

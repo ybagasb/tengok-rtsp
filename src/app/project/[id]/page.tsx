@@ -7,16 +7,17 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    ArrowLeft, Loader2, MapPin, FileText, Image as ImageIcon, ClipboardList,
-    TrendingUp, Info, LayoutDashboard, Upload, Trash2, Pencil, Check, X,
-    Phone, User, Building2, Calendar, Clock, CircleDollarSign, ExternalLink,
-    Wrench, AlertTriangle, ChevronDown, ChevronUp, Plus, Minus,
-    PieChart, ArrowUpRight, ArrowDownRight, Layers, Target, Wallet, Receipt,
-    Menu, GitBranch, ChevronLeft, ChevronRight, BookOpen
+    ArrowLeft, Loader2, MapPin, FileText, Image as ImageIcon, TrendingUp, Info, LayoutDashboard, Upload, Trash2, Pencil, Check, X,
+    User, Building2, Clock, CircleDollarSign, ExternalLink,
+    AlertTriangle, Plus, Minus,
+    ArrowUpRight, ArrowDownRight, Layers, Target, Wallet, Receipt,
+    Menu, GitBranch, ChevronLeft, ChevronRight, BookOpen, CalendarDays
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import type { FootprintPoint } from '@/components/FootprintEditor';
 import { getDivisionCssVars } from '@/lib/divisionTheme';
+import { computeEvm, derivedFromLaporan, isLaporanFresh, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
+import LaporanBulananTab from '@/components/project/LaporanBulananTab';
 
 // Leaflet butuh browser (window) -> muat hanya di klien.
 const FootprintEditor = dynamic(() => import('@/components/FootprintEditor'), {
@@ -33,6 +34,7 @@ type Tab =
     | 'operasi'
     | 'changemgmt'
     | 'issues'
+    | 'laporan'
     | 'info' | 'location' | 'contract' | 'progress' | 'gallery';
 
 interface GalleryItem { key: string; caption?: string; uploadedAt: string; url: string | null; }
@@ -118,6 +120,10 @@ interface Project {
     isuStrategis?: IsuStrategis[];
     kendala?: Kendala[];
     changeManagement?: ChangeManagement[];
+    laporanBulanan?: LaporanBulanan[];
+    rencanaKurvaS?: RencanaKurvaS[];
+    cashInAwal?: number;
+    cashOutAwal?: number;
     milestones?: Milestone[];
     gallery?: GalleryItem[];
     cameras?: { _id: string; name: string; status: string }[];
@@ -145,15 +151,15 @@ interface TabGroup { group: string; items: TabItem[] }
 
 const TAB_GROUPS: TabGroup[] = [
     {
-        group: 'Ringkasan',
+        group: 'Beranda',
         items: [
-            { id: 'summary', label: 'Ringkasan', icon: LayoutDashboard },
+            { id: 'summary', label: 'Beranda', icon: LayoutDashboard },
         ],
     },
     {
-        group: 'Ikhtiar',
+        group: 'Ringkasan',
         items: [
-            { id: 'ikhtiar', label: 'CPI / SPI', icon: Target },
+            { id: 'ikhtiar', label: 'Ringkasan', icon: Target },
         ],
     },
     {
@@ -166,6 +172,12 @@ const TAB_GROUPS: TabGroup[] = [
         group: 'Operasi',
         items: [
             { id: 'operasi', label: 'Operasi', icon: Layers },
+        ],
+    },
+    {
+        group: 'Laporan',
+        items: [
+            { id: 'laporan', label: 'Laporan Bulanan', icon: CalendarDays },
         ],
     },
     {
@@ -215,7 +227,7 @@ function pct(n?: number) { return `${(n ?? 0).toFixed(2)}%`; }
 function ProjectSkeleton() {
     const bar = "rounded-xl bg-black/[0.06] dark:bg-white/[0.07] animate-pulse";
     return (
-        <div className="min-h-screen bg-slate-100 dark:bg-slate-950" role="status" aria-live="polite" aria-label="Memuat detail proyek">
+        <div className="min-h-dvh bg-slate-100 dark:bg-slate-950" role="status" aria-live="polite" aria-label="Memuat detail proyek">
             <div className="border-b border-black/5 dark:border-white/5">
                 <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex items-center gap-3">
                     <div className={`${bar} w-11 h-11`} />
@@ -301,15 +313,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
     if (!project) {
         return (
-            <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-500 dark:text-slate-400">
+            <div className="min-h-dvh bg-slate-100 dark:bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-500 dark:text-slate-400">
                 <p className="text-lg font-bold">{loadError?.message ?? 'Proyek tidak ditemukan.'}</p>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => router.back()} className="px-5 py-2.5 bg-black/[0.04] dark:bg-white/5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-sm font-bold">Kembali</button>
+                    <button onClick={() => router.back()} className="px-5 py-2.5 bg-black/[0.04] dark:bg-white/5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-sm font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">Kembali</button>
                     {loadError?.status === 401 && (
-                        <button onClick={() => router.push('/login')} className="px-5 py-2.5 div-accent-solid hover:brightness-110 text-slate-950 rounded-xl transition-colors text-sm font-bold">Masuk</button>
+                        <button onClick={() => router.push('/login')} className="px-5 py-2.5 div-accent-solid hover:brightness-110 text-slate-950 rounded-xl transition-colors text-sm font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">Masuk</button>
                     )}
                     {loadError && loadError.status !== 401 && loadError.status !== 403 && loadError.status !== 404 && (
-                        <button onClick={() => { setLoading(true); fetchProject(); }} className="px-5 py-2.5 div-accent-solid hover:brightness-110 text-slate-950 rounded-xl transition-colors text-sm font-bold">Coba lagi</button>
+                        <button onClick={() => { setLoading(true); fetchProject(); }} className="px-5 py-2.5 div-accent-solid hover:brightness-110 text-slate-950 rounded-xl transition-colors text-sm font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">Coba lagi</button>
                     )}
                 </div>
             </div>
@@ -330,7 +342,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <nav className="space-y-5">
             {TAB_GROUPS.map(grp => (
                 <div key={grp.group}>
-                    <div className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-600">{grp.group}</div>
+                    <div className="px-3 mb-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-600">{grp.group}</div>
                     <div className="space-y-0.5">
                         {grp.items.map(t => {
                             const Icon = t.icon;
@@ -339,7 +351,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                 <button
                                     key={t.id}
                                     onClick={() => selectTab(t.id)}
-                                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                                    className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
                                         active
                                             ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border border-[rgba(var(--div-accent-rgb),0.3)]'
                                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
@@ -358,7 +370,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const pageStyle = getDivisionCssVars(project.division) as React.CSSProperties;
 
     return (
-        <div style={pageStyle} className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
+        <div style={pageStyle} className="min-h-dvh bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
             {/* Grid HUD tipis beraksen divisi (dekorasi, tidak menangkap klik) */}
             <div
                 aria-hidden
@@ -385,12 +397,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     }}
                 />
                 <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex items-center gap-3">
-                    <button onClick={() => router.back()} aria-label="Kembali" className="p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0">
+                    <button onClick={() => router.back()} aria-label="Kembali" className="p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                         <ArrowLeft className="w-5 h-5" aria-hidden="true" />
                     </button>
                     <button
                         onClick={() => setSidebarOpen(true)}
-                        className="lg:hidden p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0"
+                        className="lg:hidden p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                         aria-label="Buka menu proyek"
                         aria-expanded={sidebarOpen}
                     >
@@ -399,9 +411,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     <div className="min-w-0 flex-1">
                         <h1 className="text-lg sm:text-2xl font-bold tracking-tight truncate">{project.name}</h1>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${status.color}`}>{status.label}</span>
-                            {project.division && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">{project.division}</span>}
-                            {project.projectType && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-cyan-300">{project.projectType === 'JO' ? 'JO' : 'NON-JO'}</span>}
+                            <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${status.color}`}>{status.label}</span>
+                            {project.division && <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">{project.division}</span>}
+                            {project.projectType && <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-cyan-300">{project.projectType === 'JO' ? 'JO' : 'NON-JO'}</span>}
                             <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">{project.category}</span>
                             {project.updatedAt && (
                                 <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
@@ -412,7 +424,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         </div>
                     </div>
                     <a
-                        href="/Panduan-Input-Detail-Proyek.pdf"
+                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261024"
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Buka panduan pengisian (PDF)"
@@ -426,7 +438,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             const divisionParam = project.division ? `&division=${encodeURIComponent(project.division)}` : '';
                             router.push(`/map?category=${encodeURIComponent(project.category)}${divisionParam}`);
                         }}
-                        className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text text-sm font-bold hover:bg-[rgba(var(--div-accent-rgb),0.2)] transition-colors shrink-0"
+                        className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text text-sm font-bold hover:bg-[rgba(var(--div-accent-rgb),0.2)] transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     >
                         <MapPin className="w-4 h-4" /> Lihat di Peta
                     </button>
@@ -461,7 +473,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             >
                                 <div className="flex items-center justify-between mb-4">
                                     <span className="text-sm font-bold text-slate-900 dark:text-white">Menu Proyek</span>
-                                    <button ref={drawerCloseRef} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" className="p-3 rounded-lg bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300"><X className="w-4 h-4" aria-hidden="true" /></button>
+                                    <button ref={drawerCloseRef} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" className="p-3 rounded-lg bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-4 h-4" aria-hidden="true" /></button>
                                 </div>
                                 {sidebarNav}
                             </motion.aside>
@@ -477,15 +489,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     <AnimatePresence mode="wait">
                         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
                             {tab === 'summary'    && <SummaryTab project={project} status={status} onlineCams={onlineCams} onGoTab={selectTab} />}
-                            {tab === 'ikhtiar'    && <IkhtiarTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'finansial'  && <FinansialTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'operasi'    && <OperasiTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'ikhtiar'    && <IkhtiarTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
+                            {tab === 'finansial'  && <FinansialTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
+                            {tab === 'operasi'    && <OperasiTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
+                            {tab === 'laporan'    && <LaporanBulananTab projectId={project._id} laporan={project.laporanBulanan ?? []} rencana={project.rencanaKurvaS ?? []} saldoAwal={{ cashInAwal: project.cashInAwal, cashOutAwal: project.cashOutAwal }} contractValue={project.contractValue} onGoContract={() => selectTab('contract')} isAdmin={canEdit} onSaved={fetchProject} errorMessage={saveErrorMessage} />}
                             {tab === 'changemgmt' && <ChangeManagementTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'issues'     && <IssuesTab project={project} isAdmin={canEdit} onSaved={fetchProject} onToChangeMgmt={() => setTab('changemgmt')} />}
                             {tab === 'info'       && <InfoTab project={project} isAdmin={canEdit} isSuperAdmin={isSuperAdmin} onSaved={fetchProject} />}
                             {tab === 'location'   && <LocationTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'contract'   && <ContractTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'progress'   && <ProgressTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                            {tab === 'progress'   && <ProgressTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
                             {tab === 'gallery'    && <GalleryTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
                         </motion.div>
                     </AnimatePresence>
@@ -524,12 +537,28 @@ function IndexGauge({ title, hint, value, kind }: { title: string; hint: string;
             <div className="text-5xl font-black text-slate-900 dark:text-white leading-none mb-3">
                 {value != null ? value.toFixed(2) : '—'}
             </div>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${meta.color}`}>{meta.label}</span>
+            <span className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${meta.color}`}>{meta.label}</span>
         </div>
     );
 }
 
-function IkhtiarTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+// Catatan untuk field yang diisi otomatis dari Laporan Bulanan (satu sumber kebenaran).
+function DerivedNote({ periode, onGo, what }: { periode?: string; onGo?: () => void; what: string }) {
+    return (
+        <div role="note" className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 rounded-xl bg-[rgba(var(--div-accent-rgb),0.08)] border border-[rgba(var(--div-accent-rgb),0.25)] text-xs text-slate-600 dark:text-slate-300">
+            <span>
+                {what} diisi otomatis dari <span className="font-bold">Laporan Bulanan{periode ? ` (${periodeLabel(periode)})` : ''}</span>. Ubah di sana agar tidak perlu mengetik dua kali.
+            </span>
+            {onGo && (
+                <button type="button" onClick={onGo} className="px-3 py-2 rounded-lg div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
+                    Buka Laporan Bulanan
+                </button>
+            )}
+        </div>
+    );
+}
+
+function IkhtiarTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({
         cpi: project.cpi?.toString() ?? '',
@@ -537,14 +566,22 @@ function IkhtiarTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
     });
     const [saving, setSaving] = useState(false);
 
+    // CPI/SPI diturunkan dari laporan bulanan terbaru bila BCWP/ACWP/BCWS tersedia.
+    const latest = latestLaporan(project.laporanBulanan);
+    const derived = derivedFromLaporan(project);
+    const evm = computeEvm(latest?.evm);
+    const cpiLocked = derived.cpi !== undefined;
+    const spiLocked = derived.spi !== undefined;
+    const anyLocked = cpiLocked || spiLocked;
+
     const save = async () => {
         setSaving(true);
         try {
             await axios.patch(`/api/projects/${project._id}`, {
-                cpi: form.cpi === '' ? undefined : Number(form.cpi),
-                spi: form.spi === '' ? undefined : Number(form.spi),
+                ...(cpiLocked ? {} : { cpi: form.cpi === '' ? undefined : Number(form.cpi) }),
+                ...(spiLocked ? {} : { spi: form.spi === '' ? undefined : Number(form.spi) }),
             });
-            toast.success('Ikhtiar tersimpan');
+            toast.success('Ringkasan tersimpan');
             setEditing(false);
             onSaved();
         } catch (err) { toast.error(saveErrorMessage(err)); }
@@ -553,7 +590,8 @@ function IkhtiarTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
 
     return (
         <div className="space-y-4">
-            <SectionHeader title="Ikhtiar — CPI / SPI" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setForm({ cpi: project.cpi?.toString() ?? '', spi: project.spi?.toString() ?? '' }); setEditing(false); }} onSave={save} saving={saving} />
+            <SectionHeader title="Ringkasan — CPI / SPI" isAdmin={isAdmin && !(cpiLocked && spiLocked)} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setForm({ cpi: project.cpi?.toString() ?? '', spi: project.spi?.toString() ?? '' }); setEditing(false); }} onSave={save} saving={saving} />
+            {anyLocked && <DerivedNote what={cpiLocked && spiLocked ? 'CPI dan SPI' : cpiLocked ? 'CPI' : 'SPI'} periode={latest?.periode} onGo={isAdmin ? () => onGoTab('laporan') : undefined} />}
             {!editing ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <IndexGauge title="CPI" hint="Cost Performance Index (kinerja biaya)" value={project.cpi} kind="cpi" />
@@ -561,14 +599,28 @@ function IkhtiarTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                        <Input label="CPI (mis. 1.02)" type="number" min={0} max={5} step="0.01" value={form.cpi} onChange={v => setForm({ ...form, cpi: v })} hint="Cost Performance Index — nilai kinerja biaya dari laporan EVA. 1 ke atas = hemat/efisien, di bawah 1 = boros." />
-                        <p className="mt-2 text-[11px] text-slate-500">≥ 1 = biaya efisien, &lt; 1 = over budget.</p>
-                    </div>
-                    <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                        <Input label="SPI (mis. 0.98)" type="number" min={0} max={5} step="0.01" value={form.spi} onChange={v => setForm({ ...form, spi: v })} hint="Schedule Performance Index — nilai kinerja jadwal dari laporan EVA. 1 ke atas = sesuai/lebih cepat, di bawah 1 = terlambat." />
-                        <p className="mt-2 text-[11px] text-slate-500">≥ 1 = sesuai/lebih cepat jadwal, &lt; 1 = terlambat.</p>
-                    </div>
+                    {cpiLocked ? (
+                        <IndexGauge title="CPI" hint="Cost Performance Index (kinerja biaya)" value={project.cpi} kind="cpi" />
+                    ) : (
+                        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                            <Input label="CPI (mis. 1.02)" type="number" min={0} max={5} step="0.01" value={form.cpi} onChange={v => setForm({ ...form, cpi: v })} hint="Cost Performance Index — nilai kinerja biaya dari laporan EVA. 1 ke atas = hemat/efisien, di bawah 1 = boros." />
+                            <p className="mt-2 text-[11px] text-slate-500">≥ 1 = biaya efisien, &lt; 1 = over budget.</p>
+                        </div>
+                    )}
+                    {spiLocked ? (
+                        <IndexGauge title="SPI" hint="Schedule Performance Index (kinerja jadwal)" value={project.spi} kind="spi" />
+                    ) : (
+                        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                            <Input label="SPI (mis. 0.98)" type="number" min={0} max={5} step="0.01" value={form.spi} onChange={v => setForm({ ...form, spi: v })} hint="Schedule Performance Index — nilai kinerja jadwal dari laporan EVA. 1 ke atas = sesuai/lebih cepat, di bawah 1 = terlambat." />
+                            <p className="mt-2 text-[11px] text-slate-500">≥ 1 = sesuai/lebih cepat jadwal, &lt; 1 = terlambat.</p>
+                        </div>
+                    )}
+                </div>
+            )}
+            {(evm.cv !== undefined || evm.sv !== undefined) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <MoneyCard label="CV — Cost Variance (BCWP − ACWP)" value={evm.cv} icon={CircleDollarSign} tone={(evm.cv ?? 0) >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} />
+                    <MoneyCard label="SV — Schedule Variance (BCWP − BCWS)" value={evm.sv} icon={CircleDollarSign} tone={(evm.sv ?? 0) >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} />
                 </div>
             )}
         </div>
@@ -589,8 +641,15 @@ function MoneyCard({ label, value, icon: Icon, tone }: { label: string; value?: 
     );
 }
 
-function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
     const [editing, setEditing] = useState(false);
+    // Tagihan bruto & hasil usaha diisi otomatis dari Laporan Bulanan terbaru bila tersedia.
+    const latestLap = latestLaporan(project.laporanBulanan);
+    const derivedLap = derivedFromLaporan(project);
+    const tagihanLocked = derivedLap.tagihanBruto !== undefined;
+    const huLocked = derivedLap.hasilUsaha !== undefined;
+    const cashInLocked = derivedLap.cashIn !== undefined;
+    const cashOutLocked = derivedLap.cashOut !== undefined;
     const isKendari = Boolean(project.name?.toLowerCase().includes('kendari'));
     const initForm = () => ({
         tagihanBruto: project.tagihanBruto?.toString() ?? (isKendari ? '49000000000' : ''),
@@ -623,18 +682,20 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
             const huP = form.huPendapatan === '' ? null : Number(form.huPendapatan);
             const huB = form.huBiaya === '' ? null : Number(form.huBiaya);
             await axios.patch(`/api/projects/${project._id}`, {
-                tagihanBruto: form.tagihanBruto === '' ? undefined : Number(form.tagihanBruto),
-                cashIn: form.cashIn === '' ? undefined : Number(form.cashIn),
-                cashOut: form.cashOut === '' ? undefined : Number(form.cashOut),
+                ...(tagihanLocked ? {} : { tagihanBruto: form.tagihanBruto === '' ? undefined : Number(form.tagihanBruto) }),
+                ...(cashInLocked ? {} : { cashIn: form.cashIn === '' ? undefined : Number(form.cashIn) }),
+                ...(cashOutLocked ? {} : { cashOut: form.cashOut === '' ? undefined : Number(form.cashOut) }),
                 saldoKas: form.saldoKas === '' ? autoSaldoKas : Number(form.saldoKas),
                 saldoHutang: form.saldoHutang === '' ? undefined : Number(form.saldoHutang),
                 bad: form.bad === '' ? undefined : Number(form.bad),
                 piutang: form.piutang === '' ? undefined : Number(form.piutang),
                 ccc: form.ccc === '' ? undefined : Number(form.ccc),
                 bebanKonstruksi: form.bebanKonstruksi === '' ? undefined : Number(form.bebanKonstruksi),
-                hasilUsaha: (huP != null || huB != null)
-                    ? { pendapatan: huP ?? 0, biaya: huB ?? 0, laba: (huP ?? 0) - (huB ?? 0) }
-                    : undefined,
+                ...(huLocked ? {} : {
+                    hasilUsaha: (huP != null || huB != null)
+                        ? { pendapatan: huP ?? 0, biaya: huB ?? 0, laba: (huP ?? 0) - (huB ?? 0) }
+                        : undefined,
+                }),
                 progressKeuangan: form.progressKeuangan,
                 tagihanBelumDiproses: form.tagihanBelumDiproses === '' ? undefined : Number(form.tagihanBelumDiproses),
             });
@@ -649,6 +710,13 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
         <div className="space-y-4">
             <SectionHeader title="Finansial" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { resetForm(); setEditing(false); }} onSave={save} saving={saving} />
 
+            {(tagihanLocked || huLocked || cashInLocked || cashOutLocked) && (
+                <DerivedNote
+                    what={[tagihanLocked && 'Tagihan bruto', huLocked && 'hasil usaha', (cashInLocked || cashOutLocked) && 'cash in/out'].filter(Boolean).join(', ')}
+                    periode={latestLap?.periode}
+                    onGo={isAdmin ? () => onGoTab('laporan') : undefined}
+                />
+            )}
             {!editing ? (
                 <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -666,7 +734,7 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 dark:text-slate-400">CCC — Cash Conversion Cycle</div>
                                 <div className="text-xl font-black text-slate-900 dark:text-white font-mono mt-1">{project.ccc} hari</div>
                             </div>
-                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${project.ccc > 90 ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${project.ccc > 90 ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
                                 {project.ccc > 90 ? '> 90 · Perhatian' : 'Normal'}
                             </span>
                         </div>
@@ -674,9 +742,15 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                 </>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <MoneyInput label="Tagihan Bruto" value={form.tagihanBruto} onChange={v => setForm({ ...form, tagihanBruto: v })} hint="Total tagihan bruto proyek (Rp)." />
-                    <MoneyInput label="Cash In" value={form.cashIn} onChange={v => setForm({ ...form, cashIn: v })} hint="Total uang yang sudah masuk/diterima proyek." />
-                    <MoneyInput label="Cash Out" value={form.cashOut} onChange={v => setForm({ ...form, cashOut: v })} hint="Total uang yang sudah keluar/dibelanjakan." />
+                    {tagihanLocked
+                        ? <MoneyCard label="Tagihan Bruto (dari Laporan Bulanan)" value={project.tagihanBruto} icon={Receipt} tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
+                        : <MoneyInput label="Tagihan Bruto" value={form.tagihanBruto} onChange={v => setForm({ ...form, tagihanBruto: v })} hint="Total tagihan bruto proyek (Rp)." />}
+                    {cashInLocked
+                        ? <MoneyCard label="Cash In (saldo awal + laporan bulanan)" value={project.cashIn} icon={ArrowDownRight} tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
+                        : <MoneyInput label="Cash In" value={form.cashIn} onChange={v => setForm({ ...form, cashIn: v })} hint="Total uang yang sudah masuk/diterima proyek." />}
+                    {cashOutLocked
+                        ? <MoneyCard label="Cash Out (saldo awal + laporan bulanan)" value={project.cashOut} icon={ArrowUpRight} tone="bg-rose-500/10 border-rose-500/20 text-rose-400" />
+                        : <MoneyInput label="Cash Out" value={form.cashOut} onChange={v => setForm({ ...form, cashOut: v })} hint="Total uang yang sudah keluar/dibelanjakan." />}
                     <div>
                         <MoneyInput label="Saldo Kas (kosongkan = otomatis)" value={form.saldoKas} onChange={v => setForm({ ...form, saldoKas: v })} hint="Sisa kas. Dikosongkan = dihitung otomatis dari Cash In − Cash Out." />
                         <p className="mt-1 text-[11px] text-slate-500">Otomatis: {formatIDR(autoSaldoKas)}</p>
@@ -702,28 +776,28 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                         <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Hasil Usaha (s.d periode)</h3>
-                                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${rugi ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${rugi ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
                                     Margin {margin.toFixed(2)}%
                                 </span>
                             </div>
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center">
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pendapatan</div>
+                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pendapatan</div>
                                     <div className="text-sm font-black text-sky-400 font-mono mt-1">{formatIDRShort(pendapatan)}</div>
                                 </div>
                                 <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 text-center">
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Biaya (HPP)</div>
+                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Biaya (HPP)</div>
                                     <div className="text-sm font-black text-rose-400 font-mono mt-1">{formatIDRShort(biaya)}</div>
                                 </div>
                                 <div className={`p-3 rounded-xl text-center border ${rugi ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{rugi ? 'Rugi' : 'Laba'}</div>
+                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{rugi ? 'Rugi' : 'Laba'}</div>
                                     <div className={`text-sm font-black font-mono mt-1 ${rugi ? 'text-rose-400' : 'text-emerald-400'}`}>{formatIDRShort(laba)}</div>
                                 </div>
                             </div>
                         </div>
                     );
                 })() : null
-            ) : (
+            ) : huLocked ? null : (
                 <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Hasil Usaha</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -747,7 +821,7 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                     <div className="flex items-center justify-between">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Progress Keuangan (DIPA)</h3>
                         <button onClick={() => setForm(f => ({ ...f, progressKeuangan: [...f.progressKeuangan, { tahun: new Date().getFullYear(), rencana: 0, realisasi: 0 }] }))}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                             <Plus className="w-3.5 h-3.5" /> Tambah Tahun
                         </button>
                     </div>
@@ -758,7 +832,7 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
                                 <Input label="Tahun" type="number" min={2000} max={2100} step={1} value={String(pk.tahun ?? "")} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], tahun: Number(v) }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
                                 <MoneyInput label="Pagu/Rencana" value={pk.rencana ? String(pk.rencana) : ""} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], rencana: Number(v) || 0 }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
                                 <MoneyInput label="Realisasi" value={pk.realisasi ? String(pk.realisasi) : ""} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], realisasi: Number(v) || 0 }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
-                                <button type="button" aria-label={`Hapus data tahun ${pk.tahun}`} onClick={() => setForm(f => ({ ...f, progressKeuangan: f.progressKeuangan.filter((_, j) => j !== i) }))} className="sm:col-span-3 justify-self-end inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition-colors">
+                                <button type="button" aria-label={`Hapus data tahun ${pk.tahun}`} onClick={() => setForm(f => ({ ...f, progressKeuangan: f.progressKeuangan.filter((_, j) => j !== i) }))} className="sm:col-span-3 justify-self-end inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                                     <Minus className="w-4 h-4" aria-hidden="true" /> Hapus tahun ini
                                 </button>
                             </div>
@@ -771,106 +845,11 @@ function FinansialTab({ project, isAdmin, onSaved }: { project: Project; isAdmin
     );
 }
 
-// ── Milestone ─────────────────────────────────────────────────────────────────
-function MilestonesTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
-    const [editing, setEditing] = useState(false);
-    const [list, setList] = useState<Milestone[]>(project.milestones ?? []);
-    const [saving, setSaving] = useState(false);
-
-    const save = async () => {
-        setSaving(true);
-        try { await axios.patch(`/api/projects/${project._id}`, { milestones: list }); toast.success('Milestone tersimpan'); setEditing(false); onSaved(); }
-        catch (err) { toast.error(saveErrorMessage(err)); } finally { setSaving(false); }
-    };
-
-    // Progress milestone individual (fallback: done => 100, else 0).
-    const prog = (m: Milestone) => (m.progress != null ? m.progress : (m.done ? 100 : 0));
-    // Progress keseluruhan = rata-rata progress tiap milestone.
-    const overall = list.length ? list.reduce((a, m) => a + prog(m), 0) / list.length : 0;
-
-    // Set progress satu milestone + sinkron 'done' (100% = selesai).
-    const setProgress = (i: number, v: number) => {
-        const p = Math.max(0, Math.min(100, Math.round(v)));
-        const a = [...list];
-        a[i] = { ...a[i], progress: p, done: p >= 100 };
-        setList(a);
-    };
-
-    return (
-        <div className="space-y-4">
-            <SectionHeader title="Milestone" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setList(project.milestones ?? []); setEditing(false); }} onSave={save} saving={saving} />
-
-            {list.length > 0 && (
-                <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                    <div className="flex justify-between items-center mb-2 text-xs">
-                        <span className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Progress Keseluruhan</span>
-                        <span className="text-slate-900 dark:text-white font-bold">{overall.toFixed(0)}%</span>
-                    </div>
-                    <div className="h-2.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                        <div className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-emerald-500 transition-all duration-500" style={{ width: `${overall}%` }} />
-                    </div>
-                </div>
-            )}
-
-            {editing && (
-                <button onClick={() => setList(s => [...s, { title: '', done: false, progress: 0 }])} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
-                    <Plus className="w-3.5 h-3.5" /> Tambah Milestone
-                </button>
-            )}
-
-            {list.length === 0 && !editing
-                ? <EmptyState text={isAdmin ? "Belum ada milestone." : "Belum ada milestone. Belum diisi oleh PIC proyek."} action={isAdmin ? { label: "Isi sekarang", onClick: () => setEditing(true) } : undefined} />
-                : editing
-                ? (
-                    <div className="space-y-3">
-                        {list.map((m, i) => (
-                            <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
-                                <div className="flex gap-2 items-center">
-                                    <input placeholder="Judul milestone (mis. Pekerjaan Struktur)" value={m.title} onChange={e => { const a = [...list]; a[i] = { ...a[i], title: e.target.value }; setList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    <input type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...list]; a[i] = { ...a[i], date: e.target.value }; setList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    <button onClick={() => setList(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-16 shrink-0">Progress</span>
-                                    <input type="range" min={0} max={100} step={1} value={prog(m)} onChange={e => setProgress(i, Number(e.target.value))} className="flex-1 accent-[var(--div-accent)]" />
-                                    <input type="number" min={0} max={100} value={prog(m)} onChange={e => setProgress(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    <span className="text-sm font-black div-accent-text w-6">%</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="space-y-2.5">
-                        {list.map((m, i) => {
-                            const p = prog(m);
-                            const complete = p >= 100;
-                            return (
-                                <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                                    <div className="flex items-center gap-3 mb-2.5">
-                                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${complete ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-black/[0.04] dark:bg-white/5 text-slate-500 border border-black/10 dark:border-white/10'}`}>
-                                            {complete ? <Check className="w-4 h-4" /> : <span className="text-xs font-black">{i + 1}</span>}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className={`text-sm font-bold ${complete ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{m.title || '-'}</div>
-                                            {m.date && <div className="text-[11px] text-slate-500">{formatDate(typeof m.date === 'string' ? m.date : undefined)}</div>}
-                                        </div>
-                                        <span className={`text-sm font-black font-mono shrink-0 ${complete ? 'text-emerald-400' : 'text-yellow-400'}`}>{p}%</span>
-                                    </div>
-                                    <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                                        <div className={`h-full rounded-full transition-all duration-500 ${complete ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`} style={{ width: `${p}%` }} />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )
-            }
-        </div>
-    );
-}
-
 // ── Operasi (Kinerja Operasi + Progress Mingguan W1-W4 + Milestone + Sumber Daya) ──────────
-function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
+    // PU/BK/LK diisi otomatis dari Laporan Bulanan terbaru (hasil usaha s.d bulan ini) bila tersedia.
+    const latestLap = latestLaporan(project.laporanBulanan);
+    const kinerjaLocked = derivedFromLaporan(project).pu !== undefined;
     // ── State untuk Kinerja Operasi PU/BK/LK ──
     const [editingKinerja, setEditingKinerja] = useState(false);
     const [kinerjaForm, setKinerjaForm] = useState({
@@ -992,42 +971,43 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
             <div className="space-y-4">
                 <SectionHeader
                     title="Kinerja Operasi (PU / BK / LK)"
-                    isAdmin={isAdmin}
+                    isAdmin={isAdmin && !kinerjaLocked}
                     editing={editingKinerja}
                     onEdit={() => setEditingKinerja(true)}
                     onCancel={() => { setKinerjaForm({ pu: project.pu?.toString() ?? '', bk: project.bk?.toString() ?? '' }); setEditingKinerja(false); }}
                     onSave={saveKinerja}
                     saving={savingKinerja}
                 />
+                {kinerjaLocked && <DerivedNote what="PU, BK, dan LK" periode={latestLap?.periode} onGo={isAdmin ? () => onGoTab('laporan') : undefined} />}
                 {!editingKinerja ? (
                     (project.pu != null || project.bk != null || project.lk != null) ? (
                         <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs text-slate-500 dark:text-slate-400">Hasil kinerja operasi proyek periode berjalan.</span>
                                 {marginKinerja != null && (
-                                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${rugiKinerja ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${rugiKinerja ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
                                         LK {marginKinerja.toFixed(1)}%
                                     </span>
                                 )}
                             </div>
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center space-y-1">
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">PU</div>
+                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">PU</div>
                                     <div className="text-base font-black text-sky-400 font-mono">{formatIDRShort(project.pu)}</div>
-                                    <div className="text-[10px] text-slate-500 font-mono">{project.pu != null ? formatIDR(project.pu) : ''}</div>
+                                    <div className="text-[11px] text-slate-500 font-mono">{project.pu != null ? formatIDR(project.pu) : ''}</div>
                                 </div>
                                 <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/20 text-center space-y-1">
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">BK</div>
+                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">BK</div>
                                     <div className="text-base font-black text-rose-400 font-mono">{formatIDRShort(project.bk)}</div>
-                                    <div className="text-[10px] text-slate-500 font-mono">{project.bk != null ? formatIDR(project.bk) : ''}</div>
+                                    <div className="text-[11px] text-slate-500 font-mono">{project.bk != null ? formatIDR(project.bk) : ''}</div>
                                 </div>
                                 <div className={`p-4 rounded-xl text-center border space-y-1 ${rugiKinerja ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
-                                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{rugiKinerja ? 'LK (Rugi)' : 'LK'}</div>
+                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{rugiKinerja ? 'LK (Rugi)' : 'LK'}</div>
                                     <div className={`text-base font-black font-mono ${rugiKinerja ? 'text-rose-400' : 'text-emerald-400'}`}>{formatIDRShort(lk)}</div>
-                                    <div className="text-[10px] text-slate-500 font-mono">{formatIDR(lk)}</div>
+                                    <div className="text-[11px] text-slate-500 font-mono">{formatIDR(lk)}</div>
                                 </div>
                             </div>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold border-t border-black/5 dark:border-white/5 pt-3">
+                            <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold border-t border-black/5 dark:border-white/5 pt-3">
                                 PU · Pendapatan Usaha &nbsp;·&nbsp; BK · Beban Konstruksi &nbsp;·&nbsp; LK · Laba Kotor
                             </p>
                         </div>
@@ -1049,13 +1029,13 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                     <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Mingguan (W1–W4) · RA / RI</h3>
                     {isAdmin && (editingMinggu ? (
                         <div className="flex gap-2">
-                            <button onClick={() => { setMingguList(project.progressMinggu ?? []); setEditingMinggu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveMinggu} disabled={savingMinggu} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={() => { setMingguList(project.progressMinggu ?? []); setEditingMinggu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
+                            <button onClick={saveMinggu} disabled={savingMinggu} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
-                            <button onClick={() => setMingguList(s => [...s, { bulan: '', tahun: new Date().getFullYear(), w1Ra: 0, w1Ri: 0, w2Ra: 0, w2Ri: 0, w3Ra: 0, w3Ri: 0, w4Ra: 0, w4Ri: 0 }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Tambah Bulan</button>
-                            <button onClick={() => setEditingMinggu(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                            <button onClick={() => setMingguList(s => [...s, { bulan: '', tahun: new Date().getFullYear(), w1Ra: 0, w1Ri: 0, w2Ra: 0, w2Ri: 0, w3Ra: 0, w3Ri: 0, w4Ra: 0, w4Ri: 0 }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Plus className="w-3.5 h-3.5" /> Tambah Bulan</button>
+                            <button onClick={() => setEditingMinggu(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
                         </div>
                     ))}
                 </div>
@@ -1067,22 +1047,22 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                             {mingguList.map((row, i) => (
                                 <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
                                     <div className="flex items-center gap-3">
-                                        <input placeholder="Bulan (mis. Oktober 2026)" value={row.bulan} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], bulan: e.target.value }; setMingguList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <input type="number" placeholder="Tahun" value={row.tahun} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setMingguList(a); }} className="w-24 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <button onClick={() => setMingguList(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                                        <input aria-label="Bulan (mis. Oktober 2026)" placeholder="Bulan (mis. Oktober 2026)" value={row.bulan} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], bulan: e.target.value }; setMingguList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <input aria-label="Tahun" type="number" placeholder="Tahun" value={row.tahun} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setMingguList(a); }} className="w-24 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <button onClick={() => setMingguList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                                     </div>
                                     <div className="grid grid-cols-4 gap-2">
                                         {WEEKS.map(w => (
                                             <div key={w} className="space-y-2">
-                                                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
+                                                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
                                                 <div className="space-y-1">
                                                     <div>
                                                         <label className="text-[11px] text-sky-400 font-bold uppercase">RA (%)</label>
-                                                        <input type="number" min={0} max={100} step={0.01} value={getW(row, w, 'Ra')} onChange={e => { const a = [...mingguList]; (a[i] as any)[`${w.toLowerCase()}Ra`] = Number(e.target.value); setMingguList(a); }} className="w-full mt-0.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-sky-500/20 text-slate-900 dark:text-white text-xs outline-none focus:border-sky-500/50" />
+                                                        <input aria-label="Rencana (Ra) minggu" type="number" min={0} max={100} step={0.01} value={getW(row, w, 'Ra')} onChange={e => { const a = [...mingguList]; (a[i] as unknown as Record<string, number>)[`${w.toLowerCase()}Ra`] = Number(e.target.value); setMingguList(a); }} className="w-full mt-0.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-sky-500/20 text-slate-900 dark:text-white text-xs outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-sky-500/50" />
                                                     </div>
                                                     <div>
                                                         <label className="text-[11px] text-amber-400 font-bold uppercase">RI (%)</label>
-                                                        <input type="number" min={0} max={100} step={0.01} value={getW(row, w, 'Ri')} onChange={e => { const a = [...mingguList]; (a[i] as any)[`${w.toLowerCase()}Ri`] = Number(e.target.value); setMingguList(a); }} className="w-full mt-0.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-amber-500/20 text-slate-900 dark:text-white text-xs outline-none focus:border-amber-500/50" />
+                                                        <input aria-label="Realisasi (Ri) minggu" type="number" min={0} max={100} step={0.01} value={getW(row, w, 'Ri')} onChange={e => { const a = [...mingguList]; (a[i] as unknown as Record<string, number>)[`${w.toLowerCase()}Ri`] = Number(e.target.value); setMingguList(a); }} className="w-full mt-0.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-amber-500/20 text-slate-900 dark:text-white text-xs outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-amber-500/50" />
                                                     </div>
                                                 </div>
                                             </div>
@@ -1098,9 +1078,9 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <div className="text-sm font-bold text-slate-900 dark:text-white">{row.bulan || `Bulan ${i+1}`}</div>
-                                            {row.tahun && <div className="text-[10px] text-slate-500 font-mono">Tahun {row.tahun}</div>}
+                                            {row.tahun && <div className="text-[11px] text-slate-500 font-mono">Tahun {row.tahun}</div>}
                                         </div>
-                                        <div className="flex gap-2 text-[10px] font-bold">
+                                        <div className="flex gap-2 text-[11px] font-bold">
                                             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-400" /> RA (Rencana)</span>
                                             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" /> RI (Realisasi)</span>
                                         </div>
@@ -1114,7 +1094,7 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                             const deviasi = ri - ra;
                                             return (
                                                 <div key={w} className="space-y-2">
-                                                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
+                                                    <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
                                                     {/* Visual stacked bar */}
                                                     <div className="relative h-20 rounded-xl bg-black/[0.04] dark:bg-white/[0.04] border border-black/5 dark:border-white/5 overflow-hidden flex flex-col justify-end">
                                                         {/* RA bar */}
@@ -1131,8 +1111,8 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                                         />
                                                     </div>
                                                     <div className="text-center space-y-0.5">
-                                                        <div className="text-[10px] text-sky-400 font-mono font-bold">{ra.toFixed(1)}%</div>
-                                                        <div className={`text-[10px] font-mono font-bold ${ahead ? 'text-emerald-400' : 'text-rose-400'}`}>{ri.toFixed(1)}%</div>
+                                                        <div className="text-[11px] text-sky-400 font-mono font-bold">{ra.toFixed(1)}%</div>
+                                                        <div className={`text-[11px] font-mono font-bold ${ahead ? 'text-emerald-400' : 'text-rose-400'}`}>{ri.toFixed(1)}%</div>
                                                         <div className={`text-[11px] font-bold ${ahead ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                             {deviasi >= 0 ? '+' : ''}{deviasi.toFixed(1)}
                                                         </div>
@@ -1147,8 +1127,8 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                             <thead>
                                                 <tr className="border-b border-black/5 dark:border-white/5">
                                                     <th className="py-1.5 px-2 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Minggu</th>
-                                                    <th className="py-1.5 px-2 text-center text-[10px] font-bold uppercase tracking-wider text-sky-400">RA (%)</th>
-                                                    <th className="py-1.5 px-2 text-center text-[10px] font-bold uppercase tracking-wider text-amber-400">RI (%)</th>
+                                                    <th className="py-1.5 px-2 text-center text-[11px] font-bold uppercase tracking-wider text-sky-400">RA (%)</th>
+                                                    <th className="py-1.5 px-2 text-center text-[11px] font-bold uppercase tracking-wider text-amber-400">RI (%)</th>
                                                     <th className="py-1.5 px-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Deviasi</th>
                                                 </tr>
                                             </thead>
@@ -1193,7 +1173,7 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                 )}
 
                 {editingMs && (
-                    <button onClick={() => setMsList(s => [...s, { title: '', done: false, progress: 0 }])} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                    <button onClick={() => setMsList(s => [...s, { title: '', done: false, progress: 0 }])} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                         <Plus className="w-3.5 h-3.5" /> Tambah Milestone
                     </button>
                 )}
@@ -1206,14 +1186,14 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                             {msList.map((m, i) => (
                                 <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
                                     <div className="flex gap-2 items-center">
-                                        <input placeholder="Judul milestone" value={m.title} onChange={e => { const a = [...msList]; a[i] = { ...a[i], title: e.target.value }; setMsList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <input type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...msList]; a[i] = { ...a[i], date: e.target.value }; setMsList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <button onClick={() => setMsList(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0"><Trash2 className="w-4 h-4" /></button>
+                                        <input aria-label="Judul milestone" placeholder="Judul milestone" value={m.title} onChange={e => { const a = [...msList]; a[i] = { ...a[i], title: e.target.value }; setMsList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <input aria-label="Tanggal milestone" type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...msList]; a[i] = { ...a[i], date: e.target.value }; setMsList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <button onClick={() => setMsList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-16 shrink-0">Progress</span>
-                                        <input type="range" min={0} max={100} step={1} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="flex-1 accent-[var(--div-accent)]" />
-                                        <input type="number" min={0} max={100} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-16 shrink-0">Progress</span>
+                                        <input aria-label="Progres milestone (slider)" type="range" min={0} max={100} step={1} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="flex-1 accent-[var(--div-accent)]" />
+                                        <input aria-label="Progres milestone (persen)" type="number" min={0} max={100} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         <span className="text-sm font-black div-accent-text w-6">%</span>
                                     </div>
                                 </div>
@@ -1253,7 +1233,7 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
 
                 {editingSd && (
                     <button onClick={() => setSumberDaya(s => [...s, { namaAlat: '', jumlah: 0, kategori: '', satuan: 'Unit' }])}
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                         <Plus className="w-3.5 h-3.5" /> Tambah Sumber Daya
                     </button>
                 )}
@@ -1267,22 +1247,22 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                 <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                                     <div className="sm:col-span-4">
                                         <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Nama</label>
-                                        <input placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <input aria-label="mis. Excavator, Tukang, Besi Beton" placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-3">
                                         <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Kategori</label>
-                                        <input list="sd-kategori-op" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <input aria-label="Alat Berat / Tenaga Kerja / Material" list="sd-kategori-op" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-2">
                                         <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Jumlah</label>
-                                        <input type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <input aria-label="Jumlah" type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-2">
                                         <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Satuan</label>
-                                        <input list="sd-satuan-op" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                        <input aria-label="Unit / Orang / m³" list="sd-satuan-op" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-1 flex sm:justify-center">
-                                        <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                                        <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                                     </div>
                                 </div>
                             ))}
@@ -1303,7 +1283,7 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                             <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 text-center">
                                                 <div className={`text-3xl font-black mb-1 ${sd.jumlah > 0 ? 'div-accent-text' : 'text-slate-600'}`}>{sd.jumlah}</div>
                                                 <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{sd.namaAlat || '-'}</div>
-                                                <div className="text-[10px] text-slate-600 uppercase tracking-wider">{sd.satuan || 'Unit'}</div>
+                                                <div className="text-[11px] text-slate-600 uppercase tracking-wider">{sd.satuan || 'Unit'}</div>
                                             </div>
                                         ))}
                                     </div>
@@ -1316,11 +1296,12 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                 {/* Monitoring Pengadaan */}
                 <div className="pt-6 mt-2 border-t border-black/5 dark:border-white/5">
                     <SectionHeader title="Monitoring Pengadaan" isAdmin={isAdmin} editing={editingMon} onEdit={() => setEditingMon(true)} onCancel={() => { setMonitoring(project.monitoringPengadaan ?? []); setEditingMon(false); }} onSave={saveMonitoring} saving={savingMon} />
+                    <p className="text-[11px] text-slate-500">Progres per item major. Jumlah paket dan pagu pengadaan keseluruhan diisi di <button type="button" onClick={() => onGoTab('laporan')} className="font-bold underline focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none rounded">Laporan Bulanan</button>.</p>
                     <p className="text-xs text-slate-500 -mt-2 mb-3">Major item pengadaan beserta persentase progresnya.</p>
 
                     {editingMon && (
                         <button onClick={() => setMonitoring(s => [...s, { nama: '', persentase: 0 }])}
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold mb-3">
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold mb-3 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                             <Plus className="w-3.5 h-3.5" /> Tambah Item
                         </button>
                     )}
@@ -1334,14 +1315,14 @@ function OperasiTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: 
                                     <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                                         <div className="sm:col-span-8">
                                             <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Nama Item</label>
-                                            <input placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                            <input aria-label="mis. Pengadaan Besi Beton" placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         </div>
                                         <div className="sm:col-span-3">
                                             <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Persentase (%)</label>
-                                            <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                            <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         </div>
                                         <div className="sm:col-span-1 flex sm:justify-center">
-                                            <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                                            <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                                         </div>
                                     </div>
                                 ))}
@@ -1396,7 +1377,7 @@ function ChangeManagementTab({ project, isAdmin, onSaved }: { project: Project; 
             <p className="text-xs text-slate-500 -mt-2">Daftar perubahan lingkup/kontrak. Kendala dapat dimasukkan ke sini dari tab Isu &amp; Kendala.</p>
 
             {editing && (
-                <button onClick={() => setList(s => [...s, { judul: '', status: 'USULAN' }])} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                <button onClick={() => setList(s => [...s, { judul: '', status: 'USULAN' }])} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                     <Plus className="w-3.5 h-3.5" /> Tambah Perubahan
                 </button>
             )}
@@ -1419,10 +1400,10 @@ function ChangeManagementTab({ project, isAdmin, onSaved }: { project: Project; 
                                     <Input label="Target Implementasi" value={cm.target ?? ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], target: v }; setList(a); }} />
                                     <Input label="PIC" value={cm.pic ?? ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], pic: v }; setList(a); }} />
                                     <div className="sm:col-span-2">
-                                        <Select label="Status" value={cm.status} onChange={v => { const a = [...list]; a[i] = { ...a[i], status: v as any }; setList(a); }} options={[['USULAN', 'USULAN'], ['DISETUJUI', 'DISETUJUI'], ['DITOLAK', 'DITOLAK']]} />
+                                        <Select label="Status" value={cm.status} onChange={v => { const a = [...list]; a[i] = { ...a[i], status: v as ChangeManagement['status'] }; setList(a); }} options={[['USULAN', 'USULAN'], ['DISETUJUI', 'DISETUJUI'], ['DITOLAK', 'DITOLAK']]} />
                                     </div>
                                 </div>
-                                <button onClick={() => setList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
+                                <button onClick={() => setList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
                             </div>
                         ))}
                     </div>
@@ -1437,11 +1418,11 @@ function ChangeManagementTab({ project, isAdmin, onSaved }: { project: Project; 
                                             <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0 font-black text-xs">{i + 1}</div>
                                             <div className="min-w-0">
                                                 <p className="text-sm font-bold text-slate-900 dark:text-white break-words">{cm.judul || '-'}</p>
-                                                {cm.dariKendala && <span className="text-[10px] text-indigo-300/70 inline-flex items-center gap-1"><GitBranch className="w-3 h-3" /> Dari kendala</span>}
+                                                {cm.dariKendala && <span className="text-[11px] text-indigo-300/70 inline-flex items-center gap-1"><GitBranch className="w-3 h-3" /> Dari kendala</span>}
                                             </div>
                                         </div>
                                         <div className="flex flex-col items-end gap-1 shrink-0">
-                                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${st.color}`}>{st.label}</span>
+                                            <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${st.color}`}>{st.label}</span>
                                             <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-white/15 bg-white/[0.04] text-slate-600 dark:text-slate-300">
                                                 {(CHANGE_JENIS_OPTIONS.find(o => o.value === (cm.jenis ?? 'LAINNYA'))?.label) ?? 'Lain-lain'}
                                             </span>
@@ -1488,7 +1469,8 @@ function computeCompleteness(p: Project) {
     const items: { label: string; done: boolean; tab: Tab }[] = [
         { label: 'Informasi (PIC, pelaksana, tanggal)', done: has(p.pmName) && (has(p.penyediaJasa) || has(p.contractor)) && has(p.startDate) && has(p.endDate), tab: 'info' },
         { label: 'Kontrak (nomor & nilai)', done: has(p.contractNumber) && has(p.contractValue), tab: 'contract' },
-        { label: 'Ikhtiar (CPI / SPI)', done: has(p.cpi) && has(p.spi), tab: 'ikhtiar' },
+        { label: 'Laporan bulanan (bulan ini / bulan lalu)', done: isLaporanFresh(p.laporanBulanan), tab: 'laporan' },
+        { label: 'Ringkasan (CPI / SPI)', done: has(p.cpi) && has(p.spi), tab: 'ikhtiar' },
         { label: 'Finansial (cash / hutang / piutang)', done: finansialFilled >= 2, tab: 'finansial' },
         { label: 'Kinerja Operasi (PU / BK / LK)', done: hasHasilUsaha || (has(p.pu) && has(p.bk)), tab: 'operasi' },
         { label: 'Progres fisik', done: has(p.progressPercent), tab: 'progress' },
@@ -1524,7 +1506,7 @@ function CompletenessCard({ project, onGoTab }: { project: Project; onGoTab: (t:
                             <button
                                 key={i}
                                 onClick={() => onGoTab(m.tab)}
-                                className="px-2.5 py-1 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-[rgba(var(--div-accent-rgb),0.15)] border border-black/10 dark:border-white/10 hover:border-[rgba(var(--div-accent-rgb),0.4)] text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-[var(--div-accent)] transition-colors"
+                                className="px-2.5 py-1 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-[rgba(var(--div-accent-rgb),0.15)] border border-black/10 dark:border-white/10 hover:border-[rgba(var(--div-accent-rgb),0.4)] text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-[var(--div-accent)] transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                             >
                                 {m.label}
                             </button>
@@ -1562,7 +1544,7 @@ function SummaryTab({ project, status, onlineCams, onGoTab }: { project: Project
                     <div key={c.label} className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                         <div className="flex items-center gap-2 text-slate-500 mb-2">
                             <c.icon className="w-4 h-4" />
-                            <span className="text-[10px] font-bold uppercase tracking-wider">{c.label}</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider">{c.label}</span>
                         </div>
                         <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-white break-words leading-snug">{c.value}</div>
                     </div>
@@ -1623,7 +1605,7 @@ function ProgressFisikCard({ rencana, realisasi, deviasi }: { rencana: number; r
                     </div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Fisik</h3>
                 </div>
-                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
                     isAhead ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                 }`}>
                     {isAhead ? '● On Schedule' : '● Deviasi Negatif'}
@@ -1647,8 +1629,8 @@ function ProgressFisikCard({ rencana, realisasi, deviasi }: { rencana: number; r
                             </linearGradient>
                         </defs>
                         {/* Background Tracks */}
-                        <circle cx={C} cy={C} r={R_OUT} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={STROKE} />
-                        <circle cx={C} cy={C} r={R_IN}  fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth={STROKE - 2} />
+                        <circle cx={C} cy={C} r={R_OUT} fill="none" className="stroke-black/10 dark:stroke-white/[0.06]" strokeWidth={STROKE} />
+                        <circle cx={C} cy={C} r={R_IN}  fill="none" className="stroke-black/5 dark:stroke-white/[0.03]" strokeWidth={STROKE - 2} />
 
                         {/* Rencana Inner Ring */}
                         <motion.circle
@@ -1677,7 +1659,7 @@ function ProgressFisikCard({ rencana, realisasi, deviasi }: { rencana: number; r
                         <div className="text-3xl font-black text-slate-900 dark:text-white leading-none my-0.5">
                             {realisasi.toFixed(2)}<span className="text-sm text-amber-400 font-extrabold">%</span>
                         </div>
-                        <div className={`flex items-center gap-0.5 text-[10px] font-bold ${isAhead ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <div className={`flex items-center gap-0.5 text-[11px] font-bold ${isAhead ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {isAhead ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                             <span>{isAhead ? '+' : ''}{deviasi.toFixed(2)}%</span>
                         </div>
@@ -1745,7 +1727,7 @@ function ProgressKeuanganCard({
                     </div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Keuangan</h3>
                 </div>
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/30">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/30">
                     {totalPct.toFixed(1)}% Terserap
                 </span>
             </div>
@@ -1763,7 +1745,7 @@ function ProgressKeuanganCard({
                             </linearGradient>
                         </defs>
                         {/* Background Track (Sisa Anggaran) */}
-                        <circle cx={C} cy={C} r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={STROKE} />
+                        <circle cx={C} cy={C} r={R} fill="none" className="stroke-black/10 dark:stroke-white/[0.06]" strokeWidth={STROKE} />
 
                         {/* Realisasi Arc */}
                         <motion.circle
@@ -1783,7 +1765,7 @@ function ProgressKeuanganCard({
                         <div className="text-3xl font-black text-slate-900 dark:text-white leading-none my-0.5">
                             {totalPct.toFixed(1)}<span className="text-sm text-sky-400 font-extrabold">%</span>
                         </div>
-                        <span className="text-[10px] font-mono text-slate-600 dark:text-slate-300 font-bold truncate max-w-[130px]">
+                        <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 font-bold truncate max-w-[130px]">
                             {formatIDRShort(totalRealisasi)}
                         </span>
                     </div>
@@ -1804,7 +1786,7 @@ function ProgressKeuanganCard({
                                     </span>
                                     <span className="text-sky-400 font-mono font-bold">{pct.toFixed(1)}%</span>
                                 </div>
-                                <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                                <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
                                     <span>Realisasi: <strong className="text-slate-600 dark:text-slate-300 font-semibold">{formatIDRShort(pk.realisasi)}</strong></span>
                                     <span>Pagu: <strong className="text-slate-500 dark:text-slate-400 font-normal">{formatIDRShort(pk.rencana)}</strong></span>
                                 </div>
@@ -1828,28 +1810,6 @@ function ProgressKeuanganCard({
                         <span className="text-amber-400 font-bold font-mono">{formatIDR(tagihanBelumDiproses)}</span>
                     </div>
                 )}
-            </div>
-        </div>
-    );
-}
-
-function ProgressBar({ label, percent, color, hidePct }: { label: string; percent: number; color: string; hidePct?: boolean }) {
-    const clamped = Math.max(0, Math.min(100, percent));
-    return (
-        <div>
-            {label && (
-                <div className="flex justify-between items-center mb-1.5">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
-                    {!hidePct && <span className="text-xs font-bold text-slate-900 dark:text-white">{clamped.toFixed(2)}%</span>}
-                </div>
-            )}
-            <div className="h-2.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                <motion.div
-                    className={`h-full rounded-full ${color}`}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${clamped}%` }}
-                    transition={{ duration: 0.8, ease: 'easeOut' }}
-                />
             </div>
         </div>
     );
@@ -1906,7 +1866,7 @@ function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project
                         <Input label="Pengawas"       value={form.pengawas}      onChange={v => setForm({ ...form, pengawas: v })} />
                         <Input label="Penyedia Jasa"  value={form.penyediaJasa}  onChange={v => setForm({ ...form, penyediaJasa: v })} />
                         <Input label="Kontraktor"     value={form.contractor}    onChange={v => setForm({ ...form, contractor: v })} />
-                        <Select label="Status" value={form.status} onChange={v => setForm({ ...form, status: v as any })} options={[['planning', 'Perencanaan'], ['ongoing', 'Berjalan'], ['completed', 'Selesai']]} />
+                        <Select label="Status" value={form.status} onChange={v => setForm({ ...form, status: v as 'planning' | 'ongoing' | 'completed' })} options={[['planning', 'Perencanaan'], ['ongoing', 'Berjalan'], ['completed', 'Selesai']]} />
                         <Input label="Tanggal Mulai"  type="date" value={form.startDate} onChange={v => setForm({ ...form, startDate: v })} />
                         <Input label="Tanggal Selesai" type="date" value={form.endDate} onChange={v => setForm({ ...form, endDate: v })} />
                         <Input label="PIC"            value={form.pmName}        onChange={v => setForm({ ...form, pmName: v })} />
@@ -2048,7 +2008,7 @@ function PicPanel({ projectId }: { projectId: string }) {
                                 <button
                                     onClick={() => removePic(sub)}
                                     disabled={saving}
-                                    className="w-4 h-4 rounded-full bg-black/5 dark:bg-white/10 hover:bg-rose-500/30 flex items-center justify-center transition-colors disabled:opacity-50"
+                                    className="w-6 h-6 min-w-6 rounded-full bg-black/5 dark:bg-white/10 hover:bg-rose-500/30 flex items-center justify-center transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                                     aria-label="Hapus PIC"
                                 >
                                     <X className="w-3 h-3" />
@@ -2063,6 +2023,7 @@ function PicPanel({ projectId }: { projectId: string }) {
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
+                            aria-label="Cari user SSO untuk ditambahkan sebagai PIC"
                             placeholder="Cari user SSO untuk ditambahkan sebagai PIC..."
                             className="w-full px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-[rgba(var(--div-accent-rgb),0.5)] outline-none"
                         />
@@ -2083,7 +2044,7 @@ function PicPanel({ projectId }: { projectId: string }) {
                                     key={u.cognitoSub}
                                     onClick={() => addPic(u)}
                                     disabled={saving || picSubs.includes(u.cognitoSub)}
-                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-[rgba(var(--div-accent-rgb),0.1)] border border-transparent hover:border-[rgba(var(--div-accent-rgb),0.2)] transition-colors text-left disabled:opacity-50"
+                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-[rgba(var(--div-accent-rgb),0.1)] border border-transparent hover:border-[rgba(var(--div-accent-rgb),0.2)] transition-colors text-left disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                                 >
                                     <div className="min-w-0">
                                         <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{u.fullName || u.username}</div>
@@ -2195,8 +2156,14 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
 }
 
 // ── Progress ─────────────────────────────────────────────────────────────────
-function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+function ProgressTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
     const [editing, setEditing] = useState(false);
+    // Progres fisik diturunkan dari Kurva S (RI & RA RKAP ÷ nilai kontrak) bila tersedia.
+    const derivedLap = derivedFromLaporan(project);
+    const realLocked = derivedLap.progressPercent !== undefined;
+    const planLocked = derivedLap.progressRencana !== undefined;
+    const devLocked = derivedLap.progressDeviasi !== undefined;
+    const latestLap = latestLaporan(project.laporanBulanan);
     const [form, setForm] = useState({
         progressPercent: project.progressPercent ?? 0,
         progressRencana: project.progressRencana ?? 0,
@@ -2208,7 +2175,15 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
     const save = async () => {
         setSaving(true);
         try {
-            await axios.patch(`/api/projects/${project._id}`, { ...form });
+            // Deviasi dihitung dari nilai efektif (turunan bila terkunci, form bila tidak).
+            const effReal = realLocked ? (project.progressPercent ?? 0) : form.progressPercent;
+            const effPlan = planLocked ? (project.progressRencana ?? 0) : form.progressRencana;
+            await axios.patch(`/api/projects/${project._id}`, {
+                lingkupPekerjaan: form.lingkupPekerjaan,
+                ...(realLocked ? {} : { progressPercent: form.progressPercent }),
+                ...(planLocked ? {} : { progressRencana: form.progressRencana }),
+                ...(devLocked ? {} : { progressDeviasi: Math.round((effReal - effPlan) * 100) / 100 }),
+            });
             toast.success('Progres tersimpan');
             setEditing(false);
             onSaved();
@@ -2217,12 +2192,19 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
     };
 
     const deviasi = editing
-        ? (form.progressPercent - form.progressRencana)
+        ? ((realLocked ? (project.progressPercent ?? 0) : form.progressPercent) - (planLocked ? (project.progressRencana ?? 0) : form.progressRencana))
         : (project.progressDeviasi ?? ((project.progressPercent ?? 0) - (project.progressRencana ?? 0)));
 
     return (
         <div className="space-y-4">
             <SectionHeader title="Progres Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} />
+            {(realLocked || planLocked) && (
+                <DerivedNote
+                    what={realLocked && planLocked ? 'Progres fisik (rencana & realisasi)' : realLocked ? 'Realisasi progres fisik' : 'Rencana progres fisik'}
+                    periode={latestLap?.periode}
+                    onGo={isAdmin ? () => onGoTab('laporan') : undefined}
+                />
+            )}
 
             {!editing ? (
                 <ProgressFisikCard
@@ -2236,14 +2218,15 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                     <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Progress Fisik</h3>
                         <div className="space-y-4">
-                            <div>
+                            {!planLocked && <div>
                                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Rencana: {form.progressRencana.toFixed(2)}%</label>
-                                <input type="range" min={0} max={100} step={0.01} value={form.progressRencana} onChange={e => setForm({ ...form, progressRencana: Number(e.target.value) })} className="w-full mt-2 accent-slate-400" />
-                            </div>
-                            <div>
+                                <input aria-label="Progres rencana (persen)" type="range" min={0} max={100} step={0.01} value={form.progressRencana} onChange={e => setForm({ ...form, progressRencana: Number(e.target.value) })} className="w-full mt-2 accent-slate-400" />
+                            </div>}
+                            {!realLocked && <div>
                                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Realisasi: {form.progressPercent.toFixed(2)}%</label>
-                                <input type="range" min={0} max={100} step={0.01} value={form.progressPercent} onChange={e => setForm({ ...form, progressPercent: Number(e.target.value) })} className="w-full mt-2 accent-[var(--div-accent)]" />
-                            </div>
+                                <input aria-label="Progres realisasi (persen)" type="range" min={0} max={100} step={0.01} value={form.progressPercent} onChange={e => setForm({ ...form, progressPercent: Number(e.target.value) })} className="w-full mt-2 accent-[var(--div-accent)]" />
+                            </div>}
+                            {realLocked && planLocked && <p className="text-xs text-slate-500">Rencana dan realisasi mengikuti Laporan Bulanan.</p>}
                         </div>
                         <div className="flex justify-between items-center pt-1 border-t border-black/5 dark:border-white/5">
                             <span className="text-xs text-slate-500 dark:text-slate-400">Deviasi</span>
@@ -2262,7 +2245,7 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Lingkup Pekerjaan</h3>
                     {editing && (
                         <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: [...f.lingkupPekerjaan, ''] }))}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                             <Plus className="w-3.5 h-3.5" /> Tambah
                         </button>
                     )}
@@ -2272,8 +2255,8 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                     : editing
                     ? form.lingkupPekerjaan.map((lp, i) => (
                         <div key={i} className="flex gap-2">
-                            <input value={lp} onChange={e => { const a = [...form.lingkupPekerjaan]; a[i] = e.target.value; setForm(f => ({ ...f, lingkupPekerjaan: a })); }} className="flex-1 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                            <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: f.lingkupPekerjaan.filter((_, j) => j !== i) }))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Minus className="w-4 h-4" /></button>
+                            <input aria-label="Lingkup pekerjaan" value={lp} onChange={e => { const a = [...form.lingkupPekerjaan]; a[i] = e.target.value; setForm(f => ({ ...f, lingkupPekerjaan: a })); }} className="flex-1 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                            <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: f.lingkupPekerjaan.filter((_, j) => j !== i) }))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Minus className="w-4 h-4" aria-hidden="true" /></button>
                         </div>
                     ))
                     : (
@@ -2281,179 +2264,6 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                             {(project.lingkupPekerjaan || []).map((lp, i) => (
                                 <span key={i} className="px-3 py-1 rounded-full text-xs font-medium bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] div-accent-text">{lp}</span>
                             ))}
-                        </div>
-                    )
-                }
-            </div>
-        </div>
-    );
-}
-
-// ── Sumber Daya ──────────────────────────────────────────────────────────────
-function ResourcesTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
-    const [editing, setEditing] = useState(false);
-    const [sumberDaya, setSumberDaya] = useState<SumberDaya[]>(project.sumberDaya ?? []);
-    const [saving, setSaving] = useState(false);
-
-    // Monitoring Pengadaan (major item) — section terpisah dengan save sendiri.
-    const [editingMon, setEditingMon] = useState(false);
-    const [monitoring, setMonitoring] = useState<MonitoringPengadaan[]>(project.monitoringPengadaan ?? []);
-    const [savingMon, setSavingMon] = useState(false);
-
-    const saveMonitoring = async () => {
-        setSavingMon(true);
-        try {
-            await axios.patch(`/api/projects/${project._id}`, { monitoringPengadaan: monitoring });
-            toast.success('Monitoring pengadaan tersimpan');
-            setEditingMon(false);
-            onSaved();
-        } catch (err) { toast.error(saveErrorMessage(err)); }
-        finally { setSavingMon(false); }
-    };
-
-    const save = async () => {
-        setSaving(true);
-        try {
-            await axios.patch(`/api/projects/${project._id}`, { sumberDaya });
-            toast.success('Sumber daya tersimpan');
-            setEditing(false);
-            onSaved();
-        } catch (err) { toast.error(saveErrorMessage(err)); }
-        finally { setSaving(false); }
-    };
-
-    // Kelompokkan berdasarkan kategori (bebas). Item tanpa kategori → "Lainnya".
-    const grouped = sumberDaya.reduce<Record<string, { item: SumberDaya; idx: number }[]>>((acc, sd, idx) => {
-        const key = (sd.kategori || '').trim() || 'Lainnya';
-        (acc[key] ||= []).push({ item: sd, idx });
-        return acc;
-    }, {});
-
-    return (
-        <div className="space-y-4">
-            <SectionHeader title="Sumber Daya" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setSumberDaya(project.sumberDaya ?? []); setEditing(false); }} onSave={save} saving={saving} />
-
-            {editing && (
-                <button onClick={() => setSumberDaya(s => [...s, { namaAlat: '', jumlah: 0, kategori: '', satuan: 'Unit' }])}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold">
-                    <Plus className="w-3.5 h-3.5" /> Tambah Sumber Daya
-                </button>
-            )}
-
-            {sumberDaya.length === 0 && !editing
-                ? <EmptyState text={isAdmin ? "Belum ada data sumber daya." : "Belum ada data sumber daya. Belum diisi oleh PIC proyek."} action={isAdmin ? { label: "Isi sekarang", onClick: () => setEditing(true) } : undefined} />
-                : editing
-                ? (
-                    <div className="space-y-2">
-                        {sumberDaya.map((sd, i) => (
-                            <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                                <div className="sm:col-span-4">
-                                    <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Nama</label>
-                                    <input placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                </div>
-                                <div className="sm:col-span-3">
-                                    <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Kategori</label>
-                                    <input list="sd-kategori" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Jumlah</label>
-                                    <input type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Satuan</label>
-                                    <input list="sd-satuan" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                </div>
-                                <div className="sm:col-span-1 flex sm:justify-center">
-                                    <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
-                                </div>
-                            </div>
-                        ))}
-                        <datalist id="sd-kategori">
-                            <option value="Alat Berat" />
-                            <option value="Tenaga Kerja" />
-                            <option value="Material" />
-                            <option value="Kendaraan" />
-                            <option value="Peralatan" />
-                        </datalist>
-                        <datalist id="sd-satuan">
-                            <option value="Unit" />
-                            <option value="Orang" />
-                            <option value="m³" />
-                            <option value="Ton" />
-                            <option value="Set" />
-                            <option value="Buah" />
-                        </datalist>
-                    </div>
-                ) : (
-                    <div className="space-y-5">
-                        {Object.entries(grouped).map(([kategori, items]) => (
-                            <div key={kategori}>
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">{kategori}</h3>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                                    {items.map(({ item: sd }, i) => (
-                                        <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 text-center">
-                                            <div className={`text-3xl font-black mb-1 ${sd.jumlah > 0 ? 'div-accent-text' : 'text-slate-600'}`}>{sd.jumlah}</div>
-                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{sd.namaAlat || '-'}</div>
-                                            <div className="text-[10px] text-slate-600 uppercase tracking-wider">{sd.satuan || 'Unit'}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )
-            }
-
-            {/* ── Monitoring Pengadaan (major item) ── */}
-            <div className="pt-6 mt-2 border-t border-black/5 dark:border-white/5">
-                <SectionHeader title="Monitoring Pengadaan" isAdmin={isAdmin} editing={editingMon} onEdit={() => setEditingMon(true)} onCancel={() => { setMonitoring(project.monitoringPengadaan ?? []); setEditingMon(false); }} onSave={saveMonitoring} saving={savingMon} />
-                <p className="text-xs text-slate-500 -mt-2 mb-3">Major item pengadaan beserta persentase progresnya.</p>
-
-                {editingMon && (
-                    <button onClick={() => setMonitoring(s => [...s, { nama: '', persentase: 0 }])}
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold mb-3">
-                        <Plus className="w-3.5 h-3.5" /> Tambah Item
-                    </button>
-                )}
-
-                {monitoring.length === 0 && !editingMon
-                    ? <EmptyState text={isAdmin ? "Belum ada data monitoring pengadaan." : "Belum ada data monitoring pengadaan. Belum diisi oleh PIC proyek."} action={isAdmin ? { label: "Isi sekarang", onClick: () => setEditingMon(true) } : undefined} />
-                    : editingMon
-                    ? (
-                        <div className="space-y-2">
-                            {monitoring.map((mp, i) => (
-                                <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                                    <div className="sm:col-span-8">
-                                        <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Nama Item</label>
-                                        <input placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    </div>
-                                    <div className="sm:col-span-3">
-                                        <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Persentase (%)</label>
-                                        <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    </div>
-                                    <div className="sm:col-span-1 flex sm:justify-center">
-                                        <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="space-y-2.5">
-                            {monitoring.map((mp, i) => {
-                                const p = Math.max(0, Math.min(100, mp.persentase ?? 0));
-                                const done = p >= 100;
-                                return (
-                                    <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-2">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 min-w-0 truncate">{mp.nama || '-'}</span>
-                                            <span className={`text-xs font-black font-mono shrink-0 ${done ? 'text-emerald-400' : 'text-yellow-400'}`}>{p}%</span>
-                                        </div>
-                                        <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                                            <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`} style={{ width: `${p}%` }} />
-                                        </div>
-                                    </div>
-                                );
-                            })}
                         </div>
                     )
                 }
@@ -2514,13 +2324,13 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                     <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Isu Strategis</h3>
                     {isAdmin && (editingIsu ? (
                         <div className="flex gap-2">
-                            <button onClick={() => { setIsuList(project.isuStrategis ?? []); setEditingIsu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveIsu} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={() => { setIsuList(project.isuStrategis ?? []); setEditingIsu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
+                            <button onClick={saveIsu} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
-                            {editingIsu === false && <button onClick={() => setIsuList(s => [...s, { isu: '', usulan: '' }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Tambah</button>}
-                            <button onClick={() => setEditingIsu(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                            {editingIsu === false && <button onClick={() => setIsuList(s => [...s, { isu: '', usulan: '' }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Plus className="w-3.5 h-3.5" /> Tambah</button>}
+                            <button onClick={() => setEditingIsu(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
                         </div>
                     ))}
                 </div>
@@ -2534,7 +2344,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                                     <Textarea label="Isu" value={isu.isu} onChange={v => { const a = [...isuList]; a[i] = { ...a[i], isu: v }; setIsuList(a); }} />
                                     <Textarea label="Usulan dari Abipraya" value={isu.usulan} onChange={v => { const a = [...isuList]; a[i] = { ...a[i], usulan: v }; setIsuList(a); }} />
                                 </div>
-                                <button onClick={() => setIsuList(s => s.filter((_, j) => j !== i))} className="p-2 h-fit rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={() => setIsuList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center h-fit rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                             </div>
                         </div>
                     ))
@@ -2562,13 +2372,13 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                     <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Kendala Operasional & Kontraktual</h3>
                     {isAdmin && (editingKendala ? (
                         <div className="flex gap-2">
-                            <button onClick={() => { setKendalaList(project.kendala ?? []); setEditingKendala(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveKendala} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={() => { setKendalaList(project.kendala ?? []); setEditingKendala(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
+                            <button onClick={saveKendala} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
-                            <button onClick={() => setKendalaList(s => [...s, { masalah: '', penyebab: '', tindakan: '', status: 'OPEN' }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Tambah</button>
-                            <button onClick={() => setEditingKendala(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                            <button onClick={() => setKendalaList(s => [...s, { masalah: '', penyebab: '', tindakan: '', status: 'OPEN' }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Plus className="w-3.5 h-3.5" /> Tambah</button>
+                            <button onClick={() => setEditingKendala(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
                         </div>
                     ))}
                 </div>
@@ -2584,9 +2394,9 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                                 <Input label="Harapan Dukungan" value={k.harapan ?? ''} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], harapan: v }; setKendalaList(a); }} />
                                 <Input label="Target"   value={k.target ?? ''} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], target: v }; setKendalaList(a); }} />
                                 <Input label="PIC"      value={k.pic ?? ''} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], pic: v }; setKendalaList(a); }} />
-                                <Select label="Status" value={k.status} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], status: v as any }; setKendalaList(a); }} options={[['OPEN','OPEN'],['ON_PROGRESS','ON PROGRESS'],['CLOSED','CLOSED']]} />
+                                <Select label="Status" value={k.status} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], status: v as Kendala['status'] }; setKendalaList(a); }} options={[['OPEN','OPEN'],['ON_PROGRESS','ON PROGRESS'],['CLOSED','CLOSED']]} />
                             </div>
-                            <button onClick={() => setKendalaList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
+                            <button onClick={() => setKendalaList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
                         </div>
                     ))
                     : (
@@ -2600,7 +2410,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                                                 <div className="w-7 h-7 rounded-lg bg-slate-700/50 flex items-center justify-center text-slate-500 dark:text-slate-400 font-black text-xs shrink-0">{i + 1}</div>
                                                 <p className="text-sm font-bold text-slate-900 dark:text-white">{k.masalah}</p>
                                             </div>
-                                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${ks.color}`}>{ks.label}</span>
+                                            <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${ks.color}`}>{ks.label}</span>
                                         </div>
                                         <div className="grid sm:grid-cols-2 gap-3 ml-10">
                                             {k.penyebab && <MiniField label="Penyebab" value={k.penyebab} />}
@@ -2614,7 +2424,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                                                 <button
                                                     onClick={() => toChangeMgmt(k, i)}
                                                     disabled={promoting === i}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[11px] font-bold hover:bg-indigo-500/20 transition-colors disabled:opacity-60"
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[11px] font-bold hover:bg-indigo-500/20 transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                                                 >
                                                     {promoting === i ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitBranch className="w-3.5 h-3.5" />}
                                                     Masukkan ke Change Management
@@ -2655,13 +2465,14 @@ function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin
                 <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 [column-fill:_balance]">
                     {items.map((g, i) => (
                         <div key={g.key} className="relative group mb-4 break-inside-avoid rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-slate-900">
-                            <button type="button" onClick={() => setLightbox(i)} className="block w-full cursor-zoom-in">
+                            <button type="button" onClick={() => setLightbox(i)} className="block w-full cursor-zoom-in focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                                {/* eslint-disable-next-line @next/next/no-img-element -- URL dinamis (upload/presigned), bukan aset statis */}
                                 <img src={g.url!} alt={g.caption || ''} loading="lazy" className="w-full h-auto block transition-transform duration-300 group-hover:scale-[1.02]" />
                             </button>
-                            {g.caption && <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/80 to-transparent text-[10px] text-slate-700 dark:text-slate-200 truncate pointer-events-none">{g.caption}</div>}
+                            {g.caption && <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/80 to-transparent text-[11px] text-white truncate pointer-events-none">{g.caption}</div>}
                             {isAdmin && (
-                                <button onClick={() => del(g.key)} className="absolute top-2 right-2 p-2 rounded-lg bg-black/60 text-rose-400 opacity-0 group-hover:opacity-100 hover:bg-rose-500/20 transition-all">
-                                    <Trash2 className="w-4 h-4" />
+                                <button onClick={() => del(g.key)} aria-label="Hapus foto" className="absolute top-2 right-2 min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-black/60 text-rose-400 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 hover:bg-rose-500/20 transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                                 </button>
                             )}
                         </div>
@@ -2709,10 +2520,10 @@ function Lightbox({ items, index, onClose, onNavigate }: {
     const cur = items[index];
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center" onClick={onClose}>
+        <div role="dialog" aria-modal="true" aria-label="Pratinjau foto" className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center" onClick={onClose}>
             {/* Tutup */}
-            <button onClick={onClose} className="absolute top-4 right-4 p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors z-20" title="Tutup (Esc)">
-                <X className="w-5 h-5" />
+            <button onClick={onClose} aria-label="Tutup pratinjau" className="absolute top-4 right-4 min-w-10 min-h-10 inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" title="Tutup (Esc)">
+                <X className="w-5 h-5" aria-hidden="true" />
             </button>
 
             {/* Counter */}
@@ -2722,17 +2533,18 @@ function Lightbox({ items, index, onClose, onNavigate }: {
 
             {/* Prev */}
             {total > 1 && (
-                <button onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-3 sm:left-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20" title="Sebelumnya (←)">
-                    <ChevronLeft className="w-6 h-6" />
+                <button onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-3 sm:left-6 min-w-10 min-h-10 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" aria-label="Foto sebelumnya" title="Sebelumnya (←)">
+                    <ChevronLeft className="w-6 h-6" aria-hidden="true" />
                 </button>
             )}
 
             {/* Gambar — isi area penuh, proporsional */}
             <div
                 className="relative flex flex-col items-center justify-center"
-                style={{ width: '90vw', height: '90vh' }}
+                style={{ width: '90vw', height: '90dvh' }}
                 onClick={(e) => e.stopPropagation()}
             >
+                {/* eslint-disable-next-line @next/next/no-img-element -- URL dinamis (upload/presigned), bukan aset statis */}
                 <img
                     src={cur.url!}
                     alt={cur.caption || ''}
@@ -2748,8 +2560,8 @@ function Lightbox({ items, index, onClose, onNavigate }: {
 
             {/* Next */}
             {total > 1 && (
-                <button onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-3 sm:right-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20" title="Berikutnya (→)">
-                    <ChevronRight className="w-6 h-6" />
+                <button onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-3 sm:right-6 min-w-10 min-h-10 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" aria-label="Foto berikutnya" title="Berikutnya (→)">
+                    <ChevronRight className="w-6 h-6" aria-hidden="true" />
                 </button>
             )}
         </div>
@@ -2765,6 +2577,12 @@ function useConfirm() {
         setState({ open: true, title, message, onConfirm });
     }, []);
     const close = useCallback(() => setState(s => ({ ...s, open: false, onConfirm: null })), []);
+    useEffect(() => {
+        if (!state.open) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [state.open, close]);
 
     const ConfirmDialog = (
         <AnimatePresence>
@@ -2775,13 +2593,14 @@ function useConfirm() {
                     onClick={close}
                 >
                     <motion.div
+                        role="dialog" aria-modal="true" aria-label={state.title}
                         className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-black/10 dark:border-white/10 shadow-2xl p-6"
                         initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-start gap-3 mb-4">
                             <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
-                                <AlertTriangle className="w-5 h-5 text-rose-400" />
+                                <AlertTriangle className="w-5 h-5 text-rose-400" aria-hidden="true" />
                             </div>
                             <div className="min-w-0">
                                 <h3 className="text-base font-bold text-slate-900 dark:text-white">{state.title}</h3>
@@ -2789,10 +2608,10 @@ function useConfirm() {
                             </div>
                         </div>
                         <div className="flex gap-2 justify-end">
-                            <button onClick={close} className="px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-sm font-bold transition-colors">Batal</button>
+                            <button onClick={close} className="px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-sm font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">Batal</button>
                             <button
                                 onClick={() => { state.onConfirm?.(); close(); }}
-                                className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-900 dark:text-white text-sm font-bold transition-colors flex items-center gap-1.5"
+                                className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-900 dark:text-white text-sm font-bold transition-colors flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                             >
                                 <Trash2 className="w-3.5 h-3.5" /> Hapus
                             </button>
@@ -2815,13 +2634,13 @@ function SectionHeader({ title, isAdmin, editing, onEdit, onCancel, onSave, savi
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">{title}</h3>
             {isAdmin && (editing ? (
                 <div className="flex gap-2">
-                    <button onClick={onCancel} aria-label="Batalkan perubahan" className="px-3.5 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Batal</button>
-                    <button onClick={onSave} disabled={saving} aria-label="Simpan perubahan" className="px-3.5 py-2.5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">
+                    <button onClick={onCancel} aria-label="Batalkan perubahan" className="px-3.5 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
+                    <button onClick={onSave} disabled={saving} aria-label="Simpan perubahan" className="px-3.5 py-2.5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan
                     </button>
                 </div>
             ) : (
-                <button onClick={onEdit} aria-label={`Edit ${title}`} className="px-3.5 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                <button onClick={onEdit} aria-label={`Edit ${title}`} className="px-3.5 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
             ))}
         </div>
     );
@@ -2932,12 +2751,12 @@ function InfoTip({ text }: { text: string }) {
                 onClick={() => setOpen(o => !o)}
                 onMouseEnter={() => setOpen(true)}
                 onMouseLeave={() => setOpen(false)}
-                className="group w-7 h-7 flex items-center justify-center rounded-full"
+                className="group w-7 h-7 flex items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                 aria-label="Penjelasan istilah"
                 aria-expanded={open}
                 aria-describedby={open ? tipId : undefined}
             >
-                <span className="w-4 h-4 rounded-full bg-black/[0.08] dark:bg-white/10 group-hover:bg-[rgba(var(--div-accent-rgb),0.3)] text-slate-700 dark:text-slate-300 flex items-center justify-center text-[10px] font-black leading-none transition-colors">?</span>
+                <span className="w-4 h-4 rounded-full bg-black/[0.08] dark:bg-white/10 group-hover:bg-[rgba(var(--div-accent-rgb),0.3)] text-slate-700 dark:text-slate-300 flex items-center justify-center text-[11px] font-black leading-none transition-colors">?</span>
             </button>
             {open && (
                 <span id={tipId} role="tooltip" className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 z-50 w-56 max-w-[70vw] p-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 border border-black/10 dark:border-white/15 shadow-2xl text-xs font-normal normal-case tracking-normal text-slate-700 dark:text-slate-200 leading-snug pointer-events-none">
@@ -2979,10 +2798,10 @@ function MoneyInput({ label, value, onChange, hint }: { label: string; value: st
             </div>
             <div className="flex items-center justify-between gap-2 mt-1.5">
                 <div className="flex flex-wrap gap-1.5">
-                    <button type="button" onClick={() => mult(1_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors">×1.000</button>
-                    <button type="button" onClick={() => mult(1_000_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors">× juta</button>
-                    <button type="button" onClick={() => mult(1_000_000_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors">× miliar</button>
-                    {digits && <button type="button" onClick={() => onChange('')} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-rose-500/20 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors">bersihkan</button>}
+                    <button type="button" onClick={() => mult(1_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">×1.000</button>
+                    <button type="button" onClick={() => mult(1_000_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">× juta</button>
+                    <button type="button" onClick={() => mult(1_000_000_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">× miliar</button>
+                    {digits && <button type="button" onClick={() => onChange('')} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-rose-500/20 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">bersihkan</button>}
                 </div>
                 {digits && <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono truncate">{formatIDRShort(n)}</span>}
             </div>
@@ -3020,7 +2839,7 @@ function EmptyState({ text, action }: { text: string; action?: { label: string; 
                 <button
                     type="button"
                     onClick={action.onClick}
-                    className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold transition-colors"
+                    className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                 >
                     <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> {action.label}
                 </button>
@@ -3044,8 +2863,9 @@ function UploadButton({ projectId, kind, accept, label, onDone }: { projectId: s
             await axios.post(`/api/projects/${projectId}/upload`, fd);
             toast.success('Berhasil diunggah');
             onDone();
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Gagal mengunggah');
+        } catch (err: unknown) {
+            const apiError = axios.isAxiosError(err) ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
+            toast.error(apiError || 'Gagal mengunggah');
         } finally {
             setUploading(false);
             if (inputRef.current) inputRef.current.value = '';
@@ -3054,8 +2874,8 @@ function UploadButton({ projectId, kind, accept, label, onDone }: { projectId: s
 
     return (
         <>
-            <input ref={inputRef} type="file" accept={accept} onChange={handleFile} className="hidden" />
-            <button onClick={() => inputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold transition-colors disabled:opacity-60">
+            <input ref={inputRef} aria-label={label} type="file" accept={accept} onChange={handleFile} className="hidden" />
+            <button onClick={() => inputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                 {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} {label}
             </button>
         </>

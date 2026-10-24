@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
-    X, Phone, User, Signal, SignalZero, FolderOpen, TrendingUp,
-    CircleDollarSign, Building2, Wrench, AlertTriangle, ChevronDown,
-    ChevronUp, MapPin, Calendar, ExternalLink, Video, CheckCircle2,
-    Clock, Truck, Sparkles, Layers, ArrowUpRight, ArrowDownRight,
-    FileText, Activity, ShieldAlert, HardHat, MessageCircle, Info,
+    X, Phone, User, TrendingUp,
+    CircleDollarSign, Building2, Wrench, AlertTriangle,
+    MapPin, Calendar, ExternalLink, Video, CheckCircle2,
+    Clock, Truck, Sparkles, ArrowUpRight, ArrowDownRight,
+    FileText, Activity, HardHat, MessageCircle,
     CheckCircle, AlertCircle, GitBranch, Wallet
 } from 'lucide-react';
 import axios from 'axios';
@@ -16,7 +16,8 @@ import CountUp from './CountUp';
 import OptimizedVideoPlayer from './OptimizedVideoPlayer';
 import { useStreamManager } from '@/lib/StreamManager';
 import { ICameraData } from '@/models/Camera';
-import { ArcGauge, HBarGroup, StackedBar, type GaugeZone } from './PanelCharts';
+import { ArcGauge, CashflowChart, HBar, HBarGroup, HasilUsahaTable, SCurveChart, StackedBar, fRpShort, type GaugeZone } from './PanelCharts';
+import { cashflowSeries, computeEvm, huRencanaPeriode, kurvaSSeries, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
 import { getDivisionTheme, getDivisionCssVars } from '@/lib/divisionTheme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -143,6 +144,8 @@ export interface IPopulatedLocation {
     monitoringPengadaan?: IMonitoringPengadaan[];
     progressMinggu?: IProgressMinggu[];
     changeManagement?: IChangeManagement[];
+    laporanBulanan?: LaporanBulanan[];
+    rencanaKurvaS?: RencanaKurvaS[];
     status?: string;
     updatedAt?: string;
 }
@@ -262,9 +265,9 @@ function WeeklyProgressCard({ row }: { row: IProgressMinggu }) {
             <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                     <div className="text-xs font-black text-slate-900 dark:text-white truncate">{row.bulan || '-'}</div>
-                    {row.tahun ? <div className="text-[9px] text-slate-500 font-mono">Tahun {row.tahun}</div> : null}
+                    {row.tahun ? <div className="text-[11px] text-slate-500 font-mono">Tahun {row.tahun}</div> : null}
                 </div>
-                <div className="flex items-center gap-2.5 text-[9px] font-bold shrink-0">
+                <div className="flex items-center gap-2.5 text-[11px] font-bold shrink-0">
                     <span className="flex items-center gap-1 text-sky-500"><span className="w-2 h-2 rounded-sm bg-sky-400" />RA</span>
                     <span className="flex items-center gap-1 text-amber-500"><span className="w-2 h-2 rounded-sm bg-amber-400" />RI</span>
                 </div>
@@ -277,7 +280,7 @@ function WeeklyProgressCard({ row }: { row: IProgressMinggu }) {
                     const ahead = dev >= 0;
                     return (
                         <div key={w} className="space-y-1.5">
-                            <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
+                            <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
                             <div className="h-16 flex items-end justify-center gap-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.04] border border-black/5 dark:border-white/5 px-1.5 pb-0 overflow-hidden">
                                 <motion.div
                                     className="w-3 rounded-t-sm bg-sky-400/80"
@@ -295,9 +298,9 @@ function WeeklyProgressCard({ row }: { row: IProgressMinggu }) {
                                 />
                             </div>
                             <div className="text-center leading-tight">
-                                <div className="text-[9px] font-mono font-bold text-sky-500">{ra.toFixed(1)}%</div>
-                                <div className={`text-[9px] font-mono font-bold ${ahead ? 'text-emerald-500' : 'text-rose-500'}`}>{ri.toFixed(1)}%</div>
-                                <div className={`text-[10px] font-black font-mono ${ahead ? 'text-emerald-500' : 'text-rose-500'}`}>{ahead ? '+' : ''}{dev.toFixed(1)}</div>
+                                <div className="text-[11px] font-mono font-bold text-sky-500">{ra.toFixed(1)}%</div>
+                                <div className={`text-[11px] font-mono font-bold ${ahead ? 'text-emerald-500' : 'text-rose-500'}`}>{ri.toFixed(1)}%</div>
+                                <div className={`text-[11px] font-black font-mono ${ahead ? 'text-emerald-500' : 'text-rose-500'}`}>{ahead ? '+' : ''}{dev.toFixed(1)}</div>
                             </div>
                         </div>
                     );
@@ -333,7 +336,7 @@ function IndexGaugeCard({ label, hint, value, kind }: { label: string; hint: str
                 tone={value == null ? 'slate' : good ? 'emerald' : 'rose'}
                 size={140}
             />
-            <span className={`mt-1 text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+            <span className={`mt-1 text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                 value == null ? 'text-slate-500 border-slate-500/25 bg-slate-500/5'
                     : good ? 'text-emerald-400 border-emerald-500/25 bg-emerald-500/5'
                            : 'text-rose-400 border-rose-500/25 bg-rose-500/5'
@@ -343,6 +346,17 @@ function IndexGaugeCard({ label, hint, value, kind }: { label: string; hint: str
 }
 
 // Kartu kompak nilai finansial (cash in/out, saldo, piutang) di panel peta.
+function VarianceMini({ label, hint, value }: { label: string; hint: string; value?: number }) {
+    const neg = value != null && value < 0;
+    return (
+        <div className={`px-2.5 py-2 rounded-xl border text-center ${value == null ? 'border-black/[0.06] dark:border-white/[0.06]' : neg ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label} <span className="font-medium normal-case tracking-normal">({hint})</span></div>
+            <div className={`text-[13px] font-black font-mono mt-0.5 ${value == null ? 'text-slate-500' : neg ? 'text-rose-500' : 'text-emerald-500'}`}>
+                {value == null ? '-' : `${neg ? '−' : '+'}${fRpShort(Math.abs(value))}`}
+            </div>
+        </div>
+    );
+}
 function FinMini({ label, value, tone }: { label: string; value?: number; tone: string }) {
     const fmt = (v?: number) => {
         if (v == null) return '-';
@@ -353,7 +367,7 @@ function FinMini({ label, value, tone }: { label: string; value?: number; tone: 
     };
     return (
         <div className={`px-2.5 py-3 rounded-xl border backdrop-blur-md ${tone}`}>
-            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">{label}</div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">{label}</div>
             <div className="text-[13px] font-black text-slate-900 dark:text-white font-mono mt-1 whitespace-nowrap">
                 {value != null ? <CountUp value={value} duration={1100} format={fmt} /> : fmt(value)}
             </div>
@@ -384,7 +398,7 @@ function CccGaugeCard({ value }: { value?: number }) {
                 tone={value == null ? 'slate' : over ? 'rose' : 'emerald'}
                 size={168}
             />
-            <span className={`mt-1 text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+            <span className={`mt-1 text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                 over ? 'text-rose-400 border-rose-500/30 bg-rose-500/10' : 'text-emerald-400 border-emerald-500/25 bg-emerald-500/5'
             }`}>
                 {value == null ? 'N/A' : over ? '> 90 · Perhatian' : 'Normal'}
@@ -404,6 +418,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
         const initial: Record<string, 'online' | 'offline'> = {};
         location?.cameras?.forEach(cam => { initial[cam._id] = cam.status || 'offline'; });
         setStatuses(initial);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- sengaja hanya bereaksi pada pergantian lokasi (_id), bukan pada tiap update array kamera
     }, [location?._id]);
 
     const handleStatusChange = (id: string, status: 'online' | 'offline') => {
@@ -420,6 +435,15 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
     const rencana   = location.progressRencana  ?? 0;
     const deviasi   = location.progressDeviasi  ?? (realisasi - rencana);
     const hasProgress = location.progressPercent != null || location.progressRencana != null;
+    const kurvaS = kurvaSSeries(location);   // null-safe: undefined bila belum ada laporan/rencana
+    // Data laporan bulanan terbaru → kartu di tab Ringkasan, Finansial, dan Operasi.
+    const lapLatest = latestLaporan(location.laporanBulanan);
+    const evm = computeEvm(lapLatest?.evm);
+    const cashflow = cashflowSeries(location.laporanBulanan);
+    const huPlan = lapLatest ? huRencanaPeriode(location.rencanaKurvaS, lapLatest.periode) : undefined;
+    const hasHu = !!(lapLatest && (lapLatest.huBulanIni || lapLatest.huSdBulanIni));
+    const pengadaan = lapLatest?.pengadaan;
+    const periodeText = lapLatest ? periodeLabel(lapLatest.periode) : '';
 
     const panelTheme = getDivisionTheme(location.division);
     const panelStyle = (panelTheme ? getDivisionCssVars(location.division) : undefined) as React.CSSProperties | undefined;
@@ -436,20 +460,20 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                 {/* ── ZONA 1: Badges (kiri) + Action cluster (kanan) ───────────── */}
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 min-w-0 flex-1">
-                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-sm ${sm.badge}`}>
+                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-sm ${sm.badge}`}>
                             <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
                             {sm.label}
                         </span>
-                        <span className="text-[10px] text-slate-700 dark:text-slate-300 font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.05] dark:border-white/[0.05]">
+                        <span className="text-[11px] text-slate-700 dark:text-slate-300 font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.05] dark:border-white/[0.05]">
                             {location.category}
                         </span>
                         {location.division && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 border border-indigo-600/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/30">
+                            <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 border border-indigo-600/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/30">
                                 {location.division}
                             </span>
                         )}
                         {location.projectType && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-700 border border-cyan-600/30 dark:bg-cyan-500/10 dark:text-cyan-300 dark:border-cyan-500/30">
+                            <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-700 border border-cyan-600/30 dark:bg-cyan-500/10 dark:text-cyan-300 dark:border-cyan-500/30">
                                 {location.projectType === 'JO' ? 'JO' : 'NON-JO'}
                             </span>
                         )}
@@ -461,18 +485,18 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             onClick={() => router.push(`/project/${location._id}`)}
                             title="Halaman Detail Proyek Lengkap"
                             aria-label="Buka detail proyek lengkap"
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[rgba(var(--div-accent-rgb),0.15)] hover:bg-[rgba(var(--div-accent-rgb),0.25)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text dark:bg-[rgba(var(--div-accent-rgb),0.1)] dark:hover:bg-[rgba(var(--div-accent-rgb),0.2)] dark:border-[rgba(var(--div-accent-rgb),0.3)] text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-[rgba(var(--div-accent-rgb),0.1)]"
+                            className="flex items-center gap-1.5 px-3 py-2 min-h-10 rounded-xl bg-[rgba(var(--div-accent-rgb),0.15)] hover:bg-[rgba(var(--div-accent-rgb),0.25)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text dark:bg-[rgba(var(--div-accent-rgb),0.1)] dark:hover:bg-[rgba(var(--div-accent-rgb),0.2)] dark:border-[rgba(var(--div-accent-rgb),0.3)] text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-[rgba(var(--div-accent-rgb),0.1)]"
                         >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
                             <span className="hidden sm:inline">Detail</span>
                         </button>
                         <button
                             onClick={onClose}
                             title="Tutup Panel"
                             aria-label="Tutup panel kamera"
-                            className="p-2.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-rose-500/15 dark:hover:bg-rose-500/20 border border-black/[0.06] dark:border-white/[0.06] hover:border-rose-500/40 dark:hover:border-rose-500/30 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-all duration-200 hover:scale-105 active:scale-95"
+                            className="p-2.5 min-w-10 min-h-10 flex items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-rose-500/15 dark:hover:bg-rose-500/20 border border-black/[0.06] dark:border-white/[0.06] hover:border-rose-500/40 dark:hover:border-rose-500/30 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                         >
-                            <X className="w-4 h-4" />
+                            <X className="w-4 h-4" aria-hidden="true" />
                         </button>
                     </div>
                 </div>
@@ -482,13 +506,13 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                     <h2 className="text-lg md:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-tight line-clamp-2">
                         {location.name}
                     </h2>
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                        <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                        <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" aria-hidden="true" />
                         <span>{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</span>
                     </div>
                     {location.updatedAt && (
-                        <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                            <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                            <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" aria-hidden="true" />
                             <span>Terakhir diperbarui: {new Date(location.updatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                         </div>
                     )}
@@ -500,7 +524,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                         active={activeTab === 'overview'}
                         onClick={() => setActiveTab('overview')}
                         icon={Activity}
-                        label="Ikhtisar"
+                        label="Ringkasan"
                     />
                     <TabButton
                         active={activeTab === 'financial'}
@@ -549,7 +573,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <div className="w-2 h-2 rounded-full div-accent-solid animate-pulse" />
                                             <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Progress Fisik Proyek</span>
                                         </div>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${deviasi >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`}>
+                                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${deviasi >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`}>
                                             {deviasi >= 0 ? 'On Schedule' : 'Minor Deviation'}
                                         </span>
                                     </div>
@@ -562,23 +586,43 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 </div></Reveal>
                             )}
 
-                            {/* ── IKHTIAR: CPI / SPI (gauge busur) ── */}
-                            {(location.cpi != null || location.spi != null) && (
+                            {/* ── KURVA S: RA RKAP / RA Eksternal / RI (dari laporan bulanan) ── */}
+                            {kurvaS && (
+                                <Reveal i={1}><div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/70 dark:from-slate-900/70 to-slate-100/70 dark:to-slate-950/70 border border-black/[0.06] dark:border-white/[0.06] backdrop-blur-md">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <TrendingUp className="w-4 h-4 div-accent-text" aria-hidden="true" />
+                                            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Kurva S {kurvaS.tahun}</h3>
+                                        </div>
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">% terhadap nilai kontrak</span>
+                                    </div>
+                                    <SCurveChart data={kurvaS} />
+                                </div></Reveal>
+                            )}
+                            {/* ── RINGKASAN: CPI / SPI (gauge busur) ── */}
+                            {(location.cpi != null || location.spi != null || evm.cv !== undefined) && (
                                 <Reveal i={1}><div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/70 dark:from-slate-900/70 to-slate-100/70 dark:to-slate-950/70 border border-black/[0.06] dark:border-white/[0.06] backdrop-blur-md">
                                     <div className="grid grid-cols-2 gap-2">
                                         <IndexGaugeCard label="CPI" hint="Kinerja Biaya" value={location.cpi} kind="cpi" />
                                         <IndexGaugeCard label="SPI" hint="Kinerja Jadwal" value={location.spi} kind="spi" />
                                     </div>
+                                    {(evm.cv !== undefined || evm.sv !== undefined) && (
+                                        <div className="grid grid-cols-2 gap-2 mt-2">
+                                            <VarianceMini label="CV" hint="BCWP − ACWP" value={evm.cv} />
+                                            <VarianceMini label="SV" hint="BCWP − BCWS" value={evm.sv} />
+                                        </div>
+                                    )}
+                                    {lapLatest && <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-center">Data laporan per {periodeText}</p>}
                                 </div></Reveal>
                             )}
 
                             {/* ── PIC EXECUTIVE CARD ── */}
                             <Reveal i={2}><div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/70 dark:from-slate-900/70 to-slate-100/70 dark:to-slate-950/70 border border-black/[0.06] dark:border-white/[0.06] backdrop-blur-md flex items-center gap-3">
                                 <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-600/20 border border-blue-500/30 flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/10">
-                                    <User className="w-5 h-5 text-blue-400" />
+                                    <User className="w-5 h-5 text-blue-400" aria-hidden="true" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1">
+                                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1">
                                         <span>Project Manager</span>
                                         {location.pmName && <>
                                             <span className="w-1 h-1 rounded-full bg-slate-600" />
@@ -598,7 +642,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             aria-label="Chat WhatsApp PIC"
                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-md shadow-emerald-500/10"
                                         >
-                                            <MessageCircle className="w-3.5 h-3.5" />
+                                            <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
                                             <span>WA</span>
                                         </a>
                                         <a
@@ -607,7 +651,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             aria-label="Telepon PIC"
                                             className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] border border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-300 transition-all hover:scale-105 active:scale-95"
                                         >
-                                            <Phone className="w-3.5 h-3.5" />
+                                            <Phone className="w-3.5 h-3.5" aria-hidden="true" />
                                         </a>
                                     </div>
                                 )}
@@ -618,11 +662,11 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <div className="w-6 h-6 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] flex items-center justify-center border border-[rgba(var(--div-accent-rgb),0.2)]">
-                                            <Video className="w-3.5 h-3.5 div-accent-text" />
+                                            <Video className="w-3.5 h-3.5 div-accent-text" aria-hidden="true" />
                                         </div>
                                         <div>
                                             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Live Surveillance</h3>
-                                            <p className="text-[9px] text-slate-500 font-medium">Pemantauan visual real-time lokasi</p>
+                                            <p className="text-[11px] text-slate-500 font-medium">Pemantauan visual real-time lokasi</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-black/[0.06] dark:border-white/[0.06] text-[11px] font-bold">
@@ -659,7 +703,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                             <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400' : 'bg-rose-500'}`} />
                                                             <span className="text-xs font-bold text-slate-900 dark:text-white tracking-wide truncate max-w-[200px]">{cam.name}</span>
                                                         </div>
-                                                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border backdrop-blur-md ${
+                                                        <span className={`text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border backdrop-blur-md ${
                                                             isOnline
                                                                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                                                                 : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
@@ -682,16 +726,16 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                     </div>
                                 ) : (
                                     <div className="p-6 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.05] dark:border-white/[0.05] text-center">
-                                        <Video className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                                        <Video className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" aria-hidden="true" />
                                         <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Belum ada CCTV terpasang</p>
-                                        <p className="text-[10px] text-slate-600 mt-0.5">Tambahkan kamera via panel admin proyek</p>
+                                        <p className="text-[11px] text-slate-600 mt-0.5">Tambahkan kamera via panel admin proyek</p>
                                     </div>
                                 )}
 
                                 {/* Troubleshooting Notice if camera is offline */}
                                 {offlineCams > 0 && (
                                     <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 flex gap-2.5 items-start">
-                                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
                                         <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                                             <strong className="text-amber-300 block font-semibold mb-0.5">Koneksi Stream Terputus ({offlineCams} Unit)</strong>
                                             Periksa koneksi jaringan DVR/NVR atau konfigurasi RTSP lokal di area proyek.
@@ -715,12 +759,12 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             {/* Nilai Kontrak Hero */}
                             <div className="p-4 rounded-2xl bg-gradient-to-br from-[rgba(var(--div-accent-rgb),0.1)] via-white/80 dark:via-slate-900/90 to-slate-100 dark:to-slate-950 border border-[rgba(var(--div-accent-rgb),0.2)] shadow-xl relative overflow-hidden">
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[10px] font-bold div-accent-text opacity-80 uppercase tracking-widest flex items-center gap-1.5">
-                                        <CircleDollarSign className="w-3.5 h-3.5 div-accent-text" />
+                                    <span className="text-[11px] font-bold div-accent-text opacity-80 uppercase tracking-widest flex items-center gap-1.5">
+                                        <CircleDollarSign className="w-3.5 h-3.5 div-accent-text" aria-hidden="true" />
                                         Total Nilai Kontrak Proyek
                                     </span>
                                     {location.contractNumber && (
-                                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border border-[rgba(var(--div-accent-rgb),0.3)]">
+                                        <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border border-[rgba(var(--div-accent-rgb),0.3)]">
                                             {location.contractNumber}
                                         </span>
                                     )}
@@ -739,14 +783,13 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             {(location.cashIn != null || location.cashOut != null || location.saldoKas != null || location.saldoHutang != null || location.bad != null || location.piutang != null || location.ccc != null || location.tagihanBruto != null || location.name?.toLowerCase().includes('kendari')) && (() => {
                                 const isKendari = Boolean(location.name?.toLowerCase().includes('kendari'));
                                 const tagihanBruto = location.tagihanBruto ?? (isKendari ? 49_000_000_000 : undefined);
-                                const saldoKas = location.saldoKas ?? ((location.cashIn ?? 0) - (location.cashOut ?? 0));
                                 const surplus = (location.cashIn ?? 0) - (location.cashOut ?? 0);
                                 const showCashBars = location.cashIn != null || location.cashOut != null;
                                 const showHutang = location.saldoHutang != null || location.bad != null;
                                 return (
                                     <div className="space-y-3">
                                         <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                            <Wallet className="w-3.5 h-3.5 text-sky-400" />
+                                            <Wallet className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
                                             Ringkasan Keuangan
                                         </h3>
 
@@ -754,8 +797,8 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                         {showCashBars && (
                                             <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-2.5">
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Arus Kas</span>
-                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${surplus >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                                                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Arus Kas</span>
+                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${surplus >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
                                                         {surplus >= 0 ? 'Surplus' : 'Defisit'} {fIDRShort(Math.abs(surplus))}
                                                     </span>
                                                 </div>
@@ -766,16 +809,43 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             </div>
                                         )}
 
+                                        {/* Arus kas bulanan (dari laporan bulanan) */}
+                                        {cashflow && (
+                                            <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Arus Kas Bulanan {cashflow.tahun}</span>
+                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${cashflow.masuk - cashflow.keluar >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                                                        Kumulatif {cashflow.masuk - cashflow.keluar >= 0 ? '+' : '−'}{fRpShort(Math.abs(cashflow.masuk - cashflow.keluar))}
+                                                    </span>
+                                                </div>
+                                                <CashflowChart points={cashflow.points} tahun={cashflow.tahun} />
+                                                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                                    <div>In s.d {periodeText}: <span className="font-black text-emerald-500">{fRpShort(cashflow.masuk)}</span></div>
+                                                    <div className="text-right">Out: <span className="font-black text-rose-500">{fRpShort(cashflow.keluar)}</span></div>
+                                                </div>
+                                            </div>
+                                        )}
                                         {/* Tagihan Bruto & Piutang — nilai ringkas */}
                                         <div className="grid grid-cols-2 gap-2.5">
                                             <FinMini label="Tagihan Bruto" value={tagihanBruto} tone="text-sky-400 bg-sky-500/5 border-sky-500/20" />
                                             <FinMini label="Piutang" value={location.piutang} tone="text-violet-400 bg-violet-500/5 border-violet-500/20" />
                                         </div>
+                                        {/* Tagihan bruto vs target tagihan (laporan bulanan) */}
+                                        {lapLatest?.targetTagihan != null && lapLatest.targetTagihan > 0 && tagihanBruto != null && (
+                                            <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06]">
+                                                <HBar
+                                                    label={`Tagihan vs Target · ${periodeText}`}
+                                                    valueText={`${fRpShort(tagihanBruto)} / ${fRpShort(lapLatest.targetTagihan)} (${Math.round((tagihanBruto / lapLatest.targetTagihan) * 100)}%)`}
+                                                    fraction={tagihanBruto / lapLatest.targetTagihan}
+                                                    tone={tagihanBruto >= lapLatest.targetTagihan ? 'emerald' : 'sky'}
+                                                />
+                                            </div>
+                                        )}
 
                                         {/* Komposisi Hutang — stacked bar (Saldo Hutang + BAD) */}
                                         {showHutang && (
                                             <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-2">
-                                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Komposisi Hutang</span>
+                                                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Komposisi Hutang</span>
                                                 <StackedBar segments={[
                                                     { label: 'Saldo Hutang', value: location.saldoHutang ?? 0, tone: 'amber' },
                                                     { label: 'BAD', value: location.bad ?? 0, tone: 'orange' },
@@ -793,8 +863,31 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 );
                             })()}
 
-                            {/* Hasil Usaha */}
-                            {location.hasilUsaha && (location.hasilUsaha.pendapatan || location.hasilUsaha.biaya) ? (() => {
+                            {/* Hasil Usaha — tabel bulan ini / s.d / rencana (laporan bulanan) */}
+                            {hasHu && lapLatest && (() => {
+                                const sd = lapLatest.huSdBulanIni;
+                                const margin = sd?.pendapatan && sd.pendapatan > 0 && sd.hpp != null ? ((sd.pendapatan - sd.hpp) / sd.pendapatan) * 100 : undefined;
+                                return (
+                                    <div className="space-y-2.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                                                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+                                                Hasil Usaha · {periodeText}
+                                            </h3>
+                                            {margin !== undefined && (
+                                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${margin >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                                                    Margin kotor {margin.toFixed(2)}%
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06]">
+                                            <HasilUsahaTable bulanIni={lapLatest.huBulanIni} sdBulanIni={sd} rencana={huPlan} />
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                            {/* Hasil Usaha (ringkas, bila belum ada laporan bulanan) */}
+                            {!hasHu && location.hasilUsaha && (location.hasilUsaha.pendapatan || location.hasilUsaha.biaya) ? (() => {
                                 const { pendapatan, biaya, laba } = location.hasilUsaha!;
                                 const margin = pendapatan > 0 ? (laba / pendapatan) * 100 : 0;
                                 const rugi = laba < 0;
@@ -802,10 +895,10 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                     <div className="space-y-2.5">
                                         <div className="flex items-center justify-between">
                                             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                                                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
                                                 Hasil Usaha
                                             </h3>
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${rugi ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${rugi ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
                                                 Margin {margin.toFixed(2)}%
                                             </span>
                                         </div>
@@ -824,21 +917,21 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             {(location.startDate || location.endDate) && (
                                 <div className="p-3.5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] backdrop-blur-md">
                                     <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                            <Calendar className="w-3.5 h-3.5 text-sky-400" />
+                                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                            <Calendar className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
                                             <span>Masa Pelaksanaan Kontrak</span>
                                         </div>
-                                        <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+                                        <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
                                             275 Hari Kalender
                                         </span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 text-xs">
                                         <div className="p-2 rounded-xl bg-black/[0.03] dark:bg-black/30 border border-white/[0.04]">
-                                            <span className="text-[9px] text-slate-500 uppercase font-semibold block">Mulai</span>
+                                            <span className="text-[11px] text-slate-500 uppercase font-semibold block">Mulai</span>
                                             <span className="font-bold text-slate-900 dark:text-white mt-0.5 block">{fDate(location.startDate)}</span>
                                         </div>
                                         <div className="p-2 rounded-xl bg-black/[0.03] dark:bg-black/30 border border-white/[0.04]">
-                                            <span className="text-[9px] text-slate-500 uppercase font-semibold block">Target Selesai</span>
+                                            <span className="text-[11px] text-slate-500 uppercase font-semibold block">Target Selesai</span>
                                             <span className="font-bold div-accent-text mt-0.5 block">{fDate(location.endDate)}</span>
                                         </div>
                                     </div>
@@ -850,10 +943,10 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="space-y-2.5">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                            <TrendingUp className="w-3.5 h-3.5 div-accent-text" />
+                                            <TrendingUp className="w-3.5 h-3.5 div-accent-text" aria-hidden="true" />
                                             Penyerapan Keuangan per DIPA
                                         </h3>
-                                        <span className="text-[10px] text-slate-500 font-mono">Anggaran APBN</span>
+                                        <span className="text-[11px] text-slate-500 font-mono">Anggaran APBN</span>
                                     </div>
 
                                     <div className="space-y-2">
@@ -879,7 +972,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                         />
                                                     </div>
 
-                                                    <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-500 dark:text-slate-400 pt-0.5">
+                                                    <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
                                                         <div>
                                                             <span className="text-slate-500 block">Rencana:</span>
                                                             <span className="font-semibold text-slate-600 dark:text-slate-300">{fIDR(pk.rencana)}</span>
@@ -901,14 +994,14 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 backdrop-blur-md flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 text-amber-400">
-                                            <FileText className="w-4 h-4" />
+                                            <FileText className="w-4 h-4" aria-hidden="true" />
                                         </div>
                                         <div>
-                                            <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider block">Progress Belum Ditagihkan</span>
+                                            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider block">Progress Belum Ditagihkan</span>
                                             <span className="text-sm font-black text-slate-900 dark:text-white">{fIDR(location.tagihanBelumDiproses)}</span>
                                         </div>
                                     </div>
-                                    <span className="text-[9px] font-bold px-2 py-1 rounded-lg bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">
+                                    <span className="text-[11px] font-bold px-2 py-1 rounded-lg bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">
                                         Verifikasi PPK
                                     </span>
                                 </div>
@@ -917,26 +1010,26 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             {/* Identitas Stakeholder */}
                             <div className="space-y-2 pt-1">
                                 <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                    <Building2 className="w-3.5 h-3.5 text-sky-400" />
+                                    <Building2 className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
                                     Identitas Kontraktual
                                 </h3>
 
                                 <div className="space-y-1.5 text-xs">
                                     {location.penggunaJasa && (
                                         <div className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.05] dark:border-white/[0.05]">
-                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Pengguna Jasa</span>
+                                            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Pengguna Jasa</span>
                                             <span className="font-bold text-slate-700 dark:text-slate-200 mt-0.5 block">{location.penggunaJasa}</span>
                                         </div>
                                     )}
                                     {location.pengawas && (
                                         <div className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.05] dark:border-white/[0.05]">
-                                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Konsultan Pengawas</span>
+                                            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Konsultan Pengawas</span>
                                             <span className="font-bold text-slate-700 dark:text-slate-200 mt-0.5 block">{location.pengawas}</span>
                                         </div>
                                     )}
                                     {(location.penyediaJasa || location.contractor) && (
                                         <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20">
-                                            <span className="text-[9px] text-sky-400 font-bold uppercase tracking-wider block">Penyedia Jasa (Kontraktor)</span>
+                                            <span className="text-[11px] text-sky-400 font-bold uppercase tracking-wider block">Penyedia Jasa (Kontraktor)</span>
                                             <span className="font-bold text-sky-200 mt-0.5 block">{(location.penyediaJasa || location.contractor)}</span>
                                         </div>
                                     )}
@@ -964,11 +1057,11 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                     <div className="space-y-2.5">
                                         <div className="flex items-center justify-between">
                                             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                                                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
                                                 Kinerja Operasi
                                             </h3>
                                             {margin != null && (
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${rugi ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${rugi ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
                                                     LK {margin.toFixed(1)}%
                                                 </span>
                                             )}
@@ -993,17 +1086,17 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                     <div className="space-y-2.5">
                                         <div className="flex items-center justify-between">
                                             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                                <Activity className="w-3.5 h-3.5 text-sky-400" />
+                                                <Activity className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
                                                 Progress Mingguan · RA / RI
                                             </h3>
-                                            <span className="text-[10px] text-slate-500 font-mono">{nowLabel}</span>
+                                            <span className="text-[11px] text-slate-500 font-mono">{nowLabel}</span>
                                         </div>
                                         {row ? (
                                             <WeeklyProgressCard row={row} />
                                         ) : (
                                             <div className="p-3 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.05] dark:border-white/[0.05] text-center">
                                                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Belum ada data RA / RI untuk {nowLabel}</p>
-                                                <p className="text-[10px] text-slate-500 mt-0.5">Riwayat bulan lain ada di Detail Proyek → Operasi.</p>
+                                                <p className="text-[11px] text-slate-500 mt-0.5">Riwayat bulan lain ada di Detail Proyek → Operasi.</p>
                                             </div>
                                         )}
                                     </div>
@@ -1019,10 +1112,10 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between">
                                             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
                                                 Milestone
                                             </h3>
-                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono font-bold">{overall.toFixed(0)}%</span>
+                                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold">{overall.toFixed(0)}%</span>
                                         </div>
                                         <div className="h-2 rounded-full bg-slate-200/80 dark:bg-slate-800/80 overflow-hidden">
                                             <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-400 transition-all duration-700" style={{ width: `${overall}%` }} />
@@ -1035,10 +1128,10 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                     <div key={i} className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06]">
                                                         <div className="flex items-center gap-2.5 mb-1.5">
                                                             <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 ${complete ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-black/[0.03] dark:bg-white/[0.04] text-slate-500 border border-black/10 dark:border-white/10'}`}>
-                                                                {complete ? <CheckCircle className="w-3 h-3" /> : <span className="text-[9px] font-black">{i + 1}</span>}
+                                                                {complete ? <CheckCircle className="w-3 h-3" aria-hidden="true" /> : <span className="text-[11px] font-black">{i + 1}</span>}
                                                             </div>
                                                             <span className={`text-[11px] font-semibold flex-1 min-w-0 ${complete ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{m.title || '-'}</span>
-                                                            <span className={`text-[10px] font-black font-mono shrink-0 ${complete ? 'text-emerald-400' : 'text-amber-400'}`}>{p}%</span>
+                                                            <span className={`text-[11px] font-black font-mono shrink-0 ${complete ? 'text-emerald-400' : 'text-amber-400'}`}>{p}%</span>
                                                         </div>
                                                         <div className="h-1.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
                                                             <div className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-amber-400'}`} style={{ width: `${p}%` }} />
@@ -1056,10 +1149,10 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                            <Wrench className="w-3.5 h-3.5 div-accent-text" />
+                                            <Wrench className="w-3.5 h-3.5 div-accent-text" aria-hidden="true" />
                                             Lingkup Pekerjaan
                                         </h3>
-                                        <span className="text-[10px] text-slate-500">{location.lingkupPekerjaan.length} Kategori</span>
+                                        <span className="text-[11px] text-slate-500">{location.lingkupPekerjaan.length} Kategori</span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
                                         {location.lingkupPekerjaan.map((item, idx) => (
@@ -1067,7 +1160,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                 key={idx}
                                                 className="p-2.5 rounded-xl bg-white/75 dark:bg-slate-900/70 border border-black/[0.06] dark:border-white/[0.06] hover:border-[rgba(var(--div-accent-rgb),0.3)] transition-colors flex items-center gap-2 group"
                                             >
-                                                <div className="w-5 h-5 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] div-accent-text flex items-center justify-center text-[10px] font-bold shrink-0">
+                                                <div className="w-5 h-5 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] div-accent-text flex items-center justify-center text-[11px] font-bold shrink-0">
                                                     {idx + 1}
                                                 </div>
                                                 <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 group-hover:text-white leading-tight">
@@ -1084,10 +1177,10 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 <div className="space-y-2 pt-1">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                            <Truck className="w-3.5 h-3.5 text-blue-400" />
+                                            <Truck className="w-3.5 h-3.5 text-blue-400" aria-hidden="true" />
                                             Sumber Daya
                                         </h3>
-                                        <span className="text-[10px] text-slate-500 font-mono">Monitoring Lokasi</span>
+                                        <span className="text-[11px] text-slate-500 font-mono">Monitoring Lokasi</span>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-2">
@@ -1114,7 +1207,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             {location.isuStrategis && location.isuStrategis.length > 0 && (
                                 <div className="space-y-2 pt-1">
                                     <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
                                         Isu Strategis & Solusi Abipraya
                                     </h3>
 
@@ -1122,11 +1215,11 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                         {location.isuStrategis.map((is, i) => (
                                             <div key={i} className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 space-y-1.5">
                                                 <div className="flex items-start gap-2">
-                                                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
                                                     <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-snug">{is.isu}</p>
                                                 </div>
                                                 <div className="p-2 rounded-lg bg-black/[0.04] dark:bg-black/40 border border-black/[0.05] dark:border-white/[0.05] ml-5">
-                                                    <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">Rekomendasi / Solusi:</span>
+                                                    <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">Rekomendasi / Solusi:</span>
                                                     <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">{is.usulan}</p>
                                                 </div>
                                             </div>
@@ -1135,15 +1228,45 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 </div>
                             )}
 
+                            {/* Ringkasan pengadaan: jumlah paket & pagu (laporan bulanan) */}
+                            {pengadaan && ((pengadaan.paketTotal ?? 0) > 0 || (pengadaan.paguTotal ?? 0) > 0) && (
+                                <div className="space-y-2 pt-1">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                                            <Truck className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
+                                            Ringkasan Pengadaan
+                                        </h3>
+                                        <span className="text-[11px] text-slate-500 font-mono">{periodeText}</span>
+                                    </div>
+                                    <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-3">
+                                        {(pengadaan.paketTotal ?? 0) > 0 && (
+                                            <HBar
+                                                label="Jumlah Paket"
+                                                valueText={`${pengadaan.paketRealisasi ?? 0} / ${pengadaan.paketTotal} · sisa ${(pengadaan.paketTotal ?? 0) - (pengadaan.paketRealisasi ?? 0)}`}
+                                                fraction={(pengadaan.paketRealisasi ?? 0) / (pengadaan.paketTotal as number)}
+                                                tone="emerald"
+                                            />
+                                        )}
+                                        {(pengadaan.paguTotal ?? 0) > 0 && (
+                                            <HBar
+                                                label="Progres Pagu"
+                                                valueText={`${fRpShort(pengadaan.paguRealisasi ?? 0)} / ${fRpShort(pengadaan.paguTotal)} · sisa ${fRpShort((pengadaan.paguTotal ?? 0) - (pengadaan.paguRealisasi ?? 0))}`}
+                                                fraction={(pengadaan.paguRealisasi ?? 0) / (pengadaan.paguTotal as number)}
+                                                tone="sky"
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             {/* Monitoring Pengadaan (major item) — paling bawah tab Operasi */}
                             {location.monitoringPengadaan && location.monitoringPengadaan.length > 0 && (
                                 <div className="space-y-2 pt-1">
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                            <HardHat className="w-3.5 h-3.5 text-amber-400" />
+                                            <HardHat className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
                                             Monitoring Pengadaan
                                         </h3>
-                                        <span className="text-[10px] text-slate-500 font-mono">Major Item</span>
+                                        <span className="text-[11px] text-slate-500 font-mono">Major Item</span>
                                     </div>
                                     <div className="space-y-2">
                                         {location.monitoringPengadaan.map((mp, i) => {
@@ -1153,7 +1276,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                 <div key={i} className="p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-1.5">
                                                     <div className="flex items-center justify-between gap-2">
                                                         <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 min-w-0 truncate">{mp.nama}</span>
-                                                        <span className={`text-[10px] font-black font-mono shrink-0 ${done ? 'text-emerald-400' : 'text-amber-400'}`}>{pct}%</span>
+                                                        <span className={`text-[11px] font-black font-mono shrink-0 ${done ? 'text-emerald-400' : 'text-amber-400'}`}>{pct}%</span>
                                                     </div>
                                                     <div className="h-1.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
                                                         <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-amber-400'}`} style={{ width: `${pct}%` }} />
@@ -1190,32 +1313,32 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <div className="flex items-start justify-between gap-3 mb-1.5">
                                                 <div className="flex gap-2.5 items-start min-w-0">
                                                     <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
-                                                        <GitBranch className="w-3.5 h-3.5" />
+                                                        <GitBranch className="w-3.5 h-3.5" aria-hidden="true" />
                                                     </div>
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-bold text-slate-900 dark:text-white break-words">{cm.judul || '-'}</p>
-                                                        {cm.dariKendala && <span className="text-[10px] text-slate-500">Dari kendala</span>}
+                                                        {cm.dariKendala && <span className="text-[11px] text-slate-500">Dari kendala</span>}
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1 shrink-0">
-                                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${st}`}>{cm.status}</span>
-                                                    <span className={`text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${jm.cls}`}>{jm.label}</span>
+                                                    <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${st}`}>{cm.status}</span>
+                                                    <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${jm.cls}`}>{jm.label}</span>
                                                 </div>
                                             </div>
                                             {cm.deskripsi && <p className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-pre-line ml-9 mb-1.5">{cm.deskripsi}</p>}
                                             {cm.dampak && (
                                                 <div className="ml-9 mb-1.5 p-2 rounded-lg bg-black/[0.03] dark:bg-black/30 border border-white/[0.04]">
-                                                    <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block">Dampak</span>
+                                                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Dampak</span>
                                                     <span className="text-[11px] text-slate-600 dark:text-slate-300">{cm.dampak}</span>
                                                 </div>
                                             )}
                                             {cm.mitigasi && (
                                                 <div className="ml-9 mb-1.5 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-                                                    <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-wider block">Mitigasi</span>
+                                                    <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">Mitigasi</span>
                                                     <span className="text-[11px] text-slate-600 dark:text-slate-300">{cm.mitigasi}</span>
                                                 </div>
                                             )}
-                                            <div className="flex flex-wrap gap-x-4 gap-y-1 ml-9 text-[10px] text-slate-500">
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1 ml-9 text-[11px] text-slate-500">
                                                 {cm.nilai != null && <span>Nilai: <strong className="text-slate-600 dark:text-slate-300 font-mono">{fIDRShort(cm.nilai)}</strong></span>}
                                                 {cm.tanggal && <span>Tgl: <strong className="text-slate-500 dark:text-slate-400">{fDate(cm.tanggal)}</strong></span>}
                                                 {cm.target && <span>Target: <strong className="text-slate-500 dark:text-slate-400">{cm.target}</strong></span>}
@@ -1226,9 +1349,9 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 })
                             ) : (
                                 <div className="py-10 text-center">
-                                    <GitBranch className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-60" />
+                                    <GitBranch className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-60" aria-hidden="true" />
                                     <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Belum ada legal &amp; change management</p>
-                                    <p className="text-[10px] text-slate-500 mt-0.5">Kelola di halaman Detail Proyek</p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">Kelola di halaman Detail Proyek</p>
                                 </div>
                             )}
                         </motion.div>
@@ -1246,11 +1369,11 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                         >
                             <div className="flex items-center justify-between">
                                 <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                    <AlertTriangle className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                                    <AlertTriangle className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" aria-hidden="true" />
                                     Kendala Proyek
                                 </h3>
                                 {location.kendala && location.kendala.length > 0 && (
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-black/10 dark:border-white/10">
+                                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-black/10 dark:border-white/10">
                                         {location.kendala.length} Item
                                     </span>
                                 )}
@@ -1272,12 +1395,12 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                         >
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="flex items-start gap-2">
-                                                    <span className="w-5 h-5 rounded-lg bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-black/10 dark:border-white/10 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">
+                                                    <span className="w-5 h-5 rounded-lg bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-black/10 dark:border-white/10 text-[11px] font-black flex items-center justify-center shrink-0 mt-0.5">
                                                         {idx + 1}
                                                     </span>
                                                     <h4 className="text-xs font-black text-slate-900 dark:text-white leading-snug">{k.masalah}</h4>
                                                 </div>
-                                                <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${st.cls}`}>
+                                                <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${st.cls}`}>
                                                     {st.label}
                                                 </span>
                                             </div>
@@ -1286,26 +1409,26 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <div className="space-y-1.5 text-[11px] pl-7">
                                                 {k.penyebab && (
                                                     <div>
-                                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Penyebab</span>
+                                                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Penyebab</span>
                                                         <span className="text-slate-600 dark:text-slate-300">{k.penyebab}</span>
                                                     </div>
                                                 )}
                                                 {k.tindakan && (
                                                     <div className="p-2 rounded-xl bg-black/[0.04] dark:bg-black/40 border border-white/[0.04]">
-                                                        <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">Tindakan / Action Plan</span>
+                                                        <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">Tindakan / Action Plan</span>
                                                         <span className="text-slate-700 dark:text-slate-200">{k.tindakan}</span>
                                                     </div>
                                                 )}
                                             </div>
 
                                             {/* Metadata footer (Target & PIC) */}
-                                            <div className="flex items-center justify-between pt-2 border-t border-black/[0.05] dark:border-white/[0.05] text-[10px] pl-7">
+                                            <div className="flex items-center justify-between pt-2 border-t border-black/[0.05] dark:border-white/[0.05] text-[11px] pl-7">
                                                 <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                                                    <Clock className="w-3 h-3 text-amber-400" />
+                                                    <Clock className="w-3 h-3 text-amber-400" aria-hidden="true" />
                                                     <span>Target: <strong className="text-slate-700 dark:text-slate-200">{k.target || 'M1 Okt 2026'}</strong></span>
                                                 </div>
                                                 <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                                                    <User className="w-3 h-3 text-sky-400" />
+                                                    <User className="w-3 h-3 text-sky-400" aria-hidden="true" />
                                                     <span>PIC: <strong className="text-slate-700 dark:text-slate-200">{k.pic || 'PM, SEM'}</strong></span>
                                                 </div>
                                             </div>
@@ -1315,9 +1438,9 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 </div>
                             ) : (
                                 <div className="p-8 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.05] dark:border-white/[0.05] text-center">
-                                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-60" />
+                                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-60" aria-hidden="true" />
                                     <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Tidak ada kendala aktif tercatat</p>
-                                    <p className="text-[10px] text-slate-500 mt-0.5">Operasional proyek berjalan lancar</p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">Operasional proyek berjalan lancar</p>
                                 </div>
                             )}
                         </motion.div>
@@ -1346,12 +1469,12 @@ function TabButton({
                 active
                     ? 'bg-black/[0.06] dark:bg-white/10 text-slate-900 dark:text-white shadow-md shadow-black/10 dark:shadow-black/40 border border-black/10 dark:border-white/15'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/[0.03]'
-            }`}
+            } focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none`}
         >
             <Icon className={`w-3.5 h-3.5 shrink-0 ${active ? 'div-accent-text' : 'text-slate-500 dark:text-slate-400'}`} />
             <span className="text-[11px] sm:text-xs tracking-tight truncate">{label}</span>
             {badge != null && (
-                <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-rose-500 text-white ml-0.5">
+                <span className="text-[11px] font-black px-1.5 py-0.2 rounded-full bg-rose-500 text-white ml-0.5">
                     {badge}
                 </span>
             )}
@@ -1437,16 +1560,16 @@ function ExecutiveCircularGauge({ rencana, realisasi, deviasi }: { rencana: numb
 
                 {/* Center Content Hub */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Realisasi</span>
+                    <span className="text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Realisasi</span>
                     <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-none my-0.5 flex items-baseline">
                         <CountUp value={realisasi} duration={1400} format={(n) => n.toFixed(1)} />
                         <span className="text-base text-amber-400 font-extrabold ml-0.5">%</span>
                     </div>
                     {/* Small deviasi chip inside circle */}
-                    <div className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-black mt-1 ${
+                    <div className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-black mt-1 ${
                         isAhead ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
                     }`}>
-                        {isAhead ? <ArrowUpRight className="w-2.5 h-2.5" /> : <ArrowDownRight className="w-2.5 h-2.5" />}
+                        {isAhead ? <ArrowUpRight className="w-2.5 h-2.5" aria-hidden="true" /> : <ArrowDownRight className="w-2.5 h-2.5" aria-hidden="true" />}
                         <span>{isAhead ? '+' : ''}{deviasi.toFixed(2)}%</span>
                     </div>
                 </div>
@@ -1457,7 +1580,7 @@ function ExecutiveCircularGauge({ rencana, realisasi, deviasi }: { rencana: numb
                 <div className="px-2 py-3 rounded-xl bg-black/[0.04] dark:bg-black/40 border border-black/[0.05] dark:border-white/[0.05] text-center flex flex-col items-center gap-1.5">
                     <div className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
-                        <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Rencana</span>
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Rencana</span>
                     </div>
                     <span className="text-sm font-black text-slate-900 dark:text-white font-mono"><CountUp value={rencana} duration={1100} format={(n) => `${n.toFixed(1)}%`} /></span>
                 </div>
@@ -1465,7 +1588,7 @@ function ExecutiveCircularGauge({ rencana, realisasi, deviasi }: { rencana: numb
                 <div className="px-2 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center flex flex-col items-center gap-1.5 shadow-lg shadow-amber-500/5">
                     <div className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                        <span className="text-[9px] font-bold text-amber-300 uppercase tracking-wider">Realisasi</span>
+                        <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">Realisasi</span>
                     </div>
                     <span className="text-sm font-black text-amber-300 font-mono"><CountUp value={realisasi} duration={1400} format={(n) => `${n.toFixed(2)}%`} /></span>
                 </div>
@@ -1475,7 +1598,7 @@ function ExecutiveCircularGauge({ rencana, realisasi, deviasi }: { rencana: numb
                 }`}>
                     <div className="flex items-center gap-1">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isAhead ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                        <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Deviasi</span>
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Deviasi</span>
                     </div>
                     <span className={`text-sm font-black font-mono ${isAhead ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {isAhead ? '+' : ''}{deviasi.toFixed(2)}%

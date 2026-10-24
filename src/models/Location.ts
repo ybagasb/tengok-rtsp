@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import type { LaporanBulanan, RencanaKurvaS } from '@/lib/projectReport';
 
 // ── Sub-document shapes ──────────────────────────────────────────────────────
 export interface IMilestone {
@@ -196,6 +197,13 @@ export interface ILocationData {
     // ── Legal & change management ────────────────────────────────────────────
     changeManagement?: IChangeManagement[];
 
+    // ── Laporan bulanan (dashboard Project Control) ──────────────────────────
+    // Dikelola HANYA lewat /api/projects/[id]/laporan (bukan EDITABLE_FIELDS).
+    laporanBulanan?: LaporanBulanan[];
+    rencanaKurvaS?: RencanaKurvaS[];
+    cashInAwal?: number;         // Total cash in SEBELUM laporan bulanan pertama (IDR)
+    cashOutAwal?: number;        // Total cash out SEBELUM laporan bulanan pertama (IDR)
+
     milestones?: IMilestone[];
     gallery?: IGalleryItem[];
     documents?: IDocumentItem[];
@@ -306,6 +314,57 @@ const MonitoringPengadaanSchema = new Schema<IMonitoringPengadaan>({
     persentase: { type: Number, min: 0, max: 100, default: 0 },
 }, { _id: false });
 
+// Laporan bulanan: semua field opsional (PIC boleh mengisi sebagian).
+const HasilUsahaPeriodeSchema = new Schema({
+    pendapatan: { type: Number },
+    hpp: { type: Number },
+    ebitda: { type: Number },
+    labaBersih: { type: Number },
+}, { _id: false });
+
+const LaporanBulananSchema = new Schema({
+    periode: { type: String, required: true, match: /^20\d{2}-(0[1-9]|1[0-2])$/ },
+    evm: {
+        type: new Schema({
+            bac: { type: Number },
+            bcws: { type: Number },
+            bcwp: { type: Number },
+            acwp: { type: Number },
+        }, { _id: false }),
+    },
+    ri: { type: Number },
+    huBulanIni: { type: HasilUsahaPeriodeSchema },
+    huSdBulanIni: { type: HasilUsahaPeriodeSchema },
+    cashIn: { type: Number },
+    cashOut: { type: Number },
+    tagihanBruto: { type: Number },
+    targetTagihan: { type: Number },
+    pengadaan: {
+        type: new Schema({
+            paketTotal: { type: Number },
+            paketRealisasi: { type: Number },
+            paguTotal: { type: Number },
+            paguRealisasi: { type: Number },
+        }, { _id: false }),
+    },
+    updatedAt: { type: Date },
+}, { _id: false });
+
+const RencanaKurvaSSchema = new Schema({
+    tahun: { type: Number, required: true },
+    puRkap: { type: Number },
+    raRkap: { type: [Number], default: [] },
+    raEksternal: { type: [Number], default: [] },
+    huRencana: {
+        type: new Schema({
+            pendapatan: { type: [Number], default: [] },
+            hpp: { type: [Number], default: [] },
+            ebitda: { type: [Number], default: [] },
+            labaBersih: { type: [Number], default: [] },
+        }, { _id: false }),
+    },
+}, { _id: false });
+
 // ── Main schema ──────────────────────────────────────────────────────────────
 const LocationSchema: Schema = new Schema({
     name: { type: String, required: true },
@@ -394,6 +453,12 @@ const LocationSchema: Schema = new Schema({
 
     // Legal & change management
     changeManagement: { type: [ChangeManagementSchema], default: [] },
+
+    // Laporan bulanan & rencana Kurva S (lihat src/lib/projectReport.ts)
+    laporanBulanan: { type: [LaporanBulananSchema], default: [] },
+    rencanaKurvaS: { type: [RencanaKurvaSSchema], default: [] },
+    cashInAwal: { type: Number, min: 0 },
+    cashOutAwal: { type: Number, min: 0 },
 
     milestones: { type: [MilestoneSchema], default: [] },
     gallery: { type: [GalleryItemSchema], default: [] },
