@@ -598,7 +598,8 @@ def build():
     E.append(Paragraph('Kartu-kartu ini hanya muncul bila proyek sudah punya laporan bulanan. Grafik menampilkan '
                        '<b>satu tahun</b>, yaitu tahun laporan yang terakhir diisi.', BODY))
     E.extend(shot('10-peta-kurva-s.png',
-                  'Panel peta, tab Ringkasan: Kurva S (RA RKAP, RA Eksternal, RI) dengan nilai per bulan di bawahnya.', 112))
+                  'Panel peta, tab Ringkasan: kartu Realisasi, Rencana, dan Deviasi untuk bulan terpilih, bar PU terhadap RKAP, lalu grafik Kurva S. '
+                  'Klik chip di bawah grafik untuk menyembunyikan satu garis; tabel Rp miliar per bulan dibuka lewat tombol "Lihat tabel".', 112))
     E.extend(shot('11-peta-cpi-spi.png',
                   'Panel peta, tab Ringkasan: CPI, SPI, serta CV dan SV.', 112))
     E.extend(shot('12-peta-arus-kas.png',

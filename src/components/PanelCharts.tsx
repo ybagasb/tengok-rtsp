@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { useReducedMotion } from 'framer-motion';
+import { ChevronDown } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { BULAN_SINGKAT, hppPersen, type CashflowPoint, type HasilUsahaPeriode, type KurvaSData } from '@/lib/projectReport';
 
@@ -342,6 +343,17 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
     const { theme } = useTheme();
     const isDark = theme === 'dark';
     const [hover, setHover] = useState<number | null>(null);
+    const [show, setShow] = useState({ rkap: true, eks: true, ri: true });
+    const [tableOpen, setTableOpen] = useState(false);
+    const reduce = useReducedMotion();
+    // Animasi masuk: garis RI tergambar dari kiri ke kanan, area memudar masuk.
+    const [drawn, setDrawn] = useState(false);
+    useEffect(() => {
+        // Dengan mode hemat gerak, transisi dimatikan (ease = 'none') sehingga hasil akhir langsung terlihat.
+        const t = requestAnimationFrame(() => setDrawn(true));
+        return () => cancelAnimationFrame(t);
+    }, []);
+    const ease = reduce ? 'none' : undefined;
 
     const lastIdx = (a: (number | undefined)[]) => a.reduce<number>((acc, v, i) => (typeof v === 'number' ? i : acc), -1);
     const defaultIdx = Math.max(lastIdx(data.ri), lastIdx(data.rkap), lastIdx(data.eksternal), 0);
@@ -399,10 +411,16 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
         { label: 'RA Extern', color: cEks, vals: data.eksternal },
         { label: 'RI', color: cRi, vals: data.ri },
     ];
-    const legend = [
-        { label: 'Rencana (RKAP)', value: rkap, swatch: <i className="w-4 border-t-2 border-dashed" style={{ borderColor: cRkap }} aria-hidden="true" /> },
-        { label: 'Eksternal', value: eks, swatch: <i className="w-4 border-t-2 border-dotted" style={{ borderColor: cEks }} aria-hidden="true" /> },
-        { label: 'Internal (RI)', value: ri, swatch: <i className="w-4 border-t-[3px]" style={{ borderColor: cRi }} aria-hidden="true" /> },
+    const tipRows = [
+        { label: 'Rencana', color: cRkap, value: rkap },
+        { label: 'Eksternal', color: cEks, value: eks },
+        { label: 'Realisasi', color: cRi, value: ri },
+    ];
+    const devText = dev === undefined ? '-' : `${dev >= 0 ? '+' : ''}${dev.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`;
+    const chips = [
+        { key: 'rkap' as const, label: 'Rencana (RKAP)', value: rkap, swatch: <i className="w-4 border-t-2 border-dashed" style={{ borderColor: cRkap }} aria-hidden="true" /> },
+        { key: 'eks' as const, label: 'Eksternal', value: eks, swatch: <i className="w-4 border-t-2 border-dotted" style={{ borderColor: cEks }} aria-hidden="true" /> },
+        { key: 'ri' as const, label: 'Internal (RI)', value: ri, swatch: <i className="w-4 border-t-[3px]" style={{ borderColor: cRi }} aria-hidden="true" /> },
     ];
 
     return (
@@ -414,18 +432,48 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
             onBlur={() => setHover(null)}
             className="rounded-xl focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"
         >
-            <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
+            <div className="flex items-center justify-between gap-2 mb-2">
                 <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
-                    Progres % · Nilai Rp miliar · {data.basisFromContract ? `Basis kontrak Rp${fMil1(data.basis)} M` : 'Basis nilai terbesar pada seri'}
+                    Progres kumulatif % · {data.basisFromContract ? `Basis kontrak Rp${fMil1(data.basis)} M` : 'Basis nilai terbesar pada seri'}
                 </p>
-                {data.pu != null && data.puRkap ? (
-                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-[rgba(var(--div-accent-rgb),0.35)] bg-[rgba(var(--div-accent-rgb),0.1)] text-slate-800 dark:text-slate-100">
-                        PU: Rp{fMil1(data.pu)} M | {(puPct as number).toLocaleString('id-ID', { maximumFractionDigits: 1 })}% dari RKAP Rp{fMil1(data.puRkap)} M
-                    </span>
-                ) : null}
+                <span className="shrink-0 px-2 py-0.5 rounded-md bg-black/[0.05] dark:bg-white/[0.08] text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                    {BULAN_SINGKAT[idx]} {data.tahun}
+                </span>
             </div>
 
-            <div className="max-w-[560px] mx-auto">
+            {/* Angka utama bulan terpilih */}
+            <div className="grid grid-cols-3 gap-2 mb-2" aria-live="polite" aria-label={readout}>
+                <div className="col-span-1 rounded-xl border border-[rgba(var(--div-accent-rgb),0.35)] bg-[rgba(var(--div-accent-rgb),0.1)] px-3 py-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Realisasi</div>
+                    <div className="text-2xl font-black leading-tight text-slate-900 dark:text-white">{fPct(ri)}</div>
+                    <div className="text-[11px] font-mono font-semibold text-slate-600 dark:text-slate-300">{ri == null ? '-' : `Rp${fMil1(rp(ri) as number)} M`}</div>
+                </div>
+                <div className="rounded-xl border border-black/[0.07] dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] px-3 py-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Rencana</div>
+                    <div className="text-2xl font-black leading-tight text-slate-900 dark:text-white">{fPct(rkap)}</div>
+                    <div className="text-[11px] font-mono font-semibold text-slate-600 dark:text-slate-300">{rkap == null ? '-' : `Rp${fMil1(rp(rkap) as number)} M`}</div>
+                </div>
+                <div className={`rounded-xl border px-3 py-2 ${dev === undefined ? 'border-black/[0.07] dark:border-white/10' : dev >= 0 ? 'border-emerald-600/30 bg-emerald-500/10' : 'border-rose-600/30 bg-rose-500/10'}`}>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Deviasi</div>
+                    <div className={`text-2xl font-black leading-tight ${dev === undefined ? 'text-slate-900 dark:text-white' : dev >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{devText}</div>
+                    <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">{dev === undefined ? 'belum ada data' : dev >= 0 ? 'di atas rencana' : 'di bawah rencana'}</div>
+                </div>
+            </div>
+
+            {/* PU terhadap RKAP */}
+            {data.pu != null && data.puRkap ? (
+                <div className="mb-3">
+                    <div className="flex items-baseline justify-between gap-2 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                        <span>PU Rp{fMil1(data.pu)} M dari RKAP Rp{fMil1(data.puRkap)} M</span>
+                        <span className="font-black text-slate-900 dark:text-white">{(puPct as number).toLocaleString('id-ID', { maximumFractionDigits: 1 })}%</span>
+                    </div>
+                    <div className="mt-1 h-2 rounded-full bg-black/[0.07] dark:bg-white/10 overflow-hidden" role="progressbar" aria-label="PU terhadap RKAP" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(100, puPct as number))}>
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(100, puPct as number)}%`, background: cRi, transition: reduce ? 'none' : 'width 900ms cubic-bezier(.4,0,.2,1)' }} />
+                    </div>
+                </div>
+            ) : null}
+
+            <div className="relative max-w-[560px] mx-auto">
                 <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" aria-hidden="true">
                     <defs>
                         <linearGradient id={`${uid}-ri`} x1="0" x2="0" y1="0" y2="1">
@@ -450,20 +498,32 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
                         <text key={b} x={x(i)} y={H - 8} textAnchor="middle" fontSize="7.5" fontWeight={i === idx ? 700 : 400} fill={i === idx ? (isDark ? '#f1f5f9' : '#0f172a') : txt}>{b}</text>
                     ))}
                     {/* selisih rencana vs realisasi */}
-                    {gapPath && <path d={gapPath} fill={gapBehind ? (isDark ? 'rgba(251,113,133,0.16)' : 'rgba(225,29,72,0.10)') : (isDark ? 'rgba(52,211,153,0.16)' : 'rgba(5,150,105,0.10)')} />}
-                    {areaPath && <path d={areaPath} fill={`url(#${uid}-ri)`} />}
+                    {gapPath && show.ri && show.rkap && <path style={{ opacity: drawn ? 1 : 0, transition: ease ?? 'opacity 900ms ease 500ms' }} d={gapPath} fill={gapBehind ? (isDark ? 'rgba(251,113,133,0.16)' : 'rgba(225,29,72,0.10)') : (isDark ? 'rgba(52,211,153,0.16)' : 'rgba(5,150,105,0.10)')} />}
+                    {areaPath && show.ri && <path d={areaPath} fill={`url(#${uid}-ri)`} style={{ opacity: drawn ? 1 : 0, transition: ease ?? 'opacity 900ms ease 400ms' }} />}
                     {/* penanda bulan terpilih */}
                     <line x1={x(idx)} x2={x(idx)} y1={T} y2={H - B} stroke={txt} strokeWidth="1" strokeDasharray="2 3" opacity="0.6" />
-                    <path d={path(data.rkap)} fill="none" stroke={cRkap} strokeWidth="1.6" strokeDasharray="5 3" strokeLinecap="round" />
-                    <path d={path(data.eksternal)} fill="none" stroke={cEks} strokeWidth="1.6" strokeDasharray="1.5 3" strokeLinecap="round" />
-                    <path d={path(data.ri)} fill="none" style={{ stroke: cRi }} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                    {data.ri.map((v, i) => (typeof v === 'number' ? (
-                        <circle key={i} cx={x(i)} cy={y(v)} r={i === idx ? 4.2 : 2.4} style={{ fill: i === idx ? cRi : (isDark ? '#0f172a' : '#ffffff'), stroke: cRi }} strokeWidth="1.6" />
+                    {show.rkap && <path d={path(data.rkap)} fill="none" stroke={cRkap} strokeWidth="1.6" strokeDasharray="5 3" strokeLinecap="round" />}
+                    {show.eks && <path d={path(data.eksternal)} fill="none" stroke={cEks} strokeWidth="1.6" strokeDasharray="1.5 3" strokeLinecap="round" />}
+                    {show.ri && (
+                        <path
+                            d={path(data.ri)} pathLength={1} fill="none" style={{ stroke: cRi, strokeDasharray: 1, strokeDashoffset: drawn ? 0 : 1, transition: ease ?? 'stroke-dashoffset 1200ms cubic-bezier(.4,0,.2,1)' }}
+                            strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                        />
+                    )}
+                    {show.ri && data.ri.map((v, i) => (typeof v === 'number' ? (
+                        <circle key={i} cx={x(i)} cy={y(v)} r={i === idx ? 4.2 : 2.4} style={{ fill: i === idx ? cRi : (isDark ? '#0f172a' : '#ffffff'), stroke: cRi, opacity: drawn ? 1 : 0, transition: ease ?? `opacity 300ms ease ${200 + i * 140}ms` }} strokeWidth="1.6" />
                     ) : null))}
-                    {typeof rkap === 'number' && <circle cx={x(idx)} cy={y(rkap)} r="3.2" fill={cRkap} />}
-                    {typeof eks === 'number' && <circle cx={x(idx)} cy={y(eks)} r="3.2" fill={cEks} />}
-                    {/* label nilai realisasi pada bulan terpilih */}
-                    {typeof ri === 'number' && (() => {
+                    {/* denyut halus pada titik terakhir yang dilaporkan */}
+                    {show.ri && !reduce && riIdxLast >= 0 && typeof data.ri[riIdxLast] === 'number' && (
+                        <circle cx={x(riIdxLast)} cy={y(data.ri[riIdxLast] as number)} r="4" fill="none" style={{ stroke: cRi }} strokeWidth="1.5">
+                            <animate attributeName="r" values="4;11" dur="2.2s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="0.7;0" dur="2.2s" repeatCount="indefinite" />
+                        </circle>
+                    )}
+                    {show.rkap && typeof rkap === 'number' && <circle cx={x(idx)} cy={y(rkap)} r="3.2" fill={cRkap} />}
+                    {show.eks && typeof eks === 'number' && <circle cx={x(idx)} cy={y(eks)} r="3.2" fill={cEks} />}
+                    {/* label nilai realisasi pada bulan terpilih (saat tooltip tidak tampil) */}
+                    {show.ri && hover === null && typeof ri === 'number' && (() => {
                         const label = fPct(ri);
                         const bw = label.length * 5.2 + 10;
                         const bx = Math.max(L, Math.min(W - R - bw, x(idx) - bw / 2));
@@ -478,26 +538,51 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
                     {/* area interaksi */}
                     <rect x={L} y={T} width={W - L - R} height={H - T - B} fill="transparent" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)} style={{ touchAction: 'pan-y' }} />
                 </svg>
-            </div>
-
-            {/* Legenda dengan nilai bulan terpilih: "x% | Rp y M" */}
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-700 dark:text-slate-200 font-semibold" aria-live="polite" aria-label={readout}>
-                <span className="px-2 py-0.5 rounded-md bg-black/[0.05] dark:bg-white/[0.08] text-slate-600 dark:text-slate-300 font-bold">
-                    {BULAN_SINGKAT[idx]} {data.tahun}
-                </span>
-                {legend.map(l => (
-                    <span key={l.label} className="inline-flex items-center gap-1.5">
-                        {l.swatch} {l.label}: <span className="font-black text-slate-900 dark:text-white">{valueText(l.value)}</span>
-                    </span>
-                ))}
-                {dev !== undefined && (
-                    <span className={`font-bold ${dev >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
-                        Deviasi {dev >= 0 ? '+' : ''}{dev.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%
-                    </span>
+                            {hover !== null && (
+                    <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute z-10 min-w-[11.5rem] rounded-xl border border-black/10 dark:border-white/15 bg-white/95 dark:bg-slate-900/95 shadow-lg backdrop-blur px-3 py-2 text-[11px] text-slate-700 dark:text-slate-200"
+                        style={{ bottom: '15%', left: `${(x(idx) / W) * 100}%`, transform: idx < 6 ? 'translateX(12px)' : 'translateX(calc(-100% - 12px))' }}
+                    >
+                        <div className="font-bold text-slate-900 dark:text-white mb-1">{BULAN_SINGKAT[idx]} {data.tahun}</div>
+                        {tipRows.map(r => (
+                            <div key={r.label} className="flex items-center justify-between gap-3 py-0.5">
+                                <span className="inline-flex items-center gap-1.5"><i className="w-2 h-2 rounded-full" style={{ backgroundColor: r.color }} />{r.label}</span>
+                                <span className="font-mono font-bold text-slate-900 dark:text-white">{valueText(r.value)}</span>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </div>
 
-            {/* Tabel nilai per bulan (Rp miliar) */}
+            {/* Legenda interaktif: klik untuk menampilkan atau menyembunyikan seri */}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+                {chips.map(c => (
+                    <button
+                        key={c.key}
+                        type="button"
+                        aria-pressed={show[c.key]}
+                        onClick={() => setShow(v => ({ ...v, [c.key]: !v[c.key] }))}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none ${show[c.key] ? 'border-black/15 dark:border-white/20 bg-white/70 dark:bg-white/10 text-slate-800 dark:text-slate-100' : 'border-dashed border-black/15 dark:border-white/15 text-slate-600 dark:text-slate-400 line-through'}`}
+                    >
+                        {c.swatch}
+                        {c.label}
+                        <span className="font-mono font-black text-slate-900 dark:text-white no-underline">{fPct(c.value)}</span>
+                    </button>
+                ))}
+            </div>
+
+            {/* Tabel nilai per bulan (Rp miliar), dilipat agar grafik lebih lega */}
+            <button
+                type="button"
+                aria-expanded={tableOpen}
+                onClick={() => setTableOpen(o => !o)}
+                className="mt-2 w-full flex items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"
+            >
+                <span>{tableOpen ? 'Sembunyikan tabel' : 'Lihat tabel Rp miliar per bulan'}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${tableOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </button>
+            {tableOpen && (
             <div className="mt-2 overflow-x-auto rounded-xl border border-black/[0.06] dark:border-white/[0.06]">
                 <table className="w-full text-[11px] font-mono" aria-label={`Nilai Kurva S ${data.tahun} per bulan, dalam Rp miliar`}>
                     <thead>
@@ -524,6 +609,7 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
                     </tbody>
                 </table>
             </div>
+            )}
         </div>
     );
 }
