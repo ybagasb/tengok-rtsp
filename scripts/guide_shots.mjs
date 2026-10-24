@@ -174,6 +174,23 @@ async function main() {
         await page.getByRole('button', { name: /^Edit$/ }).click();
         await ready(page, { waitFor: page.getByText('Satuan', { exact: true }), extraMs: 3000 });
         await mainTop('06-edit-laporan-lengkap.png', 1000);
+
+        // 16 – EVM: kartu hasil hitung CPI/SPI + empat kolom input; 17 – blok Posisi Keuangan
+        const openBlock = async (id) => {
+            const btn = page.locator(`section[aria-labelledby="g-${id}"] > button`);
+            if ((await btn.getAttribute('aria-expanded')) === 'false') await btn.click();
+            await sleep(1200);
+        };
+        await openBlock('evm');
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await sleep(800);
+        const evmCards = await page.locator('[aria-label="Hasil hitung EVM"]').boundingBox();
+        const evmSec = await page.locator('section[aria-labelledby="g-evm"]').boundingBox();
+        await stableShot(page, '16-evm-cpi-spi.png', {
+            clipPage: { x: evmCards.x - 4, y: evmCards.y - 6, width: evmCards.width + 8, height: evmSec.y + evmSec.height - evmCards.y + 12 },
+        });
+        await openBlock('posisi');
+        await stableShot(page.locator('section[aria-labelledby="g-posisi"]'), '17-posisi-keuangan.png');
         await page.getByRole('button', { name: 'Batal' }).click();
 
         // 07 – Saldo Awal Kas

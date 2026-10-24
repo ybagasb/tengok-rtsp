@@ -190,11 +190,12 @@ IMG_DIR = 'scripts/guide-img'
 # Dipakai untuk membuang bagian berulang (kartu "Setup awal") atau ruang kosong.
 CROPS = {
     '01-menu-proyek.png': (0, 195, 480, 1815),
+    '03-laporan-setup.png': (0, 0, None, 1700),
     '04-rencana-tahunan.png': (0, 380, None, None),
     '05-isi-laporan.png': (0, 380, None, 1860),
     '06-edit-laporan-lengkap.png': (0, 380, None, None),
     '07-saldo-awal.png': (0, 380, None, 1020),
-    '09-cash-keuangan.png': (0, 0, None, 620),
+    '09-cash-keuangan.png': (0, 0, None, 1100),
 }
 CAP = ParagraphStyle('CAP', parent=styles['Normal'], fontName='Helvetica-Oblique',
                      fontSize=8.5, textColor=SLATE_LIGHT, leading=12, alignment=TA_CENTER, spaceBefore=3, spaceAfter=10)
@@ -344,7 +345,7 @@ def build():
         ('Operasi', 'Kinerja Operasi (PU/BK/LK), <b>Progress Mingguan</b>, Milestone, '
                     'Sumber Daya, dan Monitoring Pengadaan.'),
         ('Laporan Bulanan', '<b>Pusat pengisian angka rutin tiap bulan</b>: Earned Value, Kurva S, hasil usaha, '
-                            'arus kas, tagihan, dan pengadaan. Juga tempat Rencana Tahunan dan Saldo Awal Kas.'),
+                            'arus kas, posisi keuangan (hutang, BAD, piutang, CCC), tagihan, dan pengadaan. Juga tempat Rencana Tahunan dan Saldo Awal Kas.'),
         ('Change Management', 'Catatan perubahan harga/lingkup, klaim, dan masalah hukum.'),
         ('Isu &amp; Kendala', 'Isu strategis dan kendala di lapangan beserta penanganannya.'),
         ('Lainnya', 'Informasi, Lokasi, Kontrak, Progres, dan Galeri.'),
@@ -404,12 +405,12 @@ def build():
     E.append(Paragraph(
         'Menu <b>Laporan Bulanan</b> adalah tempat mengisi angka yang <b>berubah setiap bulan</b>. '
         'Sekali diisi di sini, angkanya langsung dipakai di grafik dan kartu pada peta serta halaman proyek '
-        '(Kurva S, CPI/SPI, arus kas, hasil usaha, pengadaan). Anda <b>tidak perlu mengetik angka yang sama dua kali</b>.', BODY))
+        '(Kurva S, CPI/SPI, arus kas, hutang/piutang, hasil usaha, pengadaan). Anda <b>tidak perlu mengetik angka yang sama dua kali</b>.', BODY))
     E.append(field_table([
         ('Sekali di awal (Setup)', 'Nilai kontrak, <b>Rencana Tahunan</b> (Kurva S + rencana hasil usaha), '
                                   'dan <b>Saldo Awal Kas</b> (hanya jika perlu).'),
         ('Setiap bulan', 'Isi satu laporan untuk bulan itu: Earned Value, realisasi Kurva S, hasil usaha, '
-                         'arus kas, tagihan, dan pengadaan.'),
+                         'arus kas, posisi keuangan, tagihan, dan pengadaan.'),
         ('Setiap awal tahun', 'Isi Rencana Tahunan untuk tahun yang baru.'),
     ], col1='Kapan'))
     E.append(Spacer(1, 2 * mm))
@@ -423,21 +424,21 @@ def build():
     # ── Setup awal ──
     E.append(Paragraph('A. Setup Awal (Cukup Sekali)', H3))
     E.append(Paragraph('<b>1) Nilai kontrak</b> — isi di menu <b>Lainnya → Kontrak</b>. '
-                       'Nilai ini dipakai sebagai pembagi untuk menghitung persen progres fisik dan Kurva S.', BODY))
+                       'Nilai ini dipakai sebagai pembagi untuk menghitung persen pada Kurva S.', BODY))
     E.append(Paragraph('<b>2) Rencana Tahunan</b> — buka menu Laporan Bulanan → tab <b>Rencana Tahunan</b>:', BODY))
     E.append(numbered([
         'Pilih <b>Tahun</b>, lalu klik <b>"Isi rencana"</b>.',
         'Pilih <b>Satuan</b> angka: Rp, Juta, atau Miliar. Ketik angka sesuai satuan yang dipilih '
         '(di bawah kolom akan tampil terjemahan "Rp ... M" agar Anda yakin).',
         'Isi <b>Target PU RKAP</b> (target pendapatan usaha setahun).',
-        'Isi tabel 12 bulan (Jan–Des). Ada enam baris: <b>RA RKAP</b> dan <b>RA Eksternal</b> (untuk Kurva S), '
-        'serta <b>Pendapatan, HPP, EBITDA, Laba Bersih</b> (rencana hasil usaha).',
+        'Isi tabel 12 bulan (Jan–Des). Ada lima baris: <b>RA RKAP</b> (sekaligus rencana pendapatan) dan '
+        '<b>RA Eksternal</b> untuk Kurva S, serta <b>HPP, EBITDA, Laba Bersih</b> (rencana hasil usaha).',
         'Klik <b>Simpan</b>.',
     ]))
     E.append(callout(
         'Isi nilai <b>kumulatif</b> (jumlah dari awal proyek s.d akhir bulan itu), bukan nilai per bulan. '
         'Satu baris harus diisi <b>lengkap 12 bulan atau dikosongkan seluruhnya</b>. '
-        'Nilai RA RKAP, RA Eksternal, Pendapatan, dan HPP <b>tidak boleh turun</b> dari bulan ke bulan '
+        'Nilai RA RKAP, RA Eksternal, dan HPP <b>tidak boleh turun</b> dari bulan ke bulan '
         '(EBITDA dan Laba Bersih boleh).', 'Aturan Rencana Tahunan'))
     E.append(Spacer(1, 2 * mm))
     E.append(tipbox(
@@ -472,12 +473,14 @@ def build():
     E.append(field_table([
         ('Earned Value (EVM)', '<b>BAC, BCWS, BCWP, ACWP</b> — nilai kumulatif s.d akhir bulan. '
                                'CPI, SPI, CV, SV langsung dihitung dan tampil di bagian atas saat Anda mengetik.'),
-        ('Kurva S – Realisasi Internal', '<b>RI kumulatif</b> s.d akhir bulan (nilai rupiah realisasi pekerjaan).'),
         ('Hasil Usaha – Bulan Ini', 'Pendapatan, HPP, EBITDA, dan Laba Bersih <b>khusus bulan ini</b>.'),
         ('Hasil Usaha – s.d Bulan Ini', '<b>Terisi otomatis</b> = s.d bulan lalu + bulan ini (dalam tahun yang sama). '
-                                        'Hapus centang "Hitung otomatis" bila ingin mengisi sendiri.'),
+                                        'Hapus centang "Hitung otomatis" bila ingin mengisi sendiri. '
+                                        '<b>Pendapatan s.d bulan ini sekaligus menjadi realisasi (RI) pada Kurva S</b>, jadi tidak diisi dua kali.'),
         ('Rencana s.d bulan ini', '<b>Tidak diisi di sini.</b> Dibaca otomatis dari Rencana Tahunan.'),
         ('Cash Flow Bulan Ini', '<b>Cash In</b> dan <b>Cash Out</b> khusus bulan ini.'),
+        ('Posisi Keuangan', '<b>Saldo hutang, BAD, piutang</b> (saldo di akhir bulan) dan <b>CCC</b> (dalam hari). '
+                            'Ini saldo, bukan arus: isi posisi pada akhir bulan itu. Tampil di menu Cash &amp; Keuangan.'),
         ('Tagihan', '<b>Tagihan bruto</b> (posisi saat ini) dan <b>target tagihan</b> (satu angka target).'),
         ('Pengadaan', '<b>Total paket</b>, <b>paket terealisasi</b>, <b>total pagu</b>, dan <b>pagu terealisasi</b> '
                       '(kumulatif s.d bulan ini).'),
@@ -494,6 +497,37 @@ def build():
         ('CV / SV', 'CV = BCWP − ACWP (selisih biaya); SV = BCWP − BCWS (selisih jadwal). '
                     'Negatif = merugikan. <i>Dihitung otomatis.</i>'),
     ], col1='Istilah'))
+    E.append(Spacer(1, 3 * mm))
+    E.append(Paragraph('CPI dan SPI: Dari Mana Angkanya?', H3))
+    E.append(Paragraph(
+        'CPI dan SPI <b>tidak diketik</b>. Aplikasi menghitungnya sendiri dari empat angka EVM yang Anda isi, '
+        'dan kartunya langsung berubah saat Anda mengetik (lihat gambar). Yang perlu Anda siapkan hanya '
+        '<b>BAC, BCWS, BCWP, dan ACWP</b>, semuanya nilai <b>kumulatif</b> sejak awal proyek s.d akhir bulan laporan.', BODY))
+    E.append(field_table([
+        ('BAC', 'Anggaran biaya total proyek. Ambil dari RAB / RAP yang disetujui.'),
+        ('BCWS', 'Nilai pekerjaan yang <b>seharusnya</b> selesai s.d bulan ini menurut jadwal. Ambil dari rencana (kurva S rencana) dikali BAC.'),
+        ('BCWP', 'Nilai pekerjaan yang <b>sudah benar-benar selesai</b> s.d bulan ini. Ambil dari progres fisik terverifikasi dikali BAC.'),
+        ('ACWP', 'Biaya yang <b>sudah benar-benar keluar</b> s.d bulan ini. Ambil dari laporan biaya aktual / buku besar proyek. '
+                 '<b>ACWP tidak otomatis sama dengan HPP</b>, jadi isi dari laporan biaya aktual.'),
+    ], col1='Angka'))
+    E.append(Spacer(1, 2 * mm))
+    E.append(callout(
+        '<b>CPI = BCWP : ACWP</b> (1 ke atas = biaya hemat). <b>SPI = BCWP : BCWS</b> (1 ke atas = jadwal sesuai atau lebih cepat). '
+        'Pada gambar di bawah: BCWP 411.970,5 : ACWP 411.804,16 = 1,00 dan BCWP 411.970,5 : BCWS 415.000 = 0,99 '
+        '(angka dalam Juta). Hasil diambil dari laporan periode terbaru dan dibulatkan 2 desimal. '
+        'Kalau BCWS atau ACWP kosong, CPI/SPI tidak tampil.', 'Rumus yang Dipakai'))
+    E.append(Spacer(1, 2 * mm))
+    E.extend(shot('16-evm-cpi-spi.png',
+                  'Blok Earned Value. Empat kartu di atas (CPI, SPI, CV, SV) dihitung otomatis dari empat kolom di bawahnya. '
+                  'Hijau = sesuai target, merah = di bawah target.', 150))
+    E.append(Spacer(1, 3 * mm))
+    E.append(Paragraph('Posisi Keuangan: Hutang, BAD, Piutang, CCC', H3))
+    E.append(Paragraph(
+        'Empat angka ini dulu diisi di menu Cash &amp; Keuangan. Sekarang diisi <b>sekali sebulan di sini</b>, '
+        'lalu otomatis tampil di Cash &amp; Keuangan dan tidak perlu diketik lagi. Isi saldo pada <b>akhir bulan laporan</b>. '
+        'CCC diisi dalam hari; di atas 90 hari ditandai merah (perlu perhatian).', BODY))
+    E.extend(shot('17-posisi-keuangan.png',
+                  'Blok Posisi Keuangan di Laporan Bulanan. Di bawah tiap kolom tampil terjemahan nilainya (Rp ... M).', 150))
     E.append(Spacer(1, 3 * mm))
     E.append(Paragraph('Fitur yang Memudahkan', H3))
     E.append(bullets([
@@ -529,13 +563,15 @@ def build():
         'Begitu laporan bulanan tersimpan, data berikut diperbarui sendiri mengikuti <b>laporan periode terbaru</b>:', BODY))
     E.append(field_table([
         ('CPI, SPI (+ CV, SV)', 'Dihitung dari EVM. Tampil di menu <b>Ringkasan</b> dan panel peta.'),
+        ('Saldo Hutang, BAD, Piutang, CCC', 'Dari blok Posisi Keuangan. Tampil sebagai kartu di Cash &amp; Keuangan.'),
         ('Tagihan Bruto', 'Dari blok Tagihan. Tampil di Cash &amp; Keuangan.'),
-        ('Hasil Usaha, PU, BK, LK', 'Dari "Hasil Usaha s.d bulan ini": Pendapatan = PU, HPP = BK, '
-                                    'Laba Kotor = Pendapatan − HPP. Tampil di Cash &amp; Keuangan dan Operasi.'),
+        ('Hasil Usaha dan PU', 'Dari "Hasil Usaha s.d bulan ini": Pendapatan = PU, Biaya = HPP, Laba = Pendapatan − HPP. '
+                               'Tampil di Cash &amp; Keuangan dan Operasi. <b>BK tidak sama dengan HPP</b>, jadi BK tetap diisi '
+                               'sendiri di menu Operasi, dan LK dihitung = PU − BK.'),
         ('Cash In / Cash Out (total)', 'Saldo awal + jumlah semua laporan bulanan. Saldo Kas ikut menyesuaikan, '
                                        'kecuali Anda pernah mengisinya manual.'),
-        ('Progres fisik (rencana, realisasi, deviasi)', 'Realisasi = RI ÷ nilai kontrak; Rencana = RA RKAP bulan itu ÷ nilai kontrak. '
-                                                        'Tampil di Beranda, Lainnya → Progres, dan peta.'),
+        ('Kurva S', 'Realisasi (RI) = Pendapatan s.d bulan ini; rencana (RA RKAP) = rencana pendapatan di Rencana Tahunan. '
+                    'Progres fisik (menu Progres) <b>bukan</b> turunan Kurva S dan tetap diisi sendiri.'),
     ], col1='Data'))
     E.append(Spacer(1, 2 * mm))
     E.append(callout(
@@ -546,7 +582,7 @@ def build():
     E.extend(shot('08-ringkasan.png',
                   'Menu Ringkasan setelah laporan diisi: CPI, SPI, CV, dan SV tampil otomatis beserta catatan sumbernya.', 135))
     E.extend(shot('09-cash-keuangan.png',
-                  'Menu Cash & Keuangan: Tagihan Bruto, Cash In, dan Cash Out mengikuti Laporan Bulanan '
+                  'Menu Cash & Keuangan: Saldo Hutang, BAD, Piutang, dan CCC tampil dari Laporan Bulanan '
                   '(ada catatan dan tombol menuju Laporan Bulanan).', 135))
     # ── Peta ──
     E.append(Paragraph('D. Di Mana Data Ini Tampil di Peta?', H3))
@@ -562,25 +598,25 @@ def build():
     E.append(Paragraph('Kartu-kartu ini hanya muncul bila proyek sudah punya laporan bulanan. Grafik menampilkan '
                        '<b>satu tahun</b>, yaitu tahun laporan yang terakhir diisi.', BODY))
     E.extend(shot('10-peta-kurva-s.png',
-                  'Panel peta, tab Ringkasan: Kurva S (RA RKAP, RA Eksternal, RI) dengan nilai per bulan di bawahnya.', 125))
+                  'Panel peta, tab Ringkasan: Kurva S (RA RKAP, RA Eksternal, RI) dengan nilai per bulan di bawahnya.', 112))
     E.extend(shot('11-peta-cpi-spi.png',
-                  'Panel peta, tab Ringkasan: CPI, SPI, serta CV dan SV.', 125))
+                  'Panel peta, tab Ringkasan: CPI, SPI, serta CV dan SV.', 112))
     E.extend(shot('12-peta-arus-kas.png',
-                  'Panel peta, tab Finansial: Arus Kas Bulanan (Cash In dan Cash Out, dalam Rp miliar).', 125))
+                  'Panel peta, tab Finansial: Arus Kas Bulanan (Cash In dan Cash Out, dalam Rp miliar).', 112))
     E.extend(shot('13-peta-tagihan.png',
-                  'Panel peta, tab Finansial: Tagihan Bruto dibanding target tagihan.', 125))
+                  'Panel peta, tab Finansial: Tagihan Bruto dibanding target tagihan.', 112))
     E.extend(shot('14-peta-hasil-usaha.png',
-                  'Panel peta, tab Finansial: Hasil Usaha (bulan ini, s.d bulan ini, dan rencana).', 125))
+                  'Panel peta, tab Finansial: Hasil Usaha (bulan ini, s.d bulan ini, dan rencana).', 112))
     E.extend(shot('15-peta-pengadaan.png',
-                  'Panel peta, tab Operasi: Ringkasan Pengadaan (jumlah paket dan progres pagu).', 125))
+                  'Panel peta, tab Operasi: Ringkasan Pengadaan (jumlah paket dan progres pagu).', 112))
     # ── Kesalahan umum ──
     E.append(Paragraph('E. Kesalahan yang Sering Terjadi', H3))
     E.append(bullets([
         '<b>Salah satuan</b> — mengetik 59 miliar sebagai 59 padahal satuan Juta. Selalu lihat terjemahan "Rp ... M" di bawah kolom.',
         '<b>Mengisi nilai bulanan di kolom kumulatif</b> — BCWS, BCWP, ACWP, dan RI adalah nilai <b>kumulatif</b> (dari awal proyek).',
         '<b>Mengisi angka s.d di kolom "bulan ini"</b> — "Bulan Ini" hanya angka bulan itu saja.',
-        '<b>Nilai kontrak belum diisi</b> — progres fisik dan Kurva S tidak bisa dihitung.',
-        '<b>Rencana Tahunan belum diisi</b> — Kurva S hanya menampilkan garis RI, dan rencana hasil usaha kosong.',
+        '<b>Nilai kontrak belum diisi</b> — persen pada Kurva S tidak bisa dihitung (basis persen = nilai kontrak).',
+        '<b>Rencana Tahunan belum diisi</b> — Kurva S hanya menampilkan garis realisasi, dan rencana hasil usaha kosong.',
         '<b>Lupa menekan Simpan</b> — isi tiap tab (Laporan Bulanan, Rencana Tahunan, Saldo Awal Kas) disimpan sendiri-sendiri.',
     ]))
     E.append(PageBreak())
@@ -612,13 +648,11 @@ def build():
         ('Cash Out', 'Total uang yang sudah keluar/dibelanjakan.'),
         ('Saldo Kas', 'Sisa kas. Boleh dikosongkan — dihitung otomatis dari '
                       'Cash In dikurangi Cash Out.'),
-        ('Saldo Hutang', 'Total hutang proyek saat ini.'),
-        ('BAD', 'Beban yang Akan Dibayar — bagian dari hutang (sesuai laporan cashflow). '
-                'Isi kalau ada angkanya.'),
-        ('Piutang', 'Uang yang masih ditunggu/belum dibayar ke proyek.'),
-        ('CCC', 'Lama perputaran kas, dihitung dalam HARI. Contoh: 120. '
-                'Kalau lebih dari 90 hari, aplikasi menandainya merah (perlu perhatian).'),
-        ('Beban Konstruksi', 'Total beban/biaya konstruksi proyek.'),
+        ('Saldo Hutang', 'Total hutang proyek. <b>Diisi di Laporan Bulanan</b> (blok Posisi Keuangan).'),
+        ('BAD', 'Beban yang Akan Dibayar, bagian dari hutang. Diisi di Laporan Bulanan.'),
+        ('Piutang', 'Uang yang masih ditunggu/belum dibayar ke proyek. Diisi di Laporan Bulanan.'),
+        ('CCC', 'Lama perputaran kas dalam HARI. Diisi di Laporan Bulanan. '
+                'Lebih dari 90 hari ditandai merah (perlu perhatian).'),
         ('Hasil Usaha', 'Isi <b>Pendapatan Usaha</b> dan <b>Biaya/HPP</b>. '
                         'Laba (atau rugi) dan margin dihitung otomatis.'),
         ('Progress Keuangan (DIPA)', 'Rincian anggaran per tahun: <b>Pagu/Rencana</b> vs <b>Realisasi</b>. '
@@ -628,13 +662,13 @@ def build():
     ], col1='Kolom'))
     E.append(Spacer(1, 2 * mm))
     E.append(callout('Setelah Laporan Bulanan diisi, kolom <b>Tagihan Bruto</b>, <b>Cash In</b>, <b>Cash Out</b>, '
-                     'dan <b>Hasil Usaha</b> di menu ini terkunci dan mengikuti laporan terbaru (lihat bagian '
-                     '"Laporan Bulanan"). Kolom lain (Saldo Hutang, BAD, Piutang, CCC, Beban Konstruksi, DIPA) '
-                     'tetap diisi di sini.', 'Sebagian Kolom Diisi Otomatis'))
+                     '<b>Hasil Usaha</b>, <b>Saldo Hutang, BAD, Piutang, dan CCC</b> di menu ini terkunci dan mengikuti laporan terbaru (lihat bagian '
+                     '"Laporan Bulanan"). Hutang, BAD, piutang, dan CCC tetap tampil sebagai kartu. '
+                     'Yang masih diisi di sini: Progress Keuangan (DIPA) dan Progress Belum Ditagihkan.', 'Sebagian Kolom Diisi Otomatis'))
     E.append(Spacer(1, 2 * mm))
-    E.append(tipbox('Istilah seperti CPI, SPI, BAD, CCC biasanya ada di laporan bulanan '
-                    'proyek. Tinggal salin angkanya ke kolom yang sesuai. Tidak perlu '
-                    'menghitung sendiri.', 'Dari Mana Angkanya?'))
+    E.append(tipbox('Angka BAD, hutang, piutang, dan CCC biasanya ada di laporan cashflow bulanan '
+                    'proyek. Salin ke blok Posisi Keuangan di Laporan Bulanan. CPI dan SPI tidak perlu '
+                    'dihitung sendiri (lihat bagian "CPI dan SPI: Dari Mana Angkanya?").', 'Dari Mana Angkanya?'))
 
     # ── Operasi ──
     E.append(Paragraph('Menu Operasi', H3))
@@ -642,10 +676,11 @@ def build():
 
     E.append(Paragraph('1) Kinerja Operasi (PU / BK / LK)', H3))
     E.append(Paragraph('Bila Laporan Bulanan sudah berisi "Hasil Usaha s.d bulan ini", bagian ini <b>terisi otomatis dan '
-                       'terkunci</b> (PU = Pendapatan, BK = HPP). Isi manual hanya jika belum ada laporan bulanan.', BODY))
+                       'terkunci</b> untuk <b>PU</b> (= Pendapatan s.d bulan ini). <b>BK tetap diisi sendiri</b> karena berbeda dari HPP. '
+                       'Bila belum ada laporan bulanan, PU juga diisi manual.', BODY))
     E.append(field_table([
         ('PU', 'Pendapatan Usaha dari sisi operasi proyek.'),
-        ('BK', 'Beban Konstruksi (biaya konstruksi operasi).'),
+        ('BK', 'Beban Konstruksi (biaya konstruksi operasi). Diisi sendiri di sini; satu-satunya tempat mengisi BK.'),
         ('LK', 'Laba Kotor — <b>tidak perlu diisi</b>, dihitung otomatis = PU − BK. '
                'Tampil merah bila rugi.'),
     ], col1='Kolom'))
@@ -726,8 +761,7 @@ def build():
                    'blok 3D di peta). Cara menggambarnya ada di bawah.'),
         ('Kontrak', 'Nomor kontrak dan nilai kontrak. Masa pelaksanaan dihitung otomatis dari tanggal mulai dan selesai di bagian Informasi.'),
         ('Progres', 'Progress fisik: geser <b>Rencana</b> dan <b>Realisasi</b> (deviasi dihitung '
-                    'otomatis). Bila Laporan Bulanan dan nilai kontrak sudah terisi, bagian ini mengikuti laporan '
-                    'dan terkunci. Di sini juga ada <b>Lingkup Pekerjaan</b> — tekan "Tambah" '
+                    'otomatis). Diisi sendiri (bukan turunan Kurva S). Di sini juga ada <b>Lingkup Pekerjaan</b> — tekan "Tambah" '
                     'untuk menuliskan tiap lingkup.'),
         ('Galeri', 'Tekan <b>"Unggah Foto"</b> untuk menambah foto proyek (JPG/PNG). '
                    'Klik foto untuk melihat ukuran penuh; gunakan panah kiri/kanan untuk '
@@ -919,8 +953,6 @@ def build():
                                      'tidak boleh turun (kecuali EBITDA dan Laba Bersih). Baca pesan yang muncul.'),
         ('Kurva S atau kartu laporan tidak muncul di peta', 'Pastikan Laporan Bulanan (dan Rencana Tahunan untuk garis rencana) sudah tersimpan, '
                                      'dan nilai kontrak sudah terisi. Muat ulang halaman peta.'),
-        ('Progres fisik tidak berubah', 'Cek nilai kontrak sudah terisi dan kolom RI di laporan bulanan terbaru sudah diisi. '
-                                        'Angka rencana butuh Rencana Tahunan.'),
         ('Masih bingung', 'Hubungi admin atau tim IT. Lebih baik bertanya daripada '
                           'salah isi.'),
     ], col1='Masalah'))
