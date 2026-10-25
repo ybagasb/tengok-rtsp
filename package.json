@@ -49,7 +49,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/mongoose": "^5.11.96",
-    "@types/node": "^20",
+    "@types/node": "24.19.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",

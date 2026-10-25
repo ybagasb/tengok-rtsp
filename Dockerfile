@@ -1,5 +1,5 @@
-# Node 22 = sama dengan .nvmrc; maplibre-gl (via @mapbox/jsonlint-lines-primitives) mensyaratkan node >= 22.
-FROM node:22-alpine AS base
+# Node 24 = sama dengan .nvmrc; maplibre-gl (via @mapbox/jsonlint-lines-primitives) mensyaratkan node >= 22.
+FROM node:24-alpine AS base
 
 FROM base AS deps
 WORKDIR /app
