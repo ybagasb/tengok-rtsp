@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Map, { Marker, Popup, Source, Layer, type MapRef } from 'react-map-gl/maplibre';
-import type { FillExtrusionLayerSpecification, FilterSpecification } from 'maplibre-gl';
+import type { FillExtrusionLayerSpecification, FilterSpecification, GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import axios from 'axios';
 import { Home, LayoutGrid, MapPin, Search, Loader2, X as CloseIcon, Signal, SignalZero, Layers, Mountain, Compass, Plus, Minus, Filter, Globe, FolderTree, Sun, Moon,
@@ -192,6 +192,39 @@ function footprintExtrusionPaint(show3d: boolean): FillExtrusionLayerSpecificati
     };
 }
 
+// ── Kantor pusat & garis lengkung ke proyek ──────────────────────────────────
+// Koordinat kantor pusat PT Brantas Abipraya, Jl. D.I. Panjaitan Kav. 14, Cawang,
+// Jakarta Timur. Titik diambil manual dari Google Maps oleh pengguna. Urutan [lng, lat].
+const HQ_LNGLAT: [number, number] = [106.874588, -6.2404438];
+const ARC_SOURCE_ID = 'tengok-arc';
+const ARC_DRAW_MS = 700;
+const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] as never[] };
+
+// Lengkung kuadratik: titik kontrol digeser tegak lurus dari titik tengah garis lurus.
+function arcCoords(a: [number, number], b: [number, number], steps = 48): [number, number][] {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    if (Math.hypot(dx, dy) < 1e-4) return [a, b];
+    const cx = (a[0] + b[0]) / 2 - dy * 0.2;
+    const cy = (a[1] + b[1]) / 2 + dx * 0.2;
+    const out: [number, number][] = [];
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const u = 1 - t;
+        out.push([u * u * a[0] + 2 * u * t * cx + t * t * b[0], u * u * a[1] + 2 * u * t * cy + t * t * b[1]]);
+    }
+    return out;
+}
+
+// Jarak garis lurus (haversine), km. Hanya perkiraan, bukan jarak tempuh jalan.
+function distanceKm(a: [number, number], b: [number, number]): number {
+    const rad = (d: number) => (d * Math.PI) / 180;
+    const dLat = rad(b[1] - a[1]);
+    const dLng = rad(b[0] - a[0]);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a[1])) * Math.cos(rad(b[1])) * Math.sin(dLng / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
 export default function MapComponent({
     category: propCategory,
     division: propDivision,
@@ -313,6 +346,70 @@ export default function MapComponent({
         });
         return on >= off;
     }, [realtimeStatuses]);
+
+    // Penanda perubahan status: saat mayoritas CCTV sebuah proyek berpindah
+    // online <-> offline (data realtime/SSE), marker-nya memancarkan satu cincin
+    // sekali. Pemuatan pertama tidak memicu apa pun (belum ada status sebelumnya).
+    const prevOnlineRef = useRef<Record<string, boolean>>({});
+    const [pings, setPings] = useState<Record<string, number>>({});
+    useEffect(() => {
+        const changed: string[] = [];
+        const next: Record<string, boolean> = {};
+        for (const loc of locations) {
+            const now = isMajorityOnline(loc);
+            next[loc._id] = now;
+            const before = prevOnlineRef.current[loc._id];
+            if (before !== undefined && before !== now) changed.push(loc._id);
+        }
+        prevOnlineRef.current = next;
+        if (changed.length > 0) {
+            setPings((p) => {
+                const out = { ...p };
+                for (const id of changed) out[id] = (out[id] ?? 0) + 1;
+                return out;
+            });
+        }
+    }, [locations, isMajorityOnline]);
+
+    // Garis lengkung kantor pusat -> proyek yang di-hover (atau yang sedang dibuka).
+    // Data penuh dirender lewat <Source>; animasi menggambar langsung memanggil
+    // setData pada source (tanpa state React) agar tidak merender ulang tiap frame.
+    const arcTarget = hovered ?? selectedLocation;
+    const arcPath = useMemo(
+        () => (arcTarget ? arcCoords(HQ_LNGLAT, [arcTarget.lng, arcTarget.lat]) : null),
+        [arcTarget],
+    );
+    const arcColor = getDivisionTheme(arcTarget?.division)?.accentHex ?? '#eab308';
+    const arcGeoJson = useMemo(
+        () => arcPath
+            ? { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: { color: arcColor }, geometry: { type: 'LineString' as const, coordinates: arcPath } }] }
+            : EMPTY_FC,
+        [arcPath, arcColor],
+    );
+    useEffect(() => {
+        if (!arcPath) return;
+        const reduced =
+            searchParams.get('reduced') === '1' ||
+            searchParams.get('motion') === '0' ||
+            (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if (reduced) return;
+        const src = mapRef.current?.getMap().getSource(ARC_SOURCE_ID) as GeoJSONSource | undefined;
+        if (!src) return;
+        const start = performance.now();
+        let raf = 0;
+        const tick = (now: number) => {
+            const t = Math.min(1, (now - start) / ARC_DRAW_MS);
+            const eased = 1 - Math.pow(1 - t, 3);
+            const n = Math.max(2, Math.ceil(eased * arcPath.length));
+            src.setData({
+                type: 'FeatureCollection',
+                features: [{ type: 'Feature', properties: { color: arcColor }, geometry: { type: 'LineString', coordinates: arcPath.slice(0, n) } }],
+            });
+            if (t < 1) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [arcPath, arcColor, searchParams]);
 
     // ── Fly camera helper ────────────────────────────────────────────────────
     // Peta full-width di belakang panel kaca; `padding.right` menggeser titik
@@ -693,6 +790,30 @@ export default function MapComponent({
                             </Source>
                         )}
 
+                        {/* Garis lengkung kantor pusat -> proyek (hover / terpilih) */}
+                        <Source id={ARC_SOURCE_ID} type="geojson" data={arcGeoJson}>
+                            <Layer
+                                id="tengok-arc-line"
+                                type="line"
+                                beforeId={labelLayerId}
+                                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                                paint={{ 'line-color': ['get', 'color'], 'line-width': 2.5, 'line-opacity': 0.9 }}
+                            />
+                        </Source>
+                        {arcTarget && (
+                            <Marker longitude={HQ_LNGLAT[0]} latitude={HQ_LNGLAT[1]} anchor="center">
+                                <div
+                                    className="pointer-events-none flex items-center gap-1.5 rounded-full bg-slate-900/85 border border-white/20 pl-1.5 pr-2.5 py-1 shadow-xl"
+                                    title="Kantor Pusat PT Brantas Abipraya"
+                                >
+                                    <span className="flex w-5 h-5 items-center justify-center rounded-full div-accent-solid">
+                                        <Building2 className="w-3 h-3 text-slate-900" aria-hidden="true" />
+                                    </span>
+                                    <span className="text-[11px] font-bold text-white whitespace-nowrap">Kantor Pusat</span>
+                                </div>
+                            </Marker>
+                        )}
+
                         {/* Location markers (custom HTML pins) — satu titik per proyek */}
                         {locations.map((loc) => {
                             const online = isMajorityOnline(loc);
@@ -712,7 +833,7 @@ export default function MapComponent({
                                         onMouseEnter={() => setHovered(loc)}
                                         onMouseLeave={() => setHovered(null)}
                                     >
-                                        <MapPin3D online={online} count={(loc.cameras || []).length} category={loc.category} isSelected={selectedLocation?._id === loc._id} progress={loc.progressPercent} />
+                                        <MapPin3D online={online} count={(loc.cameras || []).length} category={loc.category} isSelected={selectedLocation?._id === loc._id} progress={loc.progressPercent} pingKey={pings[loc._id]} />
                                     </div>
                                 </Marker>
                             );
@@ -1157,7 +1278,7 @@ export default function MapComponent({
 // Online berdenyut hijau, offline berdenyut merah lebih pelan (perhatian).
 const PIN_RING_R = 22;
 const PIN_RING_C = 2 * Math.PI * PIN_RING_R;
-function MapPin3D({ online, count, category, isSelected, progress }: { online: boolean; count: number; category?: string; isSelected?: boolean; progress?: number }) {
+function MapPin3D({ online, count, category, isSelected, progress, pingKey }: { online: boolean; count: number; category?: string; isSelected?: boolean; progress?: number; pingKey?: number }) {
     const color = online ? '#22c55e' : '#ef4444';
     const glow = online ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.55)';
     const Icon = categoryIcon(category);
@@ -1168,6 +1289,15 @@ function MapPin3D({ online, count, category, isSelected, progress }: { online: b
                 className={`relative w-9 h-9 rounded-full border-[3px] border-white flex items-center justify-center transition-transform group-hover/marker:scale-110 ${online ? 'marker-pulse' : 'marker-pulse-off'} ${isSelected ? 'ring-4 ring-[var(--div-accent)] scale-110 shadow-[0_0_15px_var(--div-glow)]' : ''}`}
                 style={{ backgroundColor: color }}
             >
+                {/* Cincin sekali-jalan saat status berganti; key baru = animasi mulai ulang */}
+                {pingKey ? (
+                    <span
+                        key={pingKey}
+                        aria-hidden="true"
+                        className="marker-status-ping pointer-events-none absolute inset-0 rounded-full border-2"
+                        style={{ borderColor: color }}
+                    />
+                ) : null}
                 {pct != null && (
                     <svg className="absolute -left-[10px] -top-[10px] pointer-events-none -rotate-90" width="50" height="50" viewBox="0 0 50 50" aria-hidden="true">
                         <circle cx="25" cy="25" r={PIN_RING_R} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" />
@@ -1254,6 +1384,11 @@ function LocationTooltip({
                         <span className="text-[11px] font-semibold text-slate-500 tracking-wide">Dicek {rel}</span>
                     </div>
                 )}
+                <div className={`text-center ${rel ? '' : 'pt-1 border-t border-black/5 dark:border-white/5'}`}>
+                    <span className="text-[11px] font-semibold text-slate-500 tracking-wide">
+                        ±{Math.round(distanceKm(HQ_LNGLAT, [loc.lng, loc.lat])).toLocaleString('id-ID')} km dari Kantor Pusat (garis lurus)
+                    </span>
+                </div>
             </div>
         </div>
     );
@@ -1271,8 +1406,12 @@ const customStyles = `
     /* Offline: denyut merah lebih pelan agar menarik perhatian tanpa mengganggu */
     .marker-pulse-off { animation: marker-pulse-off 2.4s ease-in-out infinite; }
     @keyframes marker-pulse-off { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.45); } 70% { box-shadow: 0 0 0 14px rgba(239,68,68,0); } }
+    /* Perubahan status: satu cincin membesar lalu hilang (3 kali, lalu berhenti) */
+    .marker-status-ping { animation: marker-status-ping 1.1s ease-out 3 forwards; }
+    @keyframes marker-status-ping { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(3.2); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) {
-        .marker-pulse, .marker-pulse-off { animation: none !important; }
+        .marker-pulse, .marker-pulse-off, .marker-status-ping { animation: none !important; }
+        .marker-status-ping { display: none; }
     }
 
     /* MapLibre popup — strip default chrome so our card shows cleanly */

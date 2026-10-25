@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
     ArrowLeft, Loader2, MapPin, FileText, Image as ImageIcon, TrendingUp, Info, LayoutDashboard, Upload, Trash2, Pencil, Check, X,
     User, Building2, Clock, CircleDollarSign, ExternalLink,
@@ -867,6 +867,8 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
     const [mingguList, setMingguList] = useState<ProgressMinggu[]>(project.progressMinggu ?? []);
     const [savingMinggu, setSavingMinggu] = useState(false);
 
+    const reduceMotion = useReducedMotion();
+
     // ── State untuk Milestone (reuse MilestonesTab logic) ──
     const [editingMs, setEditingMs] = useState(false);
     const [msList, setMsList] = useState<Milestone[]>(project.milestones ?? []);
@@ -1213,7 +1215,14 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                                 const p = progMs(m);
                                 const complete = p >= 100;
                                 return (
-                                    <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                                    <motion.div
+                                        key={i}
+                                        initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+                                        whileInView={{ opacity: 1, y: 0 }}
+                                        viewport={{ once: true, margin: '0px 0px -40px 0px' }}
+                                        transition={{ duration: 0.4, delay: Math.min(i, 6) * 0.06, ease: [0.23, 1, 0.32, 1] }}
+                                        className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5"
+                                    >
                                         <div className="flex items-center gap-3 mb-2.5">
                                             <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${complete ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-black/[0.04] dark:bg-white/5 text-slate-500 border border-black/10 dark:border-white/10'}`}>
                                                 {complete ? <Check className="w-4 h-4" /> : <span className="text-xs font-black">{i + 1}</span>}
@@ -1225,9 +1234,15 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                                             <span className={`text-sm font-black font-mono shrink-0 ${complete ? 'text-emerald-400' : 'text-yellow-400'}`}>{p}%</span>
                                         </div>
                                         <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                                            <div className={`h-full rounded-full transition-all duration-500 ${complete ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`} style={{ width: `${p}%` }} />
+                                            <motion.div
+                                                className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`}
+                                                initial={reduceMotion ? false : { width: 0 }}
+                                                whileInView={{ width: `${p}%` }}
+                                                viewport={{ once: true }}
+                                                transition={{ duration: 0.9, delay: 0.15 + Math.min(i, 6) * 0.06, ease: [0.23, 1, 0.32, 1] }}
+                                            />
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 );
                             })}
                         </div>
@@ -2436,6 +2451,8 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
 // ── Gallery ─────────────────────────────────────────────────────────────────
 function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin: boolean; onChanged: () => void }) {
     const [lightbox, setLightbox] = useState<number | null>(null);
+    // Foto yang diklik pertama kali: hanya foto ini yang "terbang" dari thumbnail ke lightbox.
+    const [originKey, setOriginKey] = useState<string | null>(null);
     const items = (project.gallery || []).filter(g => g.url);
     const { confirm, ConfirmDialog } = useConfirm();
 
@@ -2456,9 +2473,8 @@ function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin
                 <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 [column-fill:_balance]">
                     {items.map((g, i) => (
                         <div key={g.key} className="relative group mb-4 break-inside-avoid rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-slate-900">
-                            <button type="button" onClick={() => setLightbox(i)} className="block w-full cursor-zoom-in focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
-                                {/* eslint-disable-next-line @next/next/no-img-element -- URL dinamis (upload/presigned), bukan aset statis */}
-                                <img src={g.url!} alt={g.caption || ''} loading="lazy" className="w-full h-auto block transition-transform duration-300 group-hover:scale-[1.02]" />
+                            <button type="button" onClick={() => { setOriginKey(g.key); setLightbox(i); }} className="block w-full cursor-zoom-in focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                                <motion.img layoutId={`gal-${g.key}`} src={g.url!} alt={g.caption || ''} loading="lazy" className="w-full h-auto block transition-transform duration-300 group-hover:scale-[1.02]" />
                             </button>
                             {g.caption && <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/80 to-transparent text-[11px] text-white truncate pointer-events-none">{g.caption}</div>}
                             {isAdmin && (
@@ -2471,22 +2487,27 @@ function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin
                 </div>
             )}
 
-            {lightbox !== null && items[lightbox] && (
-                <Lightbox
-                    items={items}
-                    index={lightbox}
-                    onClose={() => setLightbox(null)}
-                    onNavigate={setLightbox}
-                />
-            )}
+            <AnimatePresence>
+                {lightbox !== null && items[lightbox] && (
+                    <Lightbox
+                        key="lightbox"
+                        items={items}
+                        index={lightbox}
+                        originKey={originKey}
+                        onClose={() => setLightbox(null)}
+                        onNavigate={setLightbox}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 }
 
 // ── Lightbox (preview galeri) ──────────────────────────────────────────────────
-function Lightbox({ items, index, onClose, onNavigate }: {
+function Lightbox({ items, index, originKey, onClose, onNavigate }: {
     items: GalleryItem[];
     index: number;
+    originKey: string | null;
     onClose: () => void;
     onNavigate: (i: number) => void;
 }) {
@@ -2509,9 +2530,21 @@ function Lightbox({ items, index, onClose, onNavigate }: {
     }, [go, onClose]);
 
     const cur = items[index];
+    const reduceMotion = useReducedMotion();
+    // Hanya foto asal klik yang berbagi layoutId dengan thumbnail. Foto lain
+    // (hasil navigasi panah) cukup crossfade, supaya tidak "terbang" dari thumbnail di luar layar.
+    const fromThumb = cur.key === originKey;
 
     return (
-        <div role="dialog" aria-modal="true" aria-label="Pratinjau foto" className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center" onClick={onClose}>
+        <motion.div
+            role="dialog" aria-modal="true" aria-label="Pratinjau foto"
+            className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center"
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.25 }}
+        >
             {/* Tutup */}
             <button onClick={onClose} aria-label="Tutup pratinjau" className="absolute top-4 right-4 min-w-10 min-h-10 inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" title="Tutup (Esc)">
                 <X className="w-5 h-5" aria-hidden="true" />
@@ -2535,8 +2568,12 @@ function Lightbox({ items, index, onClose, onNavigate }: {
                 style={{ width: '90vw', height: '90dvh' }}
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* eslint-disable-next-line @next/next/no-img-element -- URL dinamis (upload/presigned), bukan aset statis */}
-                <img
+                <motion.img
+                    key={cur.key}
+                    layoutId={fromThumb ? `gal-${cur.key}` : undefined}
+                    initial={fromThumb || reduceMotion ? false : { opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.35, ease: [0.23, 1, 0.32, 1] }}
                     src={cur.url!}
                     alt={cur.caption || ''}
                     className="w-full h-full object-contain rounded-lg shadow-2xl select-none"
@@ -2555,7 +2592,7 @@ function Lightbox({ items, index, onClose, onNavigate }: {
                     <ChevronRight className="w-6 h-6" aria-hidden="true" />
                 </button>
             )}
-        </div>
+        </motion.div>
     );
 }
 
