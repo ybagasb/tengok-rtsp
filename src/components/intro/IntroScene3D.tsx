@@ -3,7 +3,7 @@
 /**
  * IntroScene3D - scene Three.js TERPADU untuk intro /categories.
  *
- * Langkah 2: Setup scene lengkap persis prototipe tengok-intro-prototype.html:
+ * Langkah 2: Setup scene lengkap persis prototipe docs/tengok-intro-prototype.html:
  *   - Background #070d18, FogExp2(0x0a1220, 0.011)
  *   - Grid lantai amber bergerak pelan (GridHelper 260x90)
  *   - ~500 bintang (Points, posisi acak)

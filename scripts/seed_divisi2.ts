@@ -1,5 +1,5 @@
 /**
- * seed_divisi2.ts — Seed proyek DIVISI 2 dari "Segmentasi Proyek.pdf".
+ * seed_divisi2.ts — Seed proyek DIVISI 2 dari "internal-docs/data/Segmentasi Proyek.pdf".
  *
  * - Membuat kategori dari kolom SEGMENTASI (Irigasi, JIAT, Embung, Bendungan,
  *   Sungai Pantai, PLTM, Bencana, Lainnya) bila belum ada.

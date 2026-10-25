@@ -9,7 +9,7 @@ function walk(dir, callback) {
     });
 }
 
-const srcDir = path.join(__dirname, 'src');
+const srcDir = path.join(__dirname, '..', 'src');
 
 walk(srcDir, function(filePath) {
     if (filePath.endsWith('.tsx') || filePath.endsWith('.ts')) {

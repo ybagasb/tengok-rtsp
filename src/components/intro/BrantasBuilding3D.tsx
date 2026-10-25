@@ -3,7 +3,7 @@
 /**
  * BrantasBuilding3D - model 3D gedung kantor pusat PT Brantas Abipraya (fase hq).
  *
- * Langkah 1: Port model hq() dari prototipe tengok-intro-prototype.html.
+ * Langkah 1: Port model hq() dari prototipe docs/tengok-intro-prototype.html.
  * Model hq() = gedung() (flat-shaded, material kaca) + cincin Torus amber
  * + disc kaca fasad bulat khas gedung Brantas. Garis tepi amber via glow(),
  * normalisasi bounding-box via fit(). OrbitControls + auto-rotate statis.
