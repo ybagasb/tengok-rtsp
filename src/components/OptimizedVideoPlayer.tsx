@@ -516,7 +516,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                     {error === 'Kamera Offline' && (
                         <button
                             onClick={() => { retryCountRef.current = 0; setRetryAttempt(0); setError(null); initPlayer(); }}
-                            className={`${FOCUS_RING} mt-1 min-h-10 px-4 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] font-bold text-slate-300 uppercase tracking-wider transition-all`}
+                            className={`${FOCUS_RING} mt-1 min-h-11 px-4 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] font-bold text-slate-300 uppercase tracking-wider transition-all`}
                             aria-label="Coba lagi koneksi kamera"
                         >
                             Coba Lagi
@@ -546,7 +546,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                             <button
                                 onClick={(e) => { e.stopPropagation(); zoomTo(transformRef.current.scale / BUTTON_ZOOM_STEP); }}
                                 disabled={transform.scale <= MIN_SCALE}
-                                className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
+                                className={`${FOCUS_RING} min-h-11 min-w-11 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
                                 title="Perkecil"
                                 aria-label="Perkecil tampilan"
                             >
@@ -558,7 +558,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                             <button
                                 onClick={(e) => { e.stopPropagation(); zoomTo(transformRef.current.scale * BUTTON_ZOOM_STEP); }}
                                 disabled={transform.scale >= MAX_SCALE}
-                                className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
+                                className={`${FOCUS_RING} min-h-11 min-w-11 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
                                 title="Perbesar"
                                 aria-label="Perbesar tampilan"
                             >
@@ -567,7 +567,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                             <button
                                 onClick={(e) => { e.stopPropagation(); resetZoom(); }}
                                 disabled={transform.scale === 1}
-                                className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
+                                className={`${FOCUS_RING} min-h-11 min-w-11 flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent transition-colors`}
                                 title="Reset zoom"
                                 aria-label="Reset zoom"
                             >
@@ -577,7 +577,7 @@ export default function OptimizedVideoPlayer({ cameraId, manager, onStatusChange
                     )}
                     <button
                         onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
-                        className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2 bg-black/60 hover:bg-black/80 rounded-xl text-white backdrop-blur-md transition-all shadow-xl border border-white/10 group/btn`}
+                        className={`${FOCUS_RING} min-h-11 min-w-11 flex items-center justify-center p-2 bg-black/60 hover:bg-black/80 rounded-xl text-white backdrop-blur-md transition-all shadow-xl border border-white/10 group/btn`}
                         title="Layar Penuh"
                         aria-label={isFullscreen ? 'Keluar dari layar penuh' : 'Tampilkan layar penuh'}
                     >

@@ -149,7 +149,7 @@ export default function AuditLogPage() {
                                 whileTap={{ scale: 0.97 }}
                                 onClick={handleExportCSV}
                                 disabled={isExporting || logs.length === 0}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50 min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50 min-h-11"
                             >
                                 <Download aria-hidden="true" className="w-4 h-4" />
                                 Export CSV
@@ -158,7 +158,7 @@ export default function AuditLogPage() {
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={() => fetchLogs()}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-w-10 min-h-10 inline-flex items-center justify-center p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-w-11 min-h-11 inline-flex items-center justify-center p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
                                 title="Segarkan Data"
                                 aria-label="Segarkan data audit log"
                             >
@@ -217,7 +217,7 @@ export default function AuditLogPage() {
                                     setSearchQuery('');
                                     setPage(1);
                                 }}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-xs text-yellow-700 dark:text-yellow-500 hover:text-yellow-800 dark:hover:text-yellow-400 underline font-bold px-3 min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none text-xs text-yellow-700 dark:text-yellow-500 hover:text-yellow-800 dark:hover:text-yellow-400 underline font-bold px-3 min-h-11"
                             >
                                 Reset
                             </button>
@@ -315,7 +315,7 @@ export default function AuditLogPage() {
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
                                 disabled={page <= 1}
                                 aria-label="Halaman sebelumnya"
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-h-10 px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-h-11 px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                             >
                                 ← Sebelumnya
                             </button>
@@ -326,7 +326,7 @@ export default function AuditLogPage() {
                                 onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
                                 disabled={page >= pagination.totalPages}
                                 aria-label="Halaman berikutnya"
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-h-10 px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-h-11 px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                             >
                                 Selanjutnya →
                             </button>

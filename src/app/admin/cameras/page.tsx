@@ -260,7 +260,7 @@ function CameraFormModal({
                             </div>
                             {isEdit ? 'Edit Kamera' : 'Daftarkan Kamera Baru'}
                         </h2>
-                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                             <X aria-hidden="true" className="w-5 h-5" />
                         </button>
                     </div>
@@ -288,7 +288,7 @@ function CameraFormModal({
                                             type="button"
                                             onClick={handleTestStream}
                                             disabled={isTesting}
-                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 min-h-10 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 border border-black/10 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
+                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 min-h-11 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 border border-black/10 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shrink-0 disabled:opacity-50"
                                             title="Uji jangkauan stream dengan FFprobe"
                                         >
                                             {isTesting ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin text-yellow-700 dark:text-yellow-500" /> : <Activity aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" />}
@@ -449,7 +449,7 @@ function ImportCSVModal({
                             <Upload aria-hidden="true" className="w-5 h-5 text-yellow-700 dark:text-yellow-500" />
                             Import Kamera dari CSV
                         </h3>
-                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                             <X aria-hidden="true" className="w-5 h-5" />
                         </button>
                     </div>
@@ -464,7 +464,7 @@ function ImportCSVModal({
                             <button
                                 type="button"
                                 onClick={handleDownloadTemplate}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-bold uppercase tracking-wider shadow-sm hover:bg-yellow-400 transition-colors min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-yellow-500 text-slate-950 text-xs font-bold uppercase tracking-wider shadow-sm hover:bg-yellow-400 transition-colors min-h-11"
                             >
                                 <Download aria-hidden="true" className="w-3.5 h-3.5" /> Template
                             </button>
@@ -602,7 +602,7 @@ function BulkAssignModal({
                             <FolderPlus aria-hidden="true" className="w-5 h-5 text-yellow-700 dark:text-yellow-500" />
                             Tautkan ke Lokasi ({cameraIds.length} Kamera)
                         </h3>
-                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                        <button type="button" onClick={onClose} aria-label="Tutup dialog" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 max-sm:w-11 max-sm:h-11 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                             <X aria-hidden="true" className="w-5 h-5" />
                         </button>
                     </div>
@@ -915,7 +915,7 @@ export default function CamerasPage() {
                                 whileHover={{ y: -2 }}
                                 whileTap={{ scale: 0.97 }}
                                 onClick={() => handleExportCSV(false)}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-11"
                             >
                                 <Download aria-hidden="true" className="w-4 h-4" /> Export CSV
                             </motion.button>
@@ -923,7 +923,7 @@ export default function CamerasPage() {
                                 whileHover={{ y: -2 }}
                                 whileTap={{ scale: 0.97 }}
                                 onClick={() => setShowImportModal(true)}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-11"
                             >
                                 <Upload aria-hidden="true" className="w-4 h-4" /> Import CSV
                             </motion.button>
@@ -931,7 +931,7 @@ export default function CamerasPage() {
                                 whileHover={{ y: -2 }}
                                 whileTap={{ scale: 0.97 }}
                                 onClick={() => setShowAddModal(true)}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-950 font-bold transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] text-xs uppercase tracking-wider min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-slate-950 font-bold transition-all shadow-[0_4px_20px_rgba(234,179,8,0.4)] text-xs uppercase tracking-wider min-h-11"
                             >
                                 <Plus aria-hidden="true" className="w-4 h-4" /> Tambah Kamera
                             </motion.button>
@@ -1125,7 +1125,7 @@ export default function CamerasPage() {
                                                     <div className="flex items-center gap-2 pt-2">
                                                         <button
                                                             onClick={() => setPreviewCamera(cam)}
-                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1 px-3 py-1.5 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs font-bold transition-all min-h-10"
+                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1 px-3 py-1.5 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 text-xs font-bold transition-all min-h-11"
                                                             title="Buka Live Preview Modal"
                                                             aria-label={`Pratinjau live ${cam.name}`}
                                                         >
@@ -1133,7 +1133,7 @@ export default function CamerasPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => setEditingCamera(cam)}
-                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-xs min-w-10 min-h-10 inline-flex items-center justify-center"
+                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-xs min-w-11 min-h-11 inline-flex items-center justify-center"
                                                             title="Edit Konfigurasi"
                                                             aria-label={`Edit kamera ${cam.name}`}
                                                         >
@@ -1141,7 +1141,7 @@ export default function CamerasPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteSingle(cam._id as string, cam.name)}
-                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/20 text-slate-500 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 transition-all text-xs min-w-10 min-h-10 inline-flex items-center justify-center"
+                                                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/20 text-slate-500 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 transition-all text-xs min-w-11 min-h-11 inline-flex items-center justify-center"
                                                             title="Hapus Kamera"
                                                             aria-label={`Hapus kamera ${cam.name}`}
                                                         >
@@ -1167,7 +1167,7 @@ export default function CamerasPage() {
                                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                         disabled={currentPage <= 1}
                                         aria-label="Halaman sebelumnya"
-                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all min-h-10"
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all min-h-11"
                                     >
                                         ← Sebelumnya
                                     </button>
@@ -1175,7 +1175,7 @@ export default function CamerasPage() {
                                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                         disabled={currentPage >= totalPages}
                                         aria-label="Halaman berikutnya"
-                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all min-h-10"
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 text-xs font-bold rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all min-h-11"
                                     >
                                         Selanjutnya →
                                     </button>
@@ -1204,7 +1204,7 @@ export default function CamerasPage() {
                             <button
                                 onClick={handleBulkProbe}
                                 disabled={isProbingBulk}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-900 dark:text-white text-xs font-bold transition-all disabled:opacity-50 min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-900 dark:text-white text-xs font-bold transition-all disabled:opacity-50 min-h-11"
                             >
                                 {isProbingBulk ? <Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin text-yellow-700 dark:text-yellow-400" /> : <Activity aria-hidden="true" className="w-3.5 h-3.5 text-yellow-700 dark:text-yellow-400" />}
                                 Cek Status
@@ -1212,7 +1212,7 @@ export default function CamerasPage() {
 
                             <button
                                 onClick={() => setShowAssignModal(true)}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-500/30 transition-all min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-500/30 transition-all min-h-11"
                             >
                                 <FolderPlus aria-hidden="true" className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
                                 Tautkan ke Lokasi
@@ -1220,14 +1220,14 @@ export default function CamerasPage() {
 
                             <button
                                 onClick={() => handleExportCSV(true)}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.06] dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all min-h-11"
                             >
                                 <Download aria-hidden="true" className="w-3.5 h-3.5" /> CSV
                             </button>
 
                             <button
                                 onClick={handleBulkDelete}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold border border-rose-500/30 transition-all min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold border border-rose-500/30 transition-all min-h-11"
                             >
                                 <Trash2 aria-hidden="true" className="w-3.5 h-3.5 text-rose-700 dark:text-rose-400" /> Hapus
                             </button>
@@ -1235,7 +1235,7 @@ export default function CamerasPage() {
 
                         <button
                             onClick={() => setSelectedIds([])}
-                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white ml-auto min-w-10 min-h-10 inline-flex items-center justify-center"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white ml-auto min-w-11 min-h-11 inline-flex items-center justify-center"
                             title="Batal Pilih"
                             aria-label="Batalkan pilihan kamera"
                         >

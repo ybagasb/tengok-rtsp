@@ -212,7 +212,7 @@ export default function RolesPage() {
                                 onClick={() => addAdmin(u.cognitoSub)}
                                 aria-label={`Tambahkan ${u.fullName || u.username} sebagai super-admin`}
                                 disabled={adding === u.cognitoSub}
-                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full flex items-center justify-between gap-3 p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-yellow-500/10 border border-transparent hover:border-yellow-500/20 transition-colors text-left disabled:opacity-60 min-h-10"
+                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full flex items-center justify-between gap-3 p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-yellow-500/10 border border-transparent hover:border-yellow-500/20 transition-colors text-left disabled:opacity-60 min-h-11"
                             >
                                 <div className="min-w-0">
                                     <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{u.fullName || u.username}</div>
@@ -267,7 +267,7 @@ export default function RolesPage() {
                                     <button
                                         onClick={() => removeAdmin(a)}
                                         aria-label={`Cabut akses super-admin ${adminLabel(a)}`}
-                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/15 text-slate-500 hover:text-rose-700 dark:hover:text-rose-500 text-xs font-bold transition-colors shrink-0 min-h-10"
+                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-rose-500/15 text-slate-500 hover:text-rose-700 dark:hover:text-rose-500 text-xs font-bold transition-colors shrink-0 min-h-11"
                                     >
                                         <Trash2 aria-hidden="true" className="w-3.5 h-3.5" /> Cabut
                                     </button>

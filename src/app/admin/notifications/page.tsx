@@ -196,11 +196,11 @@ export default function NotificationsPage() {
 
                                         <div className="ml-auto flex items-center gap-1">
                                             <button type="button" onClick={() => move(i, -1)} disabled={i === 0} title="Naik" aria-label={`Naikkan notifikasi ${i + 1}`}
-                                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-30 transition-all min-w-10 min-h-10 inline-flex items-center justify-center">
+                                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-30 transition-all min-w-11 min-h-11 inline-flex items-center justify-center">
                                                 <ArrowUp aria-hidden="true" className="w-4 h-4" />
                                             </button>
                                             <button type="button" onClick={() => move(i, 1)} disabled={i === notices.length - 1} title="Turun" aria-label={`Turunkan notifikasi ${i + 1}`}
-                                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-30 transition-all min-w-10 min-h-10 inline-flex items-center justify-center">
+                                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-30 transition-all min-w-11 min-h-11 inline-flex items-center justify-center">
                                                 <ArrowDown aria-hidden="true" className="w-4 h-4" />
                                             </button>
                                             <button
@@ -208,12 +208,12 @@ export default function NotificationsPage() {
                                                 title={notice.enabled ? 'Sembunyikan' : 'Tampilkan'}
                                                 aria-label={notice.enabled ? `Sembunyikan notifikasi ${i + 1}` : `Tampilkan notifikasi ${i + 1}`}
                                                 aria-pressed={notice.enabled}
-                                                className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg transition-all ${notice.enabled ? 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10' : 'text-slate-500 hover:bg-black/5 dark:hover:bg-white/5'} min-w-10 min-h-10 inline-flex items-center justify-center`}
+                                                className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg transition-all ${notice.enabled ? 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10' : 'text-slate-500 hover:bg-black/5 dark:hover:bg-white/5'} min-w-11 min-h-11 inline-flex items-center justify-center`}
                                             >
                                                 {notice.enabled ? <Eye aria-hidden="true" className="w-4 h-4" /> : <EyeOff aria-hidden="true" className="w-4 h-4" />}
                                             </button>
                                             <button type="button" onClick={() => removeNotice(notice.id)} title="Hapus" aria-label={`Hapus notifikasi ${i + 1}`}
-                                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg text-rose-700 dark:text-rose-400 hover:bg-rose-500/10 transition-all min-w-10 min-h-10 inline-flex items-center justify-center">
+                                                className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg text-rose-700 dark:text-rose-400 hover:bg-rose-500/10 transition-all min-w-11 min-h-11 inline-flex items-center justify-center">
                                                 <Trash2 aria-hidden="true" className="w-4 h-4" />
                                             </button>
                                         </div>

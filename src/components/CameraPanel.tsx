@@ -19,6 +19,7 @@ import { ICameraData } from '@/models/Camera';
 import { ArcGauge, CashflowChart, HBar, HBarGroup, HasilUsahaTable, SCurveChart, StackedBar, fRpShort, type GaugeZone } from './PanelCharts';
 import { cashflowSeries, computeEvm, huRencanaPeriode, kurvaSSeries, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
 import { getDivisionTheme, getDivisionCssVars } from '@/lib/divisionTheme';
+import { useIsPhone } from '@/lib/phoneMode';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface IPopulatedCamera extends ICameraData { _id: string; }
@@ -329,14 +330,14 @@ function WeeklyProgressCard({ row, snap }: { row: IProgressMinggu; snap?: Weekly
                     <div className="flex items-center gap-2.5 text-[11px] font-bold">
                         <span className="flex items-center gap-1 text-sky-500">
                             <span className="w-2 h-2 rounded-sm bg-sky-400" />RA
-                            {snap && <span className="text-[10px] font-mono font-semibold text-sky-500/80">{pct(snap.ra)}</span>}
+                            {snap && <span className="text-[11px] font-mono font-semibold text-sky-500/80">{pct(snap.ra)}</span>}
                         </span>
                         <span className="flex items-center gap-1 text-amber-500">
                             <span className="w-2 h-2 rounded-sm bg-amber-400" />RI
-                            {snap && <span className="text-[10px] font-mono font-semibold text-amber-500/80">{pct(snap.ri)}</span>}
+                            {snap && <span className="text-[11px] font-mono font-semibold text-amber-500/80">{pct(snap.ri)}</span>}
                         </span>
                     </div>
-                    {snap && <span className="text-[10px] font-mono text-slate-500">{snap.caption}</span>}
+                    {snap && <span className="text-[11px] font-mono text-slate-500">{snap.caption}</span>}
                 </div>
             </div>
             <div className="grid grid-cols-4 gap-2">
@@ -478,6 +479,8 @@ function CccGaugeCard({ value }: { value?: number }) {
 export default function CameraPanel({ location, onClose, onStatusChange, realtimeStatuses }: CameraPanelProps) {
     const streamManager = useStreamManager();
     const router = useRouter();
+    // Mode phone (bottom sheet di /map): header dipadatkan, video selebar sheet. Desktop tidak terpengaruh.
+    const isPhone = useIsPhone();
     const [statuses, setStatuses] = useState<Record<string, 'online' | 'offline'>>({});
     const [activeTab, setActiveTab] = useState<TabType>('overview');
 
@@ -523,7 +526,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
             <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none" />
 
             {/* ── HEADER ─────────────────────────────────────────────────────── */}
-            <div className="relative shrink-0 px-5 pt-4 pb-3 border-b border-white/60 dark:border-white/10 bg-white/50 dark:bg-white/[0.04] z-20">
+            <div className={`relative shrink-0 ${isPhone ? 'px-4 pt-0 pb-2' : 'px-5 pt-4 pb-3'} border-b border-white/60 dark:border-white/10 bg-white/50 dark:bg-white/[0.04] z-20`}>
                 {/* ── ZONA 1: Badges (kiri) + Action cluster (kanan) ───────────── */}
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 min-w-0 flex-1">
@@ -552,7 +555,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             onClick={() => router.push(`/project/${location._id}`)}
                             title="Halaman Detail Proyek Lengkap"
                             aria-label="Buka detail proyek lengkap"
-                            className="flex items-center gap-1.5 px-3 py-2 min-h-10 rounded-xl bg-[rgba(var(--div-accent-rgb),0.15)] hover:bg-[rgba(var(--div-accent-rgb),0.25)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text dark:bg-[rgba(var(--div-accent-rgb),0.1)] dark:hover:bg-[rgba(var(--div-accent-rgb),0.2)] dark:border-[rgba(var(--div-accent-rgb),0.3)] text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-[rgba(var(--div-accent-rgb),0.1)]"
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 min-h-11 min-w-11 rounded-xl bg-[rgba(var(--div-accent-rgb),0.15)] hover:bg-[rgba(var(--div-accent-rgb),0.25)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text dark:bg-[rgba(var(--div-accent-rgb),0.1)] dark:hover:bg-[rgba(var(--div-accent-rgb),0.2)] dark:border-[rgba(var(--div-accent-rgb),0.3)] text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-[rgba(var(--div-accent-rgb),0.1)]"
                         >
                             <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
                             <span className="hidden sm:inline">Detail</span>
@@ -561,7 +564,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             onClick={onClose}
                             title="Tutup Panel"
                             aria-label="Tutup panel kamera"
-                            className="p-2.5 min-w-10 min-h-10 flex items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-rose-500/15 dark:hover:bg-rose-500/20 border border-black/[0.06] dark:border-white/[0.06] hover:border-rose-500/40 dark:hover:border-rose-500/30 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                            className="p-2.5 min-w-11 min-h-11 flex items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-rose-500/15 dark:hover:bg-rose-500/20 border border-black/[0.06] dark:border-white/[0.06] hover:border-rose-500/40 dark:hover:border-rose-500/30 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                         >
                             <X className="w-4 h-4" aria-hidden="true" />
                         </button>
@@ -569,15 +572,19 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                 </div>
 
                 {/* ── ZONA 2: Nama proyek (hierarki #1) + koordinat (hierarki #3) ── */}
-                <div className="mt-2.5">
-                    <h2 className="text-lg md:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-tight line-clamp-2">
+                <div className={isPhone ? 'mt-1.5' : 'mt-2.5'}>
+                    <h2 className={`text-lg md:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-tight ${isPhone ? 'line-clamp-1' : 'line-clamp-2'}`}>
                         {location.name}
                     </h2>
-                    <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                    <div className="flex min-w-0 items-center gap-1 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                         <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" aria-hidden="true" />
-                        <span>{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</span>
+                        <span className="shrink-0">{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</span>
+                        {/* Phone: tanggal pembaruan digabung ke baris koordinat agar header sticky lebih pendek */}
+                        {isPhone && location.updatedAt && (
+                            <span className="truncate">· {new Date(location.updatedAt).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span>
+                        )}
                     </div>
-                    {location.updatedAt && (
+                    {location.updatedAt && !isPhone && (
                         <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                             <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" aria-hidden="true" />
                             <span>Terakhir diperbarui: {new Date(location.updatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
@@ -586,7 +593,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                 </div>
 
                 {/* ── ZONA 3: SEGMENTED NAVIGATION TABS ─────────────────────────── */}
-                <div className="grid grid-cols-5 gap-1 p-1 mt-3 bg-white/50 dark:bg-black/20 rounded-xl border border-black/[0.06] dark:border-white/10">
+                <div className={`grid grid-cols-5 gap-1 p-1 ${isPhone ? 'mt-2' : 'mt-3'} bg-white/50 dark:bg-black/20 rounded-xl border border-black/[0.06] dark:border-white/10`}>
                     <TabButton
                         active={activeTab === 'overview'}
                         onClick={() => setActiveTab('overview')}
@@ -621,7 +628,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
             </div>
 
             {/* ── SCROLLABLE BODY ──────────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar relative z-10">
+            <div className={`flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar relative z-10 ${isPhone ? 'overscroll-y-contain' : ''}`}>
                 <AnimatePresence mode="wait">
                     {activeTab === 'overview' && (
                         <motion.div
@@ -688,11 +695,11 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                     <User className="w-5 h-5 text-blue-400" aria-hidden="true" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1">
-                                        <span>Project Manager</span>
+                                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex flex-wrap items-center gap-x-1.5">
+                                        <span className="whitespace-nowrap">Project Manager</span>
                                         {location.pmName && <>
                                             <span className="w-1 h-1 rounded-full bg-slate-600" />
-                                            <span className="text-emerald-400">PIC Aktif</span>
+                                            <span className="text-emerald-400 whitespace-nowrap">PIC Aktif</span>
                                         </>}
                                     </div>
                                     <div className="text-sm font-black text-slate-900 dark:text-white truncate mt-0.5">{location.pmName || <span className="text-slate-500 font-normal italic">Belum diisi</span>}</div>
@@ -706,7 +713,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             rel="noopener noreferrer"
                                             title="Chat WhatsApp"
                                             aria-label="Chat WhatsApp PIC"
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-md shadow-emerald-500/10"
+                                            className="flex items-center gap-1.5 px-3 min-h-11 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-md shadow-emerald-500/10"
                                         >
                                             <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
                                             <span>WA</span>
@@ -715,7 +722,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             href={`tel:${location.pmPhone}`}
                                             title="Telepon Langsung"
                                             aria-label="Telepon PIC"
-                                            className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] border border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-300 transition-all hover:scale-105 active:scale-95"
+                                            className="flex items-center justify-center min-h-11 min-w-11 rounded-xl bg-black/[0.04] dark:bg-white/[0.05] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] border border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-300 transition-all hover:scale-105 active:scale-95"
                                         >
                                             <Phone className="w-3.5 h-3.5" aria-hidden="true" />
                                         </a>
@@ -725,9 +732,9 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
 
                             {/* ── LIVE SURVEILLANCE STREAMS ── */}
                             <Reveal i={3}><div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] flex items-center justify-center border border-[rgba(var(--div-accent-rgb),0.2)]">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="w-6 h-6 shrink-0 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] flex items-center justify-center border border-[rgba(var(--div-accent-rgb),0.2)]">
                                             <Video className="w-3.5 h-3.5 div-accent-text" aria-hidden="true" />
                                         </div>
                                         <div>
@@ -735,7 +742,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <p className="text-[11px] text-slate-500 font-medium">Pemantauan visual real-time lokasi</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-black/[0.06] dark:border-white/[0.06] text-[11px] font-bold">
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-black/[0.06] dark:border-white/[0.06] text-[11px] font-bold shrink-0 whitespace-nowrap">
                                         <span className="inline-flex items-center gap-1 text-emerald-400 font-mono">
                                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                             {onlineCams} ON
@@ -757,7 +764,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             return (
                                                 <div
                                                     key={cam._id}
-                                                    className={`relative rounded-2xl overflow-hidden border transition-all duration-300 shadow-xl group ${
+                                                    className={`relative rounded-2xl overflow-hidden border transition-all duration-300 shadow-xl group ${isPhone ? '-mx-4 !rounded-none border-x-0' : ''} ${
                                                         isOnline
                                                             ? 'border-emerald-500/20 hover:border-emerald-500/40 shadow-emerald-950/20'
                                                             : 'border-black/[0.06] dark:border-white/[0.06] hover:border-white/[0.12]'
@@ -1169,7 +1176,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <div className="p-3 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.05] dark:border-white/[0.05] text-center">
                                                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Belum ada data RA / RI untuk {nowLabel}</p>
                                                 {lastSnap && (
-                                                    <p className="text-[10px] font-mono text-slate-500 mt-1">
+                                                    <p className="text-[11px] font-mono text-slate-500 mt-1">
                                                         Terakhir: <span className="text-sky-500">RA {pct(lastSnap.ra)}</span> · <span className="text-amber-500">RI {pct(lastSnap.ri)}</span> · {lastSnap.caption}
                                                     </p>
                                                 )}
@@ -1240,7 +1247,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                 <div className="w-5 h-5 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] div-accent-text flex items-center justify-center text-[11px] font-bold shrink-0">
                                                     {idx + 1}
                                                 </div>
-                                                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 group-hover:text-white leading-tight">
+                                                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white leading-tight">
                                                     {item}
                                                 </span>
                                             </div>
@@ -1542,7 +1549,7 @@ function TabButton({
         <button
             onClick={onClick}
             aria-pressed={active}
-            className={`relative min-w-0 py-2.5 px-1.5 rounded-lg text-xs font-bold transition-all duration-200 flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
+            className={`relative min-w-0 min-h-11 py-2.5 px-1.5 rounded-lg text-xs font-bold transition-all duration-200 flex flex-col sm:flex-row items-center justify-center gap-1.5 ${
                 active
                     ? 'bg-black/[0.06] dark:bg-white/10 text-slate-900 dark:text-white shadow-md shadow-black/10 dark:shadow-black/40 border border-black/10 dark:border-white/15'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/[0.03]'

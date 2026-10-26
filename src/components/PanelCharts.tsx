@@ -484,18 +484,18 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
                     {ticks.map(t => (
                         <g key={t}>
                             <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke={grid} strokeWidth="1" strokeDasharray={t === 0 ? undefined : '2 4'} />
-                            <text x={L - 5} y={y(t) + 3} textAnchor="end" fontSize="8" fill={txt}>{Math.round(t)}%</text>
+                            <text x={L - 5} y={y(t) + 3} textAnchor="end" fontSize="8" className="max-sm:[font-size:10px]" fill={txt}>{Math.round(t)}%</text>
                         </g>
                     ))}
                     {/* bulan yang belum dilaporkan */}
                     {riIdxLast >= 0 && riIdxLast < 11 && (
                         <g>
                             <rect x={x(riIdxLast)} y={T} width={W - R - x(riIdxLast)} height={H - T - B} fill={isDark ? 'rgba(255,255,255,0.03)' : 'rgba(15,23,42,0.035)'} />
-                            <text x={W - R - 3} y={H - B - 5} textAnchor="end" fontSize="7.5" fill={txt}>belum dilaporkan</text>
+                            <text x={W - R - 3} y={H - B - 5} textAnchor="end" fontSize="7.5" className="max-sm:[font-size:10px]" fill={txt}>belum dilaporkan</text>
                         </g>
                     )}
                     {BULAN_SINGKAT.map((b, i) => (
-                        <text key={b} x={x(i)} y={H - 8} textAnchor="middle" fontSize="7.5" fontWeight={i === idx ? 700 : 400} fill={i === idx ? (isDark ? '#f1f5f9' : '#0f172a') : txt}>{b}</text>
+                        <text key={b} x={x(i)} y={H - 8} textAnchor="middle" fontSize="7.5" className="max-sm:[font-size:10px]" fontWeight={i === idx ? 700 : 400} fill={i === idx ? (isDark ? '#f1f5f9' : '#0f172a') : txt}>{b}</text>
                     ))}
                     {/* selisih rencana vs realisasi */}
                     {gapPath && show.ri && show.rkap && <path style={{ opacity: drawn ? 1 : 0, transition: ease ?? 'opacity 900ms ease 500ms' }} d={gapPath} fill={gapBehind ? (isDark ? 'rgba(251,113,133,0.16)' : 'rgba(225,29,72,0.10)') : (isDark ? 'rgba(52,211,153,0.16)' : 'rgba(5,150,105,0.10)')} />}
@@ -642,7 +642,7 @@ export function CashflowChart({ points, tahun }: { points: CashflowPoint[]; tahu
                 {ticks.map(t => (
                     <g key={t}>
                         <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke={grid} strokeWidth="1" />
-                        <text x={L - 4} y={y(t) + 3} textAnchor="end" fontSize="8" fill={txt}>{fMiliar(t)}</text>
+                        <text x={L - 4} y={y(t) + 3} textAnchor="end" fontSize="8" className="max-sm:[font-size:10px]" fill={txt}>{fMiliar(t)}</text>
                     </g>
                 ))}
                 {points.map((p, i) => {
@@ -661,7 +661,7 @@ export function CashflowChart({ points, tahun }: { points: CashflowPoint[]; tahu
                                     {showLabels && <text x={b.x + bw / 2} y={y(b.v) - 3} textAnchor="middle" fontSize="7.5" fill={txt}>{fMiliar(b.v)}</text>}
                                 </g>
                             ))}
-                            <text x={cx} y={H - 6} textAnchor="middle" fontSize="8" fill={txt}>{BULAN_SINGKAT[p.bulan]}</text>
+                            <text x={cx} y={H - 6} textAnchor="middle" fontSize="8" className="max-sm:[font-size:10px]" fill={txt}>{BULAN_SINGKAT[p.bulan]}</text>
                         </g>
                     );
                 })}

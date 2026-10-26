@@ -63,11 +63,11 @@ export default function ResourceMonitor() {
     const heapPct = stats ? (stats.memory.heapUsed / stats.memory.heapTotal) * 100 : 0;
 
     return (
-        <div className="fixed bottom-4 left-4 z-[2000] rounded-2xl overflow-hidden shadow-2xl border border-black/10 dark:border-white/10 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl">
+        <div className="fixed bottom-4 left-4 max-sm:bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] max-sm:left-[calc(1rem+env(safe-area-inset-left,0px))] z-[2000] rounded-2xl overflow-hidden shadow-2xl border border-black/10 dark:border-white/10 bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl">
             {/* Header row */}
             <button
                 onClick={() => setCollapsed(p => !p)}
-                className="flex items-center gap-2 px-3 py-2 w-full text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors group min-h-10 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                className="flex items-center gap-2 px-3 py-2 w-full text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors group min-h-11 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                 aria-expanded={!collapsed}
                 aria-label={collapsed ? "Tampilkan monitor sumber daya" : "Sembunyikan monitor sumber daya"}
             >
@@ -79,8 +79,8 @@ export default function ResourceMonitor() {
                     Resources
                 </span>
                 {collapsed
-                    ? <ChevronUp className="w-3 h-3 text-slate-500 ml-auto group-hover:text-white transition-colors" />
-                    : <ChevronDown className="w-3 h-3 text-slate-500 ml-auto group-hover:text-white transition-colors" />
+                    ? <ChevronUp className="w-3 h-3 text-slate-500 ml-auto group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
+                    : <ChevronDown className="w-3 h-3 text-slate-500 ml-auto group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
                 }
             </button>
 

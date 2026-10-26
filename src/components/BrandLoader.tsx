@@ -60,7 +60,7 @@ export default function BrandLoader({
                     <p className="text-sm font-black tracking-[0.2em] uppercase bg-gradient-to-r from-yellow-300 to-amber-200 bg-clip-text text-transparent">
                         PT Brantas Abipraya
                     </p>
-                    <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
+                    <p className="mt-1 text-[10px] max-sm:text-xs font-bold uppercase tracking-[0.25em] text-slate-500">
                         {label}
                     </p>
                 </div>

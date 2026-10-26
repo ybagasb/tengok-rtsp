@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Info, Lightbulb, AlertTriangle, X as CloseIcon, Bell } from 'lucide-react';
+import { useIsPhone } from '@/lib/phoneMode';
 
 interface Notice {
     id: string;
@@ -56,6 +57,8 @@ const DISMISSED_KEY = 'cctv-notices-dismissed';
 const SEEN_KEY = 'cctv-notices-seen';
 
 export default function CctvNotices({ sharedMode = false, hidden = false }: CctvNoticesProps) {
+    // Phone: bar atas peta cuma satu baris, jadi notice naik ke bawahnya (bukan di y=184px).
+    const isPhone = useIsPhone();
     const [config, setConfig] = useState<NoticeConfig | null>(null);
     // Antrean notice yang boleh tampil. HANYA SATU yang ditampilkan sekali waktu:
     // yang berikutnya muncul setelah yang sekarang ditutup (manual / auto-dismiss).
@@ -230,7 +233,7 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
         <>
             <div
                 className={`fixed z-[2000] gap-2.5 pointer-events-none flex ${
-                    sharedMode ? 'bottom-6 left-4 flex-col-reverse' : 'top-[184px] sm:top-[204px] left-2 sm:left-6 flex-col'
+                    sharedMode ? 'bottom-6 left-4 flex-col-reverse' : isPhone ? 'top-[calc(env(safe-area-inset-top,0px)+4.75rem)] left-2 flex-col' : 'top-[184px] sm:top-[204px] left-2 sm:left-6 flex-col'
                 }`}
             >
                 <AnimatePresence mode="wait">
@@ -255,7 +258,7 @@ export default function CctvNotices({ sharedMode = false, hidden = false }: Cctv
                         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                         onClick={reopenAll}
                         className={`fixed z-[1900] flex items-center justify-center p-3 sm:p-3.5 rounded-2xl bg-white/85 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl text-yellow-500 hover:bg-white dark:hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all group ${
-                            sharedMode ? 'bottom-6 left-4' : 'top-[184px] sm:top-[204px] left-2 sm:left-6'
+                            sharedMode ? 'bottom-6 left-4' : isPhone ? 'top-[calc(env(safe-area-inset-top,0px)+4.75rem)] left-2' : 'top-[184px] sm:top-[204px] left-2 sm:left-6'
                         }`}
                         title="Tampilkan informasi"
                     >
@@ -322,7 +325,7 @@ function NoticeCard({
                 </div>
                 <button
                     onClick={onDismiss}
-                    className="absolute top-1 right-1 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-white p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto min-w-10 min-h-10 flex items-center justify-center focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                    className="absolute top-1 right-1 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-white p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors shrink-0 pointer-events-auto min-w-11 min-h-11 flex items-center justify-center focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     title="Tutup"
                     aria-label="Tutup pemberitahuan"
                 >

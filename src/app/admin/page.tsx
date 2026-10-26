@@ -192,21 +192,21 @@ export default function AdminOverviewDashboard() {
                         <button
                             onClick={handleExportPDF}
                             disabled={isExportingPDF}
-                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50 min-h-10"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50 min-h-11"
                         >
                             {isExportingPDF ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin text-yellow-700 dark:text-yellow-500" /> : <FileDown aria-hidden="true" className="w-4 h-4" />}
                             Export PDF
                         </button>
                         <Link
                             href="/multiview"
-                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-10"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400 transition-all text-xs font-bold uppercase tracking-wider min-h-11"
                         >
                             <PlayCircle aria-hidden="true" className="w-4 h-4 text-yellow-700 dark:text-yellow-500" />
                             Multi-View
                         </Link>
                         <button
                             onClick={handleRefreshAll}
-                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-w-10 min-h-10 inline-flex items-center justify-center p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none min-w-11 min-h-11 inline-flex items-center justify-center p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/10 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
                             title="Segarkan Data"
                             aria-label="Segarkan data dashboard"
                         >
@@ -390,7 +390,7 @@ export default function AdminOverviewDashboard() {
 
                                                     <Link
                                                         href={`/admin/cameras`}
-                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all shrink-0 ml-3 min-h-10"
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all shrink-0 ml-3 min-h-11"
                                                     >
                                                         Diagnosa
                                                     </Link>

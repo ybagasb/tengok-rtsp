@@ -60,7 +60,7 @@ function CountdownTimer({ expiresAt, onExpire }: { expiresAt: string; onExpire: 
         <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            className={`fixed top-14 right-4 z-[500] flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3 rounded-2xl shadow-xl shadow-slate-900/10 dark:shadow-2xl backdrop-blur-2xl border transition-all duration-500 ${
+            className={`fixed top-14 max-sm:top-[calc(3.5rem+env(safe-area-inset-top,0px))] right-4 max-sm:right-[calc(1rem+env(safe-area-inset-right,0px))] z-[500] flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3 rounded-2xl shadow-xl shadow-slate-900/10 dark:shadow-2xl backdrop-blur-2xl border transition-all duration-500 ${
                 isUrgent
                     ? 'bg-red-50 dark:bg-red-950/80 border-red-500/30 shadow-red-500/20'
                     : 'bg-white/90 dark:bg-slate-900/80 border-black/10 dark:border-white/10'
@@ -83,7 +83,7 @@ function BrandingOverlay({ label }: { label: string }) {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="fixed top-4 left-4 z-[500] flex items-center gap-2.5 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl bg-white/90 dark:bg-slate-900/80 backdrop-blur-2xl border border-black/10 dark:border-white/10 shadow-xl shadow-slate-900/10 dark:shadow-2xl max-w-[calc(100vw-7rem)]"
+            className="fixed top-4 max-sm:top-[calc(1rem+env(safe-area-inset-top,0px))] left-4 max-sm:left-[calc(1rem+env(safe-area-inset-left,0px))] z-[500] flex items-center gap-2.5 sm:gap-3 px-3 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl bg-white/90 dark:bg-slate-900/80 backdrop-blur-2xl border border-black/10 dark:border-white/10 shadow-xl shadow-slate-900/10 dark:shadow-2xl max-w-[calc(100vw-7rem)]"
         >
             {/* eslint-disable-next-line @next/next/no-img-element -- logo statis lokal (SVG), tidak perlu optimasi next/image */}
             <img src="/abipraya_blue.svg" alt="Logo" className="h-5 sm:h-6 shrink-0 block dark:hidden" />

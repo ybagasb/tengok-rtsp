@@ -94,7 +94,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
                                         />
                                     )}
-                                    <Icon aria-hidden="true" className={`w-5 h-5 transition-all ${isActive ? 'text-yellow-600 dark:text-yellow-500' : 'group-hover:scale-110 group-hover:text-yellow-400'}`} />
+                                    <Icon aria-hidden="true" className={`w-5 h-5 transition-all ${isActive ? 'text-yellow-600 dark:text-yellow-500' : 'group-hover:scale-110 group-hover:text-yellow-600 dark:group-hover:text-yellow-400'}`} />
                                     <span className="text-sm font-bold">{item.name}</span>
                                     {isActive && (
                                         <motion.div
@@ -142,7 +142,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                 key={item.name}
                                 href={item.href}
                                 aria-current={isActive ? 'page' : undefined}
-                                className={`flex flex-col items-center gap-1 py-2 px-3 min-w-[64px] min-h-12 rounded-xl transition-all relative focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
+                                className={`flex flex-col items-center justify-center gap-1 py-2 px-1 flex-1 min-w-0 min-h-12 rounded-xl transition-all relative focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
                                     isActive ? 'text-yellow-700 dark:text-yellow-500' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-300'
                                 }`}
                             >
@@ -154,7 +154,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                     />
                                 )}
                                 <Icon aria-hidden="true" className={`w-5 h-5 ${isActive ? 'drop-shadow-[0_0_6px_rgba(234,179,8,0.5)]' : ''}`} />
-                                <span className="text-[11px] font-bold">{item.name}</span>
+                                <span className="text-[11px] font-bold max-w-full truncate">{item.name}</span>
                             </Link>
                         );
                     })}
@@ -166,7 +166,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         aria-expanded={showMore}
                         aria-haspopup="dialog"
                         aria-label="Menu lainnya"
-                        className={`flex flex-col items-center gap-1 py-2 px-3 min-w-[64px] min-h-12 rounded-xl transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
+                        className={`flex flex-col items-center justify-center gap-1 py-2 px-1 flex-1 min-w-0 min-h-12 rounded-xl transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
                             mobileMoreNav.some(n => pathname.startsWith(n.href)) ? 'text-yellow-700 dark:text-yellow-500' : 'text-slate-500'
                         }`}
                     >

@@ -377,7 +377,7 @@ export default function UptimePage() {
                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                             disabled={currentPage === 1}
                             aria-label="Halaman sebelumnya"
-                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors min-h-10"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors min-h-11"
                         >
                             Prev
                         </button>
@@ -389,7 +389,7 @@ export default function UptimePage() {
                             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                             disabled={currentPage === totalPages}
                             aria-label="Halaman berikutnya"
-                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors min-h-10"
+                            className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-900 dark:text-white text-sm font-bold disabled:opacity-30 disabled:hover:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors min-h-11"
                         >
                             Next
                         </button>

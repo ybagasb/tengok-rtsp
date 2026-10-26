@@ -24,7 +24,7 @@ export default function RouteError({ error, reset, title, backHref = '/categorie
 
     return (
         <div role="alert" className="min-h-dvh bg-slate-100 dark:bg-slate-950 flex items-center justify-center p-6">
-            <div className="max-w-md w-full text-center p-8 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-black/5 dark:border-white/10">
+            <div className="max-w-md w-full text-center p-8 max-sm:p-5 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-black/5 dark:border-white/10">
                 <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
                     <AlertTriangle className="w-8 h-8 text-rose-500" aria-hidden="true" />
                 </div>
@@ -32,16 +32,16 @@ export default function RouteError({ error, reset, title, backHref = '/categorie
                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                     Terjadi gangguan saat menampilkan halaman ini. Coba muat ulang. Jika masih berulang, hubungi tim teknis.
                 </p>
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex flex-wrap items-center justify-center gap-2">
                     <a
                         href={backHref}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors"
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 min-h-11 max-sm:flex-1 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors"
                     >
                         <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {backLabel}
                     </a>
                     <button
                         onClick={() => reset()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-sm font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 min-h-11 max-sm:flex-1 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-sm font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     >
                         <RefreshCw className="w-4 h-4" aria-hidden="true" /> Coba Lagi
                     </button>

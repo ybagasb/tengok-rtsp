@@ -566,7 +566,7 @@ export default function ShareLinksPage() {
                                                     </div>
                                                     <button
                                                         onClick={() => handleDelete(link._id)}
-                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3 bg-black/[0.04] dark:bg-white/5 text-slate-500 hover:text-white hover:bg-red-500 rounded-xl transition-all shrink-0 min-w-10 min-h-10 inline-flex items-center justify-center"
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3 bg-black/[0.04] dark:bg-white/5 text-slate-500 hover:text-white hover:bg-red-500 rounded-xl transition-all shrink-0 min-w-11 min-h-11 inline-flex items-center justify-center"
                                                         title="Hapus Permanen"
                                                         aria-label={`Hapus permanen tautan ${link.label}`}
                                                     >
@@ -624,7 +624,7 @@ export default function ShareLinksPage() {
                                     </div>
                                     Form Link Baru
                                 </h3>
-                                <button type="button" onClick={() => setShowAddSheet(false)} aria-label="Tutup form link baru" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white min-w-10 min-h-10 inline-flex items-center justify-center">
+                                <button type="button" onClick={() => setShowAddSheet(false)} aria-label="Tutup form link baru" className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white min-w-11 min-h-11 inline-flex items-center justify-center">
                                     <X aria-hidden="true" className="w-5 h-5" />
                                 </button>
                             </div>

@@ -283,3 +283,20 @@ body {
     backdrop-filter: none !important;
   }
 }
+
+/* Phone: input teks minimal 16px agar iOS tidak zoom otomatis saat fokus.
+   Berlaku global tapi hanya di lebar < 640px (desktop/tablet tidak berubah).
+   Aturan ini di luar @layer sehingga menang atas utilitas text-sm/text-xs. */
+@media (max-width: 639px) {
+  :is(input:not([type="range"], [type="checkbox"], [type="radio"], [type="file"], [type="hidden"]), textarea, select) {
+    font-size: 16px;
+  }
+}
+
+/* Phone: label kecil 11px dinaikkan ke 12px (standar label minimum di ponsel).
+   Di luar @layer agar menang atas utilitas Tailwind; desktop/tablet tidak berubah. */
+@media (max-width: 639px) {
+  .text-\[11px\] {
+    font-size: 12px;
+  }
+}

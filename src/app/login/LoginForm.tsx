@@ -44,6 +44,7 @@ export default function LoginForm() {
             if (res.data.success) {
                 toast.success('Berhasil masuk');
                 // Use full page navigation so middleware sees the new auth_token cookie
+                // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                 window.location.href = '/categories';
             }
         } catch (error) {
@@ -75,7 +76,7 @@ export default function LoginForm() {
     };
 
     return (
-        <div className="min-h-dvh flex items-center justify-center bg-slate-100 dark:bg-[#060a14] relative overflow-hidden px-4 py-8">
+        <div className="min-h-dvh flex items-center justify-center bg-slate-100 dark:bg-[#060a14] relative overflow-hidden px-4 py-8 max-sm:pt-[max(1.5rem,env(safe-area-inset-top,0px))] max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
             {/* ── Latar belakang hidup (murni visual) ─────────────────────── */}
 
             {/* Aurora blobs bergerak lambat */}
@@ -167,10 +168,10 @@ export default function LoginForm() {
             ))}
 
             {/* Label HUD kecil di sudut (dekorasi command-center) */}
-            <span aria-hidden className="pointer-events-none absolute top-6 left-16 z-10 text-[10px] font-mono tracking-[0.25em] text-yellow-700 dark:text-yellow-400/50 uppercase">
+            <span aria-hidden className="pointer-events-none absolute top-6 left-16 z-10 text-[11px] font-mono tracking-[0.25em] text-yellow-700 dark:text-yellow-400/50 uppercase">
                 SEC-LINK
             </span>
-            <span aria-hidden className="pointer-events-none absolute bottom-6 right-16 z-10 text-[10px] font-mono tracking-[0.25em] text-yellow-700 dark:text-yellow-400/50 uppercase">
+            <span aria-hidden className="pointer-events-none absolute bottom-6 right-16 z-10 text-[11px] font-mono tracking-[0.25em] text-yellow-700 dark:text-yellow-400/50 uppercase">
                 v1.0
             </span>
 
@@ -196,7 +197,7 @@ export default function LoginForm() {
                     />
                 </div>
 
-                <div className="relative p-8 bg-white dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-black/10 dark:border-white/10 shadow-xl shadow-slate-900/10 dark:shadow-[0_30px_60px_rgba(0,0,0,0.5)] overflow-hidden">
+                <div className="relative p-8 max-sm:p-5 bg-white dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-black/10 dark:border-white/10 shadow-xl shadow-slate-900/10 dark:shadow-[0_30px_60px_rgba(0,0,0,0.5)] overflow-hidden">
                     {/* Shimmer diagonal halus di dalam kartu */}
                     <motion.div
                         aria-hidden
@@ -206,7 +207,7 @@ export default function LoginForm() {
                     />
 
                     {/* Logo & Title */}
-                    <div className="flex flex-col items-center mb-8">
+                    <div className="flex flex-col items-center mb-8 max-sm:mb-5">
                         <div className="relative mb-4">
                             {/* Ring orbit tipis */}
                             <motion.span
@@ -218,7 +219,7 @@ export default function LoginForm() {
                             <motion.img
                                 src="/abipraya_blue.svg"
                                 alt="PT Brantas Abipraya"
-                                className="w-20 h-20 object-contain block dark:hidden"
+                                className="w-20 h-20 max-sm:w-16 max-sm:h-16 object-contain block dark:hidden"
                                 animate={reduce
                                     ? { filter: 'drop-shadow(0 0 14px rgba(37,99,235,0.45))' }
                                     : {
@@ -234,7 +235,7 @@ export default function LoginForm() {
                                 src="/abipraya_original.svg"
                                 alt=""
                                 aria-hidden="true"
-                                className="w-20 h-20 object-contain hidden dark:block"
+                                className="w-20 h-20 max-sm:w-16 max-sm:h-16 object-contain hidden dark:block"
                                 animate={reduce
                                     ? { filter: 'drop-shadow(0 0 14px rgba(254,213,51,0.45))' }
                                     : {
@@ -260,7 +261,7 @@ export default function LoginForm() {
                         whileTap={{ scale: 0.97 }}
                         onClick={handleCognitoLogin}
                         disabled={ssoLoading}
-                        className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-600/25 dark:shadow-[0_8px_30px_rgba(37,99,235,0.4)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed text-sm uppercase tracking-wider mb-6 min-h-11 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 focus-visible:outline-none"
+                        className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-600/25 dark:shadow-[0_8px_30px_rgba(37,99,235,0.4)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed text-sm uppercase tracking-wider mb-6 min-h-11 max-sm:min-h-12 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 focus-visible:outline-none"
                     >
                         {ssoLoading ? (
                             <>
@@ -280,7 +281,7 @@ export default function LoginForm() {
                     </p>
 
                     {/* Divider */}
-                    <div className="flex items-center gap-4 mb-6">
+                    <div className="flex items-center gap-4 mb-6 max-sm:mb-4">
                         <div className="flex-1 h-px bg-gradient-to-r from-transparent to-black/15 dark:to-white/15" />
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">atau PIN</span>
                         <div className="flex-1 h-px bg-gradient-to-l from-transparent to-black/15 dark:to-white/15" />
@@ -299,7 +300,7 @@ export default function LoginForm() {
                                     autoComplete="off"
                                     value={pin}
                                     onChange={(e) => setPin(e.target.value)}
-                                    className="w-full min-h-11 bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl py-3 pl-12 pr-4 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-yellow-500 focus-visible:ring-2 focus-visible:ring-amber-500 transition-all text-center tracking-[0.5em] font-mono text-lg"
+                                    className="w-full min-h-11 max-sm:min-h-12 bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl py-3 pl-12 pr-4 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-yellow-500 focus-visible:ring-2 focus-visible:ring-amber-500 transition-all text-center tracking-[0.5em] font-mono text-lg"
                                     placeholder="••••••"
                                     maxLength={6}
                                 />
@@ -311,7 +312,7 @@ export default function LoginForm() {
                             whileTap={{ scale: 0.98 }}
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3.5 rounded-xl transition-all shadow-md shadow-amber-600/20 dark:shadow-[0_0_20px_rgba(234,179,8,0.3)] dark:hover:shadow-[0_0_30px_rgba(234,179,8,0.5)] min-h-11 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 focus-visible:outline-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3.5 rounded-xl transition-all shadow-md shadow-amber-600/20 dark:shadow-[0_0_20px_rgba(234,179,8,0.3)] dark:hover:shadow-[0_0_30px_rgba(234,179,8,0.5)] min-h-11 max-sm:min-h-12 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 focus-visible:outline-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? (
                                 <>
@@ -324,7 +325,7 @@ export default function LoginForm() {
                         </motion.button>
                     </form>
 
-                    <div className="mt-6 pt-5 border-t border-black/10 dark:border-white/10 text-center">
+                    <div className="mt-6 max-sm:mt-4 pt-5 max-sm:pt-3 border-t border-black/10 dark:border-white/10 text-center">
                         <a
                             href="/Panduan-Input-Detail-Proyek.pdf?v=20261024"
                             target="_blank"

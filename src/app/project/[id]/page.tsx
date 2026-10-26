@@ -207,6 +207,53 @@ const TAB_GROUPS: TabGroup[] = [
 
 const ALL_TABS: TabItem[] = TAB_GROUPS.flatMap(g => g.items);
 
+// Phone: simpan tinggi header sticky ke --ph-h (dipakai bar Simpan yang menempel di bawahnya).
+// Fungsi tingkat modul agar identitas ref stabil (tidak re-observe tiap render).
+function trackHeaderHeight(el: HTMLElement | null) {
+    const root = el?.parentElement;
+    if (!el || !root) return;
+    const set = () => root.style.setProperty('--ph-h', `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+}
+
+// Phone (< sm): strip tab horizontal di dalam header sticky. Desktop/tablet tetap sidebar/drawer.
+function PhoneTabStrip({ tab, onSelect }: { tab: Tab; onSelect: (t: Tab) => void }) {
+    const listRef = useRef<HTMLDivElement>(null);
+    const reduceMotion = useReducedMotion();
+    // Tab aktif selalu terlihat, juga saat berpindah lewat tombol lain (mis. "Buka Laporan Bulanan").
+    useEffect(() => {
+        const el = listRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+        el?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+    }, [tab, reduceMotion]);
+    return (
+        <nav aria-label="Bagian proyek" className="sm:hidden border-t border-black/5 dark:border-white/5">
+            <div ref={listRef} className="flex gap-1.5 overflow-x-auto overscroll-x-contain snap-x px-4 py-2 touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {ALL_TABS.map(t => {
+                    const Icon = t.icon;
+                    const active = tab === t.id;
+                    return (
+                        <button
+                            key={t.id}
+                            onClick={() => onSelect(t.id)}
+                            aria-current={active ? 'page' : undefined}
+                            className={`snap-start shrink-0 min-h-11 inline-flex items-center gap-2 px-3.5 rounded-xl text-sm font-semibold whitespace-nowrap border transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
+                                active
+                                    ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border-[rgba(var(--div-accent-rgb),0.3)]'
+                                    : 'text-slate-600 dark:text-slate-400 border-transparent bg-black/[0.03] dark:bg-white/5'
+                            }`}
+                        >
+                            <Icon className="w-4 h-4 shrink-0" aria-hidden="true" /> {t.label}
+                        </button>
+                    );
+                })}
+            </div>
+        </nav>
+    );
+}
+
 function formatIDR(v?: number) {
     if (v == null) return '-';
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v);
@@ -314,9 +361,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
     if (!project) {
         return (
-            <div className="min-h-dvh bg-slate-100 dark:bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-500 dark:text-slate-400">
-                <p className="text-lg font-bold">{loadError?.message ?? 'Proyek tidak ditemukan.'}</p>
-                <div className="flex items-center gap-2">
+            <div className="min-h-dvh bg-slate-100 dark:bg-slate-950 flex flex-col items-center justify-center gap-4 px-6 text-center text-slate-500 dark:text-slate-400">
+                <p className="text-lg font-bold text-balance max-w-md">{loadError?.message ?? 'Proyek tidak ditemukan.'}</p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
                     <button onClick={() => router.back()} className="px-5 py-2.5 bg-black/[0.04] dark:bg-white/5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-sm font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">Kembali</button>
                     {loadError?.status === 401 && (
                         <button onClick={() => router.push('/login')} className="px-5 py-2.5 div-accent-solid hover:brightness-110 text-slate-950 rounded-xl transition-colors text-sm font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">Masuk</button>
@@ -352,7 +399,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                 <button
                                     key={t.id}
                                     onClick={() => selectTab(t.id)}
-                                    className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                                    className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full max-sm:min-h-11 flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
                                         active
                                             ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border border-[rgba(var(--div-accent-rgb),0.3)]'
                                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
@@ -371,7 +418,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const pageStyle = getDivisionCssVars(project.division) as React.CSSProperties;
 
     return (
-        <div style={pageStyle} className="min-h-dvh bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
+        <div style={pageStyle} className="phone-input-16 min-h-dvh bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white">
             {/* Grid HUD tipis beraksen divisi (dekorasi, tidak menangkap klik) */}
             <div
                 aria-hidden
@@ -386,7 +433,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             />
 
             {/* Header */}
-            <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
+            <header ref={trackHeaderHeight} className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
                 {/* Garis aksen divisi bercahaya di tepi bawah header */}
                 <div
                     aria-hidden
@@ -397,7 +444,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         boxShadow: '0 0 12px rgba(var(--div-accent-rgb),0.45)',
                     }}
                 />
-                <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex items-center gap-3">
+                <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top,0px))] max-sm:pb-3 flex items-center gap-3">
                     <button onClick={() => router.back()} aria-label="Kembali" className="p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                         <ArrowLeft className="w-5 h-5" aria-hidden="true" />
                     </button>
@@ -415,9 +462,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${status.color}`}>{status.label}</span>
                             {project.division && <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">{project.division}</span>}
                             {project.projectType && <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-cyan-300">{project.projectType === 'JO' ? 'JO' : 'NON-JO'}</span>}
-                            <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">{project.category}</span>
+                            <span className="max-sm:hidden text-[11px] text-slate-500 font-medium uppercase tracking-wider">{project.category}</span>
                             {project.updatedAt && (
-                                <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                                <span className="max-sm:hidden inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
                                     <Clock className="w-3 h-3 shrink-0" />
                                     Terakhir diperbarui: {new Date(project.updatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
                                 </span>
@@ -429,7 +476,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Buka panduan pengisian (PDF)"
-                        className="p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0"
+                        className="max-sm:hidden p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0"
                     >
                         <BookOpen className="w-5 h-5" aria-hidden="true" />
                     </a>
@@ -444,6 +491,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         <MapPin className="w-4 h-4" /> Lihat di Peta
                     </button>
                 </div>
+                <PhoneTabStrip tab={tab} onSelect={selectTab} />
             </header>
 
             <div className="relative z-[1] max-w-7xl mx-auto px-4 sm:px-8 py-6 flex gap-6">
@@ -468,15 +516,35 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                 role="dialog"
                                 aria-modal="true"
                                 aria-label="Menu proyek"
-                                className="fixed inset-y-0 left-0 z-50 w-72 bg-slate-100 dark:bg-slate-950 border-r border-black/10 dark:border-white/10 p-4 overflow-y-auto lg:hidden"
+                                className="fixed inset-y-0 left-0 z-50 w-72 bg-slate-100 dark:bg-slate-950 border-r border-black/10 dark:border-white/10 p-4 overflow-y-auto overscroll-contain max-sm:pt-[calc(1rem+env(safe-area-inset-top,0px))] max-sm:pb-[calc(1rem+env(safe-area-inset-bottom,0px))] lg:hidden"
                                 initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
                                 transition={{ type: 'tween', duration: 0.22 }}
                             >
                                 <div className="flex items-center justify-between mb-4">
                                     <span className="text-sm font-bold text-slate-900 dark:text-white">Menu Proyek</span>
-                                    <button ref={drawerCloseRef} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" className="p-3 rounded-lg bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-4 h-4" aria-hidden="true" /></button>
+                                    <button ref={drawerCloseRef} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" className="p-3 max-sm:p-3.5 rounded-lg bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-4 h-4" aria-hidden="true" /></button>
                                 </div>
                                 {sidebarNav}
+                                {/* Phone: aksi header yang disembunyikan di layar kecil dipindah ke sini */}
+                                <div className="sm:hidden mt-5 pt-4 border-t border-black/10 dark:border-white/10 space-y-2">
+                                    <button
+                                        onClick={() => {
+                                            const divisionParam = project.division ? `&division=${encodeURIComponent(project.division)}` : '';
+                                            router.push(`/map?category=${encodeURIComponent(project.category)}${divisionParam}`);
+                                        }}
+                                        className="w-full min-h-11 flex items-center gap-2.5 px-3 rounded-xl text-sm font-bold bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                                    >
+                                        <MapPin className="w-4 h-4 shrink-0" aria-hidden="true" /> Lihat di Peta
+                                    </button>
+                                    <a
+                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261024"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full min-h-11 flex items-center gap-2.5 px-3 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 bg-black/[0.04] dark:bg-white/5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                                    >
+                                        <BookOpen className="w-4 h-4 shrink-0" aria-hidden="true" /> Panduan pengisian (PDF)
+                                    </a>
+                                </div>
                             </motion.aside>
                         </>
                     )}
@@ -484,7 +552,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
                 {/* Content */}
                 <main className="flex-1 min-w-0">
-                    <div className="mb-4 flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-widest lg:hidden">
+                    <div className="mb-4 flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-widest lg:hidden max-sm:hidden">
                         {activeLabel}
                     </div>
                     <AnimatePresence mode="wait">
@@ -783,7 +851,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                                     Margin {margin.toFixed(2)}%
                                 </span>
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 min-[480px]:grid-cols-3 gap-3">
                                 <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center">
                                     <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pendapatan</div>
                                     <div className="text-sm font-black text-sky-400 font-mono mt-1">{formatIDRShort(pendapatan)}</div>
@@ -998,21 +1066,21 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                                     </span>
                                 )}
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 min-[480px]:grid-cols-3 gap-3">
                                 <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center space-y-1">
                                     <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">PU</div>
                                     <div className="text-base font-black text-sky-400 font-mono">{formatIDRShort(project.pu)}</div>
-                                    <div className="text-[11px] text-slate-500 font-mono">{project.pu != null ? formatIDR(project.pu) : ''}</div>
+                                    <div className="text-[11px] text-slate-500 font-mono break-all">{project.pu != null ? formatIDR(project.pu) : ''}</div>
                                 </div>
                                 <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/20 text-center space-y-1">
                                     <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">BK</div>
                                     <div className="text-base font-black text-rose-400 font-mono">{formatIDRShort(project.bk)}</div>
-                                    <div className="text-[11px] text-slate-500 font-mono">{project.bk != null ? formatIDR(project.bk) : ''}</div>
+                                    <div className="text-[11px] text-slate-500 font-mono break-all">{project.bk != null ? formatIDR(project.bk) : ''}</div>
                                 </div>
                                 <div className={`p-4 rounded-xl text-center border space-y-1 ${rugiKinerja ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
                                     <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{rugiKinerja ? 'LK (Rugi)' : 'LK'}</div>
                                     <div className={`text-base font-black font-mono ${rugiKinerja ? 'text-rose-400' : 'text-emerald-400'}`}>{formatIDRShort(lk)}</div>
-                                    <div className="text-[11px] text-slate-500 font-mono">{formatIDR(lk)}</div>
+                                    <div className="text-[11px] text-slate-500 font-mono break-all">{formatIDR(lk)}</div>
                                 </div>
                             </div>
                             <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold border-t border-black/5 dark:border-white/5 pt-3">
@@ -1040,7 +1108,7 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                     {isAdmin && (editingMinggu ? (
                         <div className="flex gap-2">
                             <button onClick={() => { setMingguList(project.progressMinggu ?? []); setEditingMinggu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveMinggu} disabled={savingMinggu} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={saveMinggu} disabled={savingMinggu} className="px-3 py-2 max-sm:min-h-11 max-sm:px-4 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
@@ -1059,9 +1127,9 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                                     <div className="flex items-center gap-3">
                                         <input aria-label="Bulan (mis. Oktober 2026)" placeholder="Bulan (mis. Oktober 2026)" value={row.bulan} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], bulan: e.target.value }; setMingguList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         <input aria-label="Tahun" type="number" placeholder="Tahun" value={row.tahun} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setMingguList(a); }} className="w-24 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <button onClick={() => setMingguList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                                        <button onClick={() => setMingguList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                                     </div>
-                                    <div className="grid grid-cols-4 gap-2">
+                                    <div className="grid grid-cols-2 min-[480px]:grid-cols-4 gap-2">
                                         {WEEKS.map(w => (
                                             <div key={w} className="space-y-2">
                                                 <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
@@ -1198,7 +1266,7 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                                     <div className="flex gap-2 items-center">
                                         <input aria-label="Judul milestone" placeholder="Judul milestone" value={m.title} onChange={e => { const a = [...msList]; a[i] = { ...a[i], title: e.target.value }; setMsList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         <input aria-label="Tanggal milestone" type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...msList]; a[i] = { ...a[i], date: e.target.value }; setMsList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <button onClick={() => setMsList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                                        <button onClick={() => setMsList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-16 shrink-0">Progress</span>
@@ -1285,7 +1353,7 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                                         <input aria-label="Unit / Orang / m³" list="sd-satuan-op" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                     </div>
                                     <div className="sm:col-span-1 flex sm:justify-center">
-                                        <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                                        <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                                     </div>
                                 </div>
                             ))}
@@ -1345,7 +1413,7 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                                             <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                                         </div>
                                         <div className="sm:col-span-1 flex sm:justify-center">
-                                            <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                                            <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                                         </div>
                                     </div>
                                 ))}
@@ -1426,7 +1494,7 @@ function ChangeManagementTab({ project, isAdmin, onSaved }: { project: Project; 
                                         <Select label="Status" value={cm.status} onChange={v => { const a = [...list]; a[i] = { ...a[i], status: v as ChangeManagement['status'] }; setList(a); }} options={[['USULAN', 'USULAN'], ['DISETUJUI', 'DISETUJUI'], ['DITOLAK', 'DITOLAK']]} />
                                     </div>
                                 </div>
-                                <button onClick={() => setList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
+                                <button onClick={() => setList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
                             </div>
                         ))}
                     </div>
@@ -2262,7 +2330,7 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                     ? form.lingkupPekerjaan.map((lp, i) => (
                         <div key={i} className="flex gap-2">
                             <input aria-label="Lingkup pekerjaan" value={lp} onChange={e => { const a = [...form.lingkupPekerjaan]; a[i] = e.target.value; setForm(f => ({ ...f, lingkupPekerjaan: a })); }} className="flex-1 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                            <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: f.lingkupPekerjaan.filter((_, j) => j !== i) }))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Minus className="w-4 h-4" aria-hidden="true" /></button>
+                            <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: f.lingkupPekerjaan.filter((_, j) => j !== i) }))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Minus className="w-4 h-4" aria-hidden="true" /></button>
                         </div>
                     ))
                     : (
@@ -2331,7 +2399,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                     {isAdmin && (editingIsu ? (
                         <div className="flex gap-2">
                             <button onClick={() => { setIsuList(project.isuStrategis ?? []); setEditingIsu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveIsu} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={saveIsu} disabled={saving} className="px-3 py-2 max-sm:min-h-11 max-sm:px-4 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
@@ -2350,7 +2418,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                                     <Textarea label="Isu" value={isu.isu} onChange={v => { const a = [...isuList]; a[i] = { ...a[i], isu: v }; setIsuList(a); }} />
                                     <Textarea label="Usulan dari Abipraya" value={isu.usulan} onChange={v => { const a = [...isuList]; a[i] = { ...a[i], usulan: v }; setIsuList(a); }} />
                                 </div>
-                                <button onClick={() => setIsuList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center h-fit rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                                <button onClick={() => setIsuList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center h-fit rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
                             </div>
                         </div>
                     ))
@@ -2379,7 +2447,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                     {isAdmin && (editingKendala ? (
                         <div className="flex gap-2">
                             <button onClick={() => { setKendalaList(project.kendala ?? []); setEditingKendala(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveKendala} disabled={saving} className="px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={saveKendala} disabled={saving} className="px-3 py-2 max-sm:min-h-11 max-sm:px-4 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
@@ -2402,7 +2470,7 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
                                 <Input label="PIC"      value={k.pic ?? ''} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], pic: v }; setKendalaList(a); }} />
                                 <Select label="Status" value={k.status} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], status: v as Kendala['status'] }; setKendalaList(a); }} options={[['OPEN','OPEN'],['ON_PROGRESS','ON PROGRESS'],['CLOSED','CLOSED']]} />
                             </div>
-                            <button onClick={() => setKendalaList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
+                            <button onClick={() => setKendalaList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
                         </div>
                     ))
                     : (
@@ -2478,7 +2546,7 @@ function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin
                             </button>
                             {g.caption && <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/80 to-transparent text-[11px] text-white truncate pointer-events-none">{g.caption}</div>}
                             {isAdmin && (
-                                <button onClick={() => del(g.key)} aria-label="Hapus foto" className="absolute top-2 right-2 min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-black/60 text-rose-400 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 hover:bg-rose-500/20 transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                                <button onClick={() => del(g.key)} aria-label="Hapus foto" className="absolute top-2 right-2 min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-black/60 text-rose-400 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 hover:bg-rose-500/20 transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                                     <Trash2 className="w-4 h-4" aria-hidden="true" />
                                 </button>
                             )}
@@ -2546,18 +2614,18 @@ function Lightbox({ items, index, originKey, onClose, onNavigate }: {
             transition={{ duration: reduceMotion ? 0 : 0.25 }}
         >
             {/* Tutup */}
-            <button onClick={onClose} aria-label="Tutup pratinjau" className="absolute top-4 right-4 min-w-10 min-h-10 inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" title="Tutup (Esc)">
+            <button onClick={onClose} aria-label="Tutup pratinjau" className="absolute top-4 right-4 max-sm:top-[calc(1rem+env(safe-area-inset-top,0px))] max-sm:right-[calc(1rem+env(safe-area-inset-right,0px))] min-w-11 min-h-11 max-sm:min-w-12 max-sm:min-h-12 inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" title="Tutup (Esc)">
                 <X className="w-5 h-5" aria-hidden="true" />
             </button>
 
             {/* Counter */}
-            <div className="absolute top-5 left-5 text-xs font-bold text-white/80 bg-white/10 rounded-full px-3 py-1 z-20">
+            <div className="absolute top-5 left-5 max-sm:top-[calc(1.25rem+env(safe-area-inset-top,0px))] max-sm:left-[calc(1.25rem+env(safe-area-inset-left,0px))] text-xs font-bold text-white/80 bg-white/10 rounded-full px-3 py-1 z-20">
                 {index + 1} / {total}
             </div>
 
             {/* Prev */}
             {total > 1 && (
-                <button onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-3 sm:left-6 min-w-10 min-h-10 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" aria-label="Foto sebelumnya" title="Sebelumnya (←)">
+                <button onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-3 sm:left-6 min-w-11 min-h-11 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" aria-label="Foto sebelumnya" title="Sebelumnya (←)">
                     <ChevronLeft className="w-6 h-6" aria-hidden="true" />
                 </button>
             )}
@@ -2588,7 +2656,7 @@ function Lightbox({ items, index, originKey, onClose, onNavigate }: {
 
             {/* Next */}
             {total > 1 && (
-                <button onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-3 sm:right-6 min-w-10 min-h-10 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" aria-label="Foto berikutnya" title="Berikutnya (→)">
+                <button onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-3 sm:right-6 min-w-11 min-h-11 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none" aria-label="Foto berikutnya" title="Berikutnya (→)">
                     <ChevronRight className="w-6 h-6" aria-hidden="true" />
                 </button>
             )}
@@ -2636,10 +2704,10 @@ function useConfirm() {
                             </div>
                         </div>
                         <div className="flex gap-2 justify-end">
-                            <button onClick={close} className="px-4 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-sm font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">Batal</button>
+                            <button onClick={close} className="px-4 py-2 max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-sm font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">Batal</button>
                             <button
                                 onClick={() => { state.onConfirm?.(); close(); }}
-                                className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-900 dark:text-white text-sm font-bold transition-colors flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                                className="px-4 py-2 max-sm:min-h-11 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-900 dark:text-white text-sm font-bold transition-colors flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                             >
                                 <Trash2 className="w-3.5 h-3.5" /> Hapus
                             </button>
@@ -2658,17 +2726,17 @@ function SectionHeader({ title, isAdmin, editing, onEdit, onCancel, onSave, savi
     title: string; isAdmin: boolean; editing: boolean; onEdit: () => void; onCancel: () => void; onSave: () => void; saving: boolean;
 }) {
     return (
-        <div className="flex items-center justify-between">
+        <div className={`flex items-center justify-between ${editing && isAdmin ? 'max-sm:sticky max-sm:top-[calc(var(--ph-h,0px)+0.25rem)] max-sm:z-20 max-sm:-mx-4 max-sm:px-4 max-sm:py-2 max-sm:bg-slate-100/90 dark:max-sm:bg-slate-950/90 max-sm:backdrop-blur max-sm:border-b max-sm:border-black/5 dark:max-sm:border-white/5' : ''}`}>
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">{title}</h3>
             {isAdmin && (editing ? (
                 <div className="flex gap-2">
-                    <button onClick={onCancel} aria-label="Batalkan perubahan" className="px-3.5 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
-                    <button onClick={onSave} disabled={saving} aria-label="Simpan perubahan" className="px-3.5 py-2.5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                    <button onClick={onCancel} aria-label="Batalkan perubahan" className="px-3.5 py-2.5 max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
+                    <button onClick={onSave} disabled={saving} aria-label="Simpan perubahan" className="px-3.5 py-2.5 max-sm:min-h-11 max-sm:px-5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan
                     </button>
                 </div>
             ) : (
-                <button onClick={onEdit} aria-label={`Edit ${title}`} className="px-3.5 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                <button onClick={onEdit} aria-label={`Edit ${title}`} className="px-3.5 py-2.5 max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
             ))}
         </div>
     );

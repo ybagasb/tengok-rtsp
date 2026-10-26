@@ -93,7 +93,7 @@ export default function FootprintEditor({ lat, lng, footprint, height, canEdit, 
         }
     };
 
-    const btn = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors disabled:opacity-50 min-h-10 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none';
+    const btn = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors disabled:opacity-50 min-h-11 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none';
     const btnGhost = `${btn} bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300`;
 
     return (

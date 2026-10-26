@@ -756,7 +756,7 @@ export default function AdminLocations() {
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => handleEdit(loc)}
-                                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3 text-slate-500 hover:text-yellow-800 dark:hover:text-yellow-400 hover:bg-yellow-400/10 rounded-xl transition-all min-w-10 min-h-10 inline-flex items-center justify-center"
+                                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3 text-slate-500 hover:text-yellow-800 dark:hover:text-yellow-400 hover:bg-yellow-400/10 rounded-xl transition-all min-w-11 min-h-11 inline-flex items-center justify-center"
                                                     title="Edit Data"
                                                     aria-label={`Edit proyek ${loc.name}`}
                                                 >
@@ -764,7 +764,7 @@ export default function AdminLocations() {
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(loc._id, loc.name)}
-                                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3 text-slate-500 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all min-w-10 min-h-10 inline-flex items-center justify-center"
+                                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-3 text-slate-500 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all min-w-11 min-h-11 inline-flex items-center justify-center"
                                                     title="Hapus Data"
                                                     aria-label={`Hapus proyek ${loc.name}`}
                                                 >

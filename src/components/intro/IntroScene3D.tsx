@@ -24,11 +24,52 @@ import * as THREE from "three";
 import type { DivisionModelKey } from "@/lib/divisionTheme";
 import { loadHqModel, loadHqEnv, type HqModel } from "./hqModel";
 import { createDivisionModels } from "./divisionModels";
+import { isPhoneViewport } from "@/lib/phoneMode";
 
 // X positions divisi
 const XS_WIDE = [-18, 0, 18] as const;
 // Layar potret: jarak antar divisi dirapatkan supaya ketiganya bisa di-zoom lebih dekat.
 const XS_NARROW = [-16.5, 0, 16.5] as const;
+/**
+ * Tuning MODE FOKUS (phone: lebar < 640 dan aspect < 0.85, lihat src/lib/phoneMode.ts).
+ * Hanya berlaku di fase split. Semua angka mobile ada di sini; ubah di sini saja.
+ */
+export const MOBILE_SPLIT = {
+  /** FOV kamera (derajat) saat fase split di phone; fase lain tetap 40 */
+  fov: 50,
+  /** Jari-jari efektif (satuan dunia) yang harus muat di lebar layar */
+  R: 9,
+  /** Pengali jarak kamera: dist = R / (tan(fov/2) * aspect) * distMul */
+  distMul: 1.1,
+  /** Posisi kamera: y = dist * camY, z = dist * camZ (sudut pandang dari atas-depan) */
+  camY: 0.55,
+  camZ: 0.85,
+  /** Titik pandang (y). Lebih rendah dari pusat model (~6) agar model tampil DI ATAS panel bawah */
+  targetY: -0.5,
+  /** Jarak X antar model */
+  spacing: 13,
+  /** Skala model tetangga (bukan fokus) */
+  neighborScale: 0.7,
+  /** Geser horizontal minimal (px) untuk pindah fokus */
+  swipePx: 40,
+  /** ...atau kecepatan minimal (px/ms) dengan geseran minimal swipeMinPx */
+  swipeVelocity: 0.5,
+  swipeMinPx: 16,
+  /** Toleransi gerak (px) agar sentuhan masih dihitung tap */
+  tapSlopPx: 10,
+  /** Grid lantai: skala (lebih jarang) dan pengali opasitas (lebih tipis) */
+  gridScale: 2.2,
+  gridOpacity: 0.4,
+} as const;
+/**
+ * Tuning kamera phone untuk fase hq dan detail (di luar MOBILE_SPLIT). Hanya berlaku saat `phone`.
+ */
+export const MOBILE_DETAIL = {
+  /** Batas pecahan tinggi layar yang dikompensasi untuk sheet bawah (sheet penuh 90% tidak mengejar model sampai hilang) */
+  maxLookFrac: 0.5,
+  /** Fase hq/explode: pecahan tinggi layar yang dikosongkan untuk judul + tombol Mulai di bawah, agar gedung tidak tertimpa */
+  hqLookFrac: 0.1,
+} as const;
 // Urutan model per divisi (sama dengan ORDER di page)
 const MODEL_KEYS: DivisionModelKey[] = ["gedung", "bendungan", "tol"];
 
@@ -45,6 +86,12 @@ export interface IntroScene3DProps {
   selectedDiv: number;
   /** Indeks divisi yang di-hover (-1 = tidak ada) */
   hoveredDiv: number;
+  /** Divisi yang sedang difokuskan (mode phone fase split); -1 = tidak ada */
+  focusDiv?: number;
+  /** Pecahan tinggi layar yang ditutup bottom sheet fase detail (phone); 0 = tidak ada. Kamera menggeser model ke area terlihat. */
+  sheetFrac?: number;
+  /** Dipanggil saat pengguna menggeser/tap tetangga di canvas (mode phone) */
+  onFocusChange?: (i: number) => void;
   /** Warna aksen tiap divisi (hex string, urutan sesuai ORDER) */
   divisionColors: readonly string[];
   /** Status CCTV per divisi (urutan sesuai ORDER) */
@@ -74,6 +121,9 @@ export default function IntroScene3D({
   phase,
   selectedDiv,
   hoveredDiv,
+  focusDiv = -1,
+  sheetFrac = 0,
+  onFocusChange,
   divisionColors,
   divisionStatus,
   theme = "dark",
@@ -93,16 +143,16 @@ export default function IntroScene3D({
   const themeRef = useRef(theme);
 
   // Refs untuk props agar loop animasi selalu baca nilai terkini tanpa rebuild scene
-  const stateRef = useRef({ phase, selectedDiv, hoveredDiv, reducedMotion, divisionStatus });
-  const cbRef = useRef({ onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onReady, onError, onMounted });
+  const stateRef = useRef({ phase, selectedDiv, hoveredDiv, focusDiv, sheetFrac, reducedMotion, divisionStatus });
+  const cbRef = useRef({ onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onFocusChange, onReady, onError, onMounted });
 
   useEffect(() => {
-    stateRef.current = { phase, selectedDiv, hoveredDiv, reducedMotion, divisionStatus };
-  }, [phase, selectedDiv, hoveredDiv, reducedMotion, divisionStatus]);
+    stateRef.current = { phase, selectedDiv, hoveredDiv, focusDiv, sheetFrac, reducedMotion, divisionStatus };
+  }, [phase, selectedDiv, hoveredDiv, focusDiv, sheetFrac, reducedMotion, divisionStatus]);
 
   useEffect(() => {
-    cbRef.current = { onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onReady, onError, onMounted };
-  }, [onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onReady, onError, onMounted]);
+    cbRef.current = { onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onFocusChange, onReady, onError, onMounted };
+  }, [onBuildingClick, onExplodeComplete, onDivisionClick, onDivisionHover, onFocusChange, onReady, onError, onMounted]);
 
   useEffect(() => {
     themeRef.current = theme;
@@ -127,7 +177,10 @@ export default function IntroScene3D({
     let fogBase = 0.011;
 
     const cam = new THREE.PerspectiveCamera(40, W() / H(), 0.1, 400);
-    const XS = W() / H() < 1 ? XS_NARROW : XS_WIDE;
+    // XS mutable: dihitung ulang oleh applyLayout() (mount + resize/rotasi) tanpa membangun ulang scene.
+    // Nilai awal non-phone = logika lama (aspect < 1 -> NARROW, selain itu WIDE).
+    const XS: number[] = [...(W() / H() < 1 ? XS_NARROW : XS_WIDE)];
+    let phone = isPhoneViewport(window.innerWidth, window.innerHeight);
 
     // Perangkat sentuh / layar kecil: batasi resolusi render & detail dekorasi.
     const lowPower =
@@ -395,6 +448,15 @@ export default function IntroScene3D({
     }
 
     // ---- Tema terang/gelap: ubah lingkungan saja (model & aksen tetap) ----
+    // Grid lantai: opasitas dasar per tema x peredam mode fokus (phone, fase split).
+    let gridBaseOp = 0.22;
+    let gridDamp = 1;
+    let gridScaleCur = 1;
+    const syncGridOpacity = () => {
+      gridMats.forEach((m) => {
+        (m as THREE.LineBasicMaterial).opacity = gridBaseOp * gridDamp;
+      });
+    };
     const applyTheme = (t: "light" | "dark") => {
       const light = t === "light";
       const bg = light ? 0xe9eef5 : 0x070d18;
@@ -412,9 +474,8 @@ export default function IntroScene3D({
       sun.color.setHex(light ? 0xfff1d6 : 0xffe2b0);
       sun.intensity = baseSun;
       if (stars) stars.visible = !light;
-      gridMats.forEach((m) => {
-        (m as THREE.LineBasicMaterial).opacity = light ? 0.4 : 0.22;
-      });
+      gridBaseOp = light ? 0.4 : 0.22;
+      syncGridOpacity();
     };
     applyThemeRef.current = applyTheme;
     applyTheme(themeRef.current);
@@ -575,6 +636,23 @@ export default function IntroScene3D({
       return { w, p };
     });
 
+    // Susun ulang posisi model + touch-action sesuai viewport (mount & resize), tanpa rebuild scene.
+    const applyLayout = () => {
+      phone = isPhoneViewport(window.innerWidth, window.innerHeight);
+      const src: readonly number[] = phone
+        ? [-MOBILE_SPLIT.spacing, 0, MOBILE_SPLIT.spacing]
+        : W() / H() < 1
+        ? XS_NARROW
+        : XS_WIDE;
+      for (let i = 0; i < 3; i++) XS[i] = src[i];
+      mods.forEach((m, i) => {
+        m.w.position.x = XS[i];
+        m.p.position.x = XS[i];
+      });
+      // pan-y: geser horizontal ditangani kita, scroll vertikal halaman tidak diblokir
+      ren.domElement.style.touchAction = phone ? "pan-y" : "";
+    };
+    applyLayout();
     // Putar awal model bendungan agar sisi hilir menghadap kamera (V4)
     if (mods[1]) {
       mods[1].w.rotation.y = Math.PI * 0.75;
@@ -628,10 +706,13 @@ export default function IntroScene3D({
       return -1;
     }
 
+    // Gestur mode fokus (phone, fase split): geser horizontal / tap diputuskan saat pointerup.
+    let gesture: { id: number; x: number; y: number; t: number } | null = null;
     const onPtrMove = (e: PointerEvent) => {
       lastActivity = performance.now();
       updatePt(e);
       const { phase: ph } = stateRef.current;
+      if (phone && ph === "split") return; // sentuh: tanpa hover, gestur di pointerup
       if (ph === "hq") {
         ren.domElement.style.cursor = pickFrom([hqW]) ? "pointer" : "default";
       } else if (ph === "split") {
@@ -647,6 +728,10 @@ export default function IntroScene3D({
       lastActivity = performance.now();
       updatePt(e);
       const { phase: ph } = stateRef.current;
+      if (phone && ph === "split") {
+        gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
+        return;
+      }
       if (ph === "hq" && pickFrom([hqW])) {
         cbRef.current.onBuildingClick();
       } else if (ph === "split") {
@@ -654,11 +739,45 @@ export default function IntroScene3D({
         if (i >= 0) cbRef.current.onDivisionClick(i);
       }
     };
+    const onPtrUp = (e: PointerEvent) => {
+      const g = gesture;
+      gesture = null;
+      if (!g || g.id !== e.pointerId) return;
+      const { phase: ph, focusDiv: foc } = stateRef.current;
+      if (!(phone && ph === "split")) return;
+      lastActivity = performance.now();
+      const dx = e.clientX - g.x;
+      const dy = e.clientY - g.y;
+      const adx = Math.abs(dx);
+      const speed = adx / Math.max(1, performance.now() - g.t);
+      const cur = foc >= 0 ? foc : 0;
+      const swipe =
+        adx > Math.abs(dy) &&
+        (adx >= MOBILE_SPLIT.swipePx || (adx >= MOBILE_SPLIT.swipeMinPx && speed >= MOBILE_SPLIT.swipeVelocity));
+      if (swipe) {
+        const next = Math.min(2, Math.max(0, cur + (dx < 0 ? 1 : -1)));
+        if (next !== cur) cbRef.current.onFocusChange?.(next);
+        return;
+      }
+      if (Math.hypot(dx, dy) <= MOBILE_SPLIT.tapSlopPx) {
+        updatePt(e);
+        const i = idxOf(pickFrom(mods.map((m) => m.w)));
+        if (i < 0) return;
+        // tap model yang sudah fokus = buka detail; tap tetangga = jadikan fokus
+        if (i === cur) cbRef.current.onDivisionClick(i);
+        else cbRef.current.onFocusChange?.(i);
+      }
+    };
+    const onPtrCancel = () => {
+      gesture = null;
+    };
     ren.domElement.addEventListener("pointermove", onPtrMove);
     ren.domElement.addEventListener("pointerdown", onPtrDown);
-
+    ren.domElement.addEventListener("pointerup", onPtrUp);
+    ren.domElement.addEventListener("pointercancel", onPtrCancel);
     // ---- Resize -----------------------------------------------------------
     const onResize = () => {
+      applyLayout();
       cam.aspect = W() / H();
       cam.updateProjectionMatrix();
       ren.setSize(W(), H());
@@ -825,7 +944,7 @@ export default function IntroScene3D({
 
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      const { phase: ph, selectedDiv: sel, hoveredDiv: hov } = stateRef.current;
+      const { phase: ph, selectedDiv: sel, hoveredDiv: hov, focusDiv: foc, sheetFrac: sFrac } = stateRef.current;
       const isRed = Boolean(stateRef.current.reducedMotion);
 
       // Tangani transisi fase [Bagian B & F]
@@ -953,13 +1072,15 @@ export default function IntroScene3D({
 
       // Kamera target berdasarkan fase (f = faktor layar sempit) [Bagian D]
       const f = Math.max(1, 1.75 / cam.aspect);
+      // Gedung HQ: desktop sedikit dimundurkan (tidak terlalu ngezoom); potret sudah ditarik jauh oleh f, jadi didekatkan lagi.
+      const hqZoom = cam.aspect >= 1 ? 1.2 : 0.85;
       let P: THREE.Vector3, L: THREE.Vector3;
       if (ph === "hq") {
-        P = V(0, 9 * f * 1.2, 34 * f * 1.2);
+        P = V(0, 9 * f * hqZoom, 34 * f * hqZoom);
         L = V(0, 4, 0);
       } else if (ph === "explode" && !isRed) {
         const fly = exT > EX_FLY0 - 0.2; // dekat saat terurai, mundur saat terbang
-        P = fly ? V(0, 11 * f, 40 * f) : V(0, 10 * f * 1.2, 34 * f * 1.2);
+        P = fly ? V(0, 11 * f, 40 * f) : V(0, 10 * f * hqZoom, 34 * f * hqZoom);
         L = fly ? V(0, 4, 0) : V(0, 10, 0);
       } else if (ph === "detail") {
         const X = XS[sel] ?? 0;
@@ -971,14 +1092,40 @@ export default function IntroScene3D({
         const shift = (panelPx / window.innerWidth) * visW * 0.5;
         P = V(X + 2, 8 * f, dist);
         L = V(X + shift, 5, 0);
+        if (phone) {
+          // Phone: sheet menutup sFrac tinggi layar -> turunkan titik pandang agar model di tengah area terlihat.
+          // Pergeseran = frac * (setengah tinggi terlihat di jarak target) = frac * d * tan(fov/2).
+          const frac = Math.min(Math.max(sFrac, 0), MOBILE_DETAIL.maxLookFrac);
+          L.y -= frac * P.distanceTo(L) * Math.tan(fovV / 2);
+        }
       } else {
-        // split / explode (isRed): 3 platform (x ±19, r 8.8) harus muat di lebar layar.
-        // Jarak kamera dihitung dari lebar horizontal yang terlihat, bukan rasio kasar.
-        const tanHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
-        const halfNeed = cam.aspect < 1 ? 24 : XS[2] + 8;
-        const fitSplit = Math.max(1, halfNeed / (tanHalf * cam.aspect) / Math.hypot(11, 40));
-        P = V(0, 11 * fitSplit, 40 * fitSplit);
-        L = V(0, 4, 0);
+        // split / explode (isRed)
+        if (phone && ph === "split") {
+          // MODE FOKUS (phone): kamera mengikuti model fokus, tetangga mengintip di tepi.
+          const fovV = THREE.MathUtils.degToRad(MOBILE_SPLIT.fov);
+          const dist = (MOBILE_SPLIT.R / (Math.tan(fovV / 2) * cam.aspect)) * MOBILE_SPLIT.distMul;
+          const fx = XS[foc >= 0 && foc <= 2 ? foc : 0];
+          P = V(fx, dist * MOBILE_SPLIT.camY, dist * MOBILE_SPLIT.camZ);
+          L = V(fx, MOBILE_SPLIT.targetY, 0);
+        } else {
+          // 3 platform (x ±18, r 8.8) harus muat di lebar layar.
+          // Jarak kamera dihitung dari lebar horizontal yang terlihat, bukan rasio kasar.
+          const tanHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+          const halfNeed = cam.aspect < 1 ? 26 : XS[2] + 8;
+          const fitSplit = Math.max(1, halfNeed / (tanHalf * cam.aspect) / Math.hypot(11, 40));
+          P = V(0, 11 * fitSplit, 40 * fitSplit);
+          L = V(0, 4, 0);
+        }
+      }
+      // Phone, fase hq/explode: naikkan gedung sedikit supaya judul + tombol Mulai di bawah tidak menimpanya.
+      if (phone && (ph === "hq" || (ph === "explode" && !isRed))) {
+        L.y -= MOBILE_DETAIL.hqLookFrac * P.distanceTo(L) * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+      }
+      // FOV: 50 hanya untuk fase split di phone, selain itu 40 (nilai asli). Lerp halus.
+      const fovT = phone && ph === "split" ? MOBILE_SPLIT.fov : 40;
+      if (cam.fov !== fovT) {
+        cam.fov = Math.abs(cam.fov - fovT) < 0.05 ? fovT : cam.fov + (fovT - cam.fov) * Math.min(1, dt * 6);
+        cam.updateProjectionMatrix();
       }
       camP.lerp(P, 0.045);
       lookTgt.lerp(L, 0.05);
@@ -1122,16 +1269,21 @@ export default function IntroScene3D({
           a = 1;
         }
         const hScale = i === hov || i === sel ? 1.1 : 1;
+        // Mode fokus (phone, split): tetangga mengecil, fokus penuh.
+        const fTarget = phone && ph === "split" && foc >= 0 ? (i === foc ? 1 : MOBILE_SPLIT.neighborScale) : 1;
+        const fsPrev = (m.w.userData.fs as number | undefined) ?? 1;
+        const fs = fsPrev + (fTarget - fsPrev) * Math.min(1, dt * 7);
+        (m.w.userData as Record<string, unknown>).fs = fs;
         const dim = ph === "detail" && i !== sel ? 0.55 : 1;
         const prev = m.w.userData.s as number;
-        const next = prev + (a * hScale * dim - prev) * Math.min(1, dt * 7);
+        const next = prev + (a * hScale * dim * fTarget - prev) * Math.min(1, dt * 7);
         (m.w.userData as Record<string, unknown>).s = next;
         m.w.scale.setScalar(Math.max(0.0001, next));
         m.w.visible = next > 0.02 || ph === "explode";
         m.w.rotation.y += dt * (i === hov || i === sel ? 0.9 : 0.3);
         m.w.position.y = isRed ? 0 : Math.sin(tt * 1.2 + i) * 0.35 * a;
         m.p.visible = a > 0.02;
-        m.p.scale.setScalar(Math.max(0.01, a));
+        m.p.scale.setScalar(Math.max(0.01, a * fs));
         const sc = m.p.userData.sc as THREE.Mesh;
         const scMat = sc.material as THREE.MeshBasicMaterial;
         const u = (tt * 0.5 + i * 0.3) % 1;
@@ -1173,7 +1325,19 @@ export default function IntroScene3D({
       });
 
       // Grid scroll pelan ke arah z
-      grid.position.z = (tt * 2) % 2.9;
+      // Grid: lebih jarang & tipis di mode fokus (phone, split); lerp halus, tanpa alokasi.
+      const gridModeFocus = phone && ph === "split";
+      const gDampT = gridModeFocus ? MOBILE_SPLIT.gridOpacity : 1;
+      const gScaleT = gridModeFocus ? MOBILE_SPLIT.gridScale : 1;
+      if (gridDamp !== gDampT) {
+        gridDamp = Math.abs(gridDamp - gDampT) < 0.005 ? gDampT : gridDamp + (gDampT - gridDamp) * Math.min(1, dt * 4);
+        syncGridOpacity();
+      }
+      if (gridScaleCur !== gScaleT) {
+        gridScaleCur = Math.abs(gridScaleCur - gScaleT) < 0.005 ? gScaleT : gridScaleCur + (gScaleT - gridScaleCur) * Math.min(1, dt * 4);
+        grid.scale.set(gridScaleCur, 1, gridScaleCur);
+      }
+      grid.position.z = (tt * 2) % (2.9 * gridScaleCur);
 
       ren.render(scene, cam);
       renderCount++;
@@ -1196,6 +1360,8 @@ export default function IntroScene3D({
       ro.disconnect();
       ren.domElement.removeEventListener("pointermove", onPtrMove);
       ren.domElement.removeEventListener("pointerdown", onPtrDown);
+      ren.domElement.removeEventListener("pointerup", onPtrUp);
+      ren.domElement.removeEventListener("pointercancel", onPtrCancel);
 
       scene.traverse((obj) => {
         const mesh = obj as THREE.Mesh;

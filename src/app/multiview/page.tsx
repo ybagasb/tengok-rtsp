@@ -63,7 +63,11 @@ function MultiViewContent() {
     const [fetchError, setFetchError] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    // Di layar kecil panel pilihan menutupi seluruh grid: mulai tertutup. Aman dari mismatch hidrasi
+    // karena render pertama selalu BrandLoader (loading = true) sehingga panel belum ada di DOM.
+    const [isSidebarOpen, setIsSidebarOpen] = useState(
+        () => typeof window === "undefined" || !window.matchMedia("(max-width: 639px)").matches
+    );
     // Default follows the opened project's context: category if present,
     // else the division, else everything (page opened without any context).
     const [filterMode, setFilterMode] = useState<FilterMode>(
@@ -116,12 +120,6 @@ function MultiViewContent() {
             clearInterval(intervalId);
         };
     }, [query]);
-
-    // Di layar kecil panel pilihan menutupi seluruh grid: mulai dalam keadaan tertutup
-    // (user bisa membukanya lewat tombol). Hanya dijalankan sekali saat mount.
-    useEffect(() => {
-        if (window.matchMedia("(max-width: 639px)").matches) setIsSidebarOpen(false);
-    }, []);
 
     // Esc menutup panel pilihan lokasi (berguna di mobile saat panel menutupi grid).
     useEffect(() => {
@@ -177,6 +175,20 @@ function MultiViewContent() {
         }
         didAutoSelect.current = true;
     }, [loading, locations, filterMode]);
+
+    // router.back() tidak melakukan apa-apa bila halaman dibuka langsung (tab baru, tautan) karena
+    // tidak ada riwayat. Dalam kasus itu pulang ke peta konteks, atau ke Kategori.
+    const goBack = () => {
+        if (window.history.length > 1) {
+            router.back();
+            return;
+        }
+        const p = new URLSearchParams();
+        if (contextDivision) p.set('division', contextDivision);
+        if (contextCategory) p.set('category', contextCategory);
+        const qs = p.toString();
+        router.push(hasContext ? `/map?${qs}` : '/categories');
+    };
 
     const switchFilterMode = (mode: FilterMode) => {
         if (mode === filterMode) return;
@@ -270,7 +282,7 @@ function MultiViewContent() {
     const gridCols = useMemo(() => {
         const count = selectedCameras.length;
         if (count <= 1) return 'grid-cols-1';
-        if (count <= 4) return 'grid-cols-2';
+        if (count <= 4) return 'grid-cols-1 sm:grid-cols-2';
         // Mobile priority: fewer columns on small screens
         if (count <= 12) return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3';
         if (count <= 24) return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4';
@@ -336,25 +348,24 @@ function MultiViewContent() {
                             animate={{ x: 0, opacity: 1 }}
                             exit={{ x: -400, opacity: 0 }}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                            className="fixed inset-y-0 left-0 w-[85%] sm:w-80 bg-white/95 dark:bg-slate-900/95 shadow-xl dark:shadow-none backdrop-blur-3xl border-r border-black/10 dark:border-white/5 flex flex-col z-[100] sm:relative sm:z-50 shrink-0 overflow-hidden"
+                            className="fixed inset-y-0 left-0 w-[85%] sm:w-80 bg-white/95 dark:bg-slate-900/95 shadow-xl dark:shadow-none backdrop-blur-3xl border-r border-black/10 dark:border-white/5 flex flex-col z-[100] sm:relative sm:z-50 shrink-0 overflow-hidden pl-[env(safe-area-inset-left,0px)]"
                         >
                             <div className="w-full sm:w-80 h-full flex flex-col">
                                 {/* Sidebar Header */}
-                                <div className="p-6 border-b border-black/10 dark:border-white/5 bg-slate-50 dark:bg-slate-900/40">
-                                    <div className="flex items-center justify-between gap-1 mb-6">
+                                <div className="p-6 max-sm:p-4 max-sm:pt-[calc(1rem+env(safe-area-inset-top,0px))] border-b border-black/10 dark:border-white/5 bg-slate-50 dark:bg-slate-900/40">
+                                    <div className="flex items-center justify-between gap-1 mb-6 max-sm:mb-4">
                                         <button
-                                            onClick={() => router.back()}
-                                            className={`min-h-10 min-w-10 flex items-center justify-center p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-slate-600 dark:text-slate-400 transition-colors ${FOCUS_RING}`}
+                                            onClick={goBack}
+                                            className={`min-h-11 min-w-11 flex items-center justify-center p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-slate-600 dark:text-slate-400 transition-colors ${FOCUS_RING}`}
                                             aria-label="Kembali"
                                         >
                                             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
                                         </button>
                                         <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight uppercase truncate">Pilih Lokasi</h2>
                                         <div className="flex items-center gap-1 shrink-0">
-                                            <ThemeToggle className="!px-2" />
                                             <button
                                                 onClick={() => setIsSidebarOpen(false)}
-                                                className={`min-h-10 min-w-10 flex items-center justify-center p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-slate-600 dark:text-slate-400 transition-colors group ${FOCUS_RING}`}
+                                                className={`min-h-11 min-w-11 flex items-center justify-center p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl text-slate-600 dark:text-slate-400 transition-colors group ${FOCUS_RING}`}
                                                 title="Tutup panel pilihan"
                                                 aria-label="Tutup panel pilihan lokasi"
                                             >
@@ -374,7 +385,7 @@ function MultiViewContent() {
                                             <button
                                                 onClick={() => switchFilterMode('context')}
                                                 disabled={!hasCategory}
-                                                className={`${FOCUS_RING} min-h-10 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                className={`${FOCUS_RING} min-h-11 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'context'
                                                         ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
                                                         : 'bg-black/[0.03] dark:bg-white/5 border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10'
@@ -388,7 +399,7 @@ function MultiViewContent() {
                                             <button
                                                 onClick={() => switchFilterMode('division')}
                                                 disabled={!hasDivision}
-                                                className={`${FOCUS_RING} min-h-10 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                className={`${FOCUS_RING} min-h-11 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'division'
                                                         ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
                                                         : 'bg-black/[0.03] dark:bg-white/5 border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10'
@@ -401,7 +412,7 @@ function MultiViewContent() {
                                             {/* 3. Semua proyek (lintas divisi) */}
                                             <button
                                                 onClick={() => switchFilterMode('all')}
-                                                className={`${FOCUS_RING} min-h-10 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
+                                                className={`${FOCUS_RING} min-h-11 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all border text-left ${
                                                     filterMode === 'all'
                                                         ? 'bg-[rgba(var(--div-accent-rgb),0.15)] border-[rgba(var(--div-accent-rgb),0.4)] div-accent-text'
                                                         : 'bg-black/[0.03] dark:bg-white/5 border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10'
@@ -427,13 +438,13 @@ function MultiViewContent() {
                                             placeholder="Cari lokasi..."
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full min-h-10 bg-white dark:bg-slate-950/50 border border-black/10 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)] transition-all"
+                                            className="w-full min-h-11 bg-white dark:bg-slate-950/50 border border-black/10 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-base sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)] transition-all"
                                         />
                                     </div>
                                 </div>
 
                                 {/* Location List */}
-                                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
+                                <div className="flex-1 overflow-y-auto overscroll-contain p-4 custom-scrollbar space-y-2">
                                     {filteredLocations.length === 0 ? (
                                         <div className={`py-12 px-2 text-center text-xs font-bold tracking-wider ${fetchError ? 'text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400 uppercase'}`} role={fetchError ? 'alert' : undefined}>
                                             {fetchError ? 'Gagal memuat daftar lokasi. Mencoba lagi otomatis.' : 'Tidak ada lokasi'}
@@ -445,7 +456,7 @@ function MultiViewContent() {
                                                 key={loc._id}
                                                 onClick={() => toggleLocation(loc._id)}
                                                 aria-pressed={isSelected}
-                                                className={`${FOCUS_RING} w-full min-h-10 flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border hover:shadow-lg hover:-translate-y-0.5 active:scale-95 ${isSelected
+                                                className={`${FOCUS_RING} w-full min-h-11 flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border hover:shadow-lg hover:-translate-y-0.5 active:scale-95 ${isSelected
                                                     ? 'bg-[rgba(var(--div-accent-rgb),0.1)] border-[rgba(var(--div-accent-rgb),0.3)] shadow-[rgba(var(--div-accent-rgb),0.05)]'
                                                     : 'bg-black/[0.03] dark:bg-white/5 border-transparent hover:bg-black/5 dark:hover:bg-white/10'
                                                     }`}
@@ -467,7 +478,7 @@ function MultiViewContent() {
                                 </div>
 
                                 {/* Sidebar Footer */}
-                                <div className="p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] bg-slate-50 dark:bg-slate-900/60 border-t border-black/10 dark:border-white/5">
+                                <div className="p-6 max-sm:py-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] max-sm:pb-[calc(1rem+env(safe-area-inset-bottom,0px))] bg-slate-50 dark:bg-slate-900/60 border-t border-black/10 dark:border-white/5">
                                     <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
                                         <span className="text-slate-600 dark:text-slate-500">Dipilih</span>
                                         <span className="div-accent-text">{selectedLocationIds.length} Lokasi</span>
@@ -522,12 +533,22 @@ function MultiViewContent() {
                 ))}
 
                 {/* Overlay Header */}
-                <header className="absolute top-0 left-0 right-0 z-40 p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between pointer-events-none gap-4">
+                <header className="absolute top-0 left-0 right-0 z-40 p-4 max-sm:pt-[calc(1rem+env(safe-area-inset-top,0px))] max-sm:px-[max(1rem,env(safe-area-inset-left,0px))] sm:p-6 flex flex-col sm:flex-row items-center justify-between pointer-events-none gap-4">
                     <div className="flex items-center gap-3 sm:gap-4 pointer-events-auto w-full sm:w-auto">
                         {!isSidebarOpen && (
                             <button
+                                onClick={goBack}
+                                className={`${FOCUS_RING} min-h-11 min-w-11 flex items-center justify-center p-2.5 sm:p-3 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all shadow-lg dark:shadow-2xl shrink-0`}
+                                title="Kembali"
+                                aria-label="Kembali"
+                            >
+                                <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+                            </button>
+                        )}
+                        {!isSidebarOpen && (
+                            <button
                                 onClick={() => setIsSidebarOpen(true)}
-                                className={`${FOCUS_RING} min-h-10 min-w-10 flex items-center justify-center p-2.5 sm:p-3 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all shadow-lg dark:shadow-2xl group`}
+                                className={`${FOCUS_RING} min-h-11 min-w-11 flex items-center justify-center p-2.5 sm:p-3 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-2xl text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all shadow-lg dark:shadow-2xl group`}
                                 title="Buka Sidebar"
                                 aria-label="Buka sidebar pemilihan lokasi"
                             >
@@ -563,7 +584,7 @@ function MultiViewContent() {
                 </header>
 
                 {/* Grid Content */}
-                <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 pt-28 sm:pt-24 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+                <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 pt-28 max-sm:pt-[calc(7rem+env(safe-area-inset-top,0px))] sm:pt-24 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] overscroll-y-contain">
                     <AnimatePresence mode="popLayout">
                         {selectedCameras.length > 0 ? (
                             <>
@@ -653,7 +674,7 @@ function MultiViewContent() {
                                 {!isSidebarOpen && (
                                     <button
                                         onClick={() => setIsSidebarOpen(true)}
-                                        className={`${FOCUS_RING} mt-10 min-h-10 px-8 py-4 div-accent-solid hover:brightness-110 text-slate-950 font-bold uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-[rgba(var(--div-accent-rgb),0.2)] active:scale-95 flex items-center gap-3`}
+                                        className={`${FOCUS_RING} mt-10 min-h-11 px-8 py-4 div-accent-solid hover:brightness-110 text-slate-950 font-bold uppercase tracking-wider rounded-2xl transition-all shadow-xl shadow-[rgba(var(--div-accent-rgb),0.2)] active:scale-95 flex items-center gap-3`}
                                     >
                                         <PanelLeftOpen className="w-5 h-5" aria-hidden="true" />
                                         Buka Filter Lokasi

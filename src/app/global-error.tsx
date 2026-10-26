@@ -29,8 +29,10 @@ export default function GlobalError({
                         min-height: 100dvh;
                         display: flex;
                         align-items: center;
+                        align-items: safe center;
                         justify-content: center;
-                        overflow: hidden;
+                        overflow-x: hidden;
+                        overflow-y: auto;
                     }
                     .glow-1 {
                         position: fixed; width: 500px; height: 500px;
@@ -96,6 +98,20 @@ export default function GlobalError({
                         .footer { opacity: 0.6; }
                         .footer-div { background: rgba(15,23,42,0.25); }
                         h1 { background: linear-gradient(135deg, #dc2626, #b91c1c); -webkit-background-clip: text; background-clip: text; }
+                    }
+                    /* Ponsel: kontainer lebih rapat, judul lebih kecil. */
+                    @media (max-width: 480px) {
+                        .container { padding: 1.25rem; }
+                        h1 { font-size: 1.5rem; }
+                        .sub { margin-bottom: 1.5rem; }
+                    }
+                    /* Landscape pendek: ikon & jarak dikecilkan agar tidak terpotong. */
+                    @media (max-height: 500px) {
+                        .container { padding: 1rem; }
+                        .icon-wrap { width: 64px; height: 64px; margin-bottom: 1rem; border-radius: 1.5rem; }
+                        .icon-wrap svg { width: 28px; height: 28px; }
+                        .sub { margin-bottom: 1.25rem; }
+                        .footer { margin-top: 1.5rem; }
                     }
                     @media (prefers-reduced-motion: reduce) {
                         *, *::before, *::after { animation: none !important; transition: none !important; }
