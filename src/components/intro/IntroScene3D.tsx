@@ -8,7 +8,6 @@
  *   - Grid lantai amber bergerak pelan (GridHelper 260x90)
  *   - ~500 bintang (Points, posisi acak)
  *   - Platform per model: disc transparan + cincin solid + scan ring animasi
- *   - PointLight berwarna per divisi
  *   - HemisphereLight + DirectionalLight
  *   - HQ model (fit+glow amber) + 3 division models (scale lerp by phase)
  *   - Kamera fov 40, lerp halus 0.045/frame + parallax mengikuti pointer
@@ -23,9 +22,13 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { DivisionModelKey } from "@/lib/divisionTheme";
+import { loadHqModel, loadHqEnv, type HqModel } from "./hqModel";
+import { createDivisionModels } from "./divisionModels";
 
 // X positions divisi
-const XS = [-19, 0, 19] as const;
+const XS_WIDE = [-18, 0, 18] as const;
+// Layar potret: jarak antar divisi dirapatkan supaya ketiganya bisa di-zoom lebih dekat.
+const XS_NARROW = [-16.5, 0, 16.5] as const;
 // Urutan model per divisi (sama dengan ORDER di page)
 const MODEL_KEYS: DivisionModelKey[] = ["gedung", "bendungan", "tol"];
 
@@ -120,14 +123,17 @@ export default function IntroScene3D({
     // ---- Scene & renderer (opaque, background #070d18) --------------------
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x0a1220, 0.011);
+    // Densitas dasar kabut; diperkecil saat kamera mundur jauh (layar sempit) agar model tidak gelap.
+    let fogBase = 0.011;
 
     const cam = new THREE.PerspectiveCamera(40, W() / H(), 0.1, 400);
+    const XS = W() / H() < 1 ? XS_NARROW : XS_WIDE;
 
     // Perangkat sentuh / layar kecil: batasi resolusi render & detail dekorasi.
     const lowPower =
       window.matchMedia("(pointer: coarse)").matches ||
       Math.min(window.innerWidth, window.innerHeight) < 600;
-    let currentPr = Math.min(window.devicePixelRatio || 1, lowPower ? 1.5 : 2);
+    let currentPr = Math.min(window.devicePixelRatio || 1, 1.5);
     let ren: THREE.WebGLRenderer;
     try {
       // MSAA tidak perlu di layar high-DPI (piksel sudah rapat) & mahal di GPU lemah.
@@ -144,6 +150,9 @@ export default function IntroScene3D({
     ren.setPixelRatio(currentPr);
     ren.setSize(W(), H());
     ren.setClearColor(0x070d18, 0); // transparan: latar & watermark diatur CSS di belakang canvas
+    // Bayangan hanya untuk gedung HQ (fase hq/explode); dimatikan di perangkat lemah.
+    ren.shadowMap.enabled = !lowPower;
+    ren.shadowMap.type = THREE.PCFShadowMap;
     mount.appendChild(ren.domElement);
 
     // resource tracking untuk dispose saat unmount
@@ -159,6 +168,34 @@ export default function IntroScene3D({
     const sun = new THREE.DirectionalLight(0xffe2b0, 0.9);
     sun.position.set(20, 40, 30);
     scene.add(sun);
+    // Nilai dasar cahaya global per tema; frame loop meredamnya saat rig siang gedung HQ menyala.
+    let baseHemi = 0.85;
+    let baseSun = 0.9;
+
+    // Rig "siang" khusus gedung HQ: matahari hangat dengan bayangan + fill dingin.
+    // Intensitas 0 di luar fase hq/explode (dikendalikan hqMix di loop).
+    const keyLight = new THREE.DirectionalLight(0xffdfbc, 0);
+    keyLight.position.set(-38, 42, 14);
+    keyLight.castShadow = !lowPower;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    Object.assign(keyLight.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 140 });
+    keyLight.shadow.bias = -0.00045;
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xb5d5ee, 0);
+    fillLight.position.set(34, 18, -26);
+    scene.add(fillLight);
+    let hqMix = 0;
+
+    // Rig siang untuk tiga divisi: matahari dengan bayangan yang menutupi ketiga platform.
+    const divLight = new THREE.DirectionalLight(0xffe3c2, 0);
+    divLight.position.set(-26, 52, 34);
+    divLight.castShadow = !lowPower;
+    divLight.shadow.mapSize.set(1024, 1024);
+    Object.assign(divLight.shadow.camera, { left: -40, right: 40, top: 24, bottom: -24, near: 1, far: 150 });
+    divLight.shadow.bias = -0.0006;
+    divLight.shadow.normalBias = 0.05;
+    scene.add(divLight);
+    let divMix = 0;
 
     // ---- Helper material & tekstur prosedural -----------------------------
     const M = (c: number, o: THREE.MeshStandardMaterialParameters = {}) =>
@@ -219,28 +256,6 @@ export default function IntroScene3D({
       p.add(o);
       return o;
     }
-    function cyl(
-      a: THREE.Vector3, c: THREE.Vector3, r: number,
-      m: THREE.Material, p: THREE.Object3D, s = 6
-    ) {
-      const d = new THREE.Vector3().subVectors(c, a);
-      const l = d.length();
-      const o = new THREE.Mesh(track(new THREE.CylinderGeometry(r, r, l, s)), m);
-      o.position.copy(a).addScaledVector(d, 0.5);
-      o.quaternion.setFromUnitVectors(V(0, 1, 0), d.normalize());
-      p.add(o);
-      return o;
-    }
-    function segm(
-      a: THREE.Vector3, c: THREE.Vector3,
-      w: number, t: number, m: THREE.Material, p: THREE.Object3D
-    ) {
-      const o = new THREE.Mesh(track(new THREE.BoxGeometry(w, t, a.distanceTo(c) + 0.05)), m);
-      o.position.copy(a).add(c).multiplyScalar(0.5);
-      o.lookAt(c);
-      p.add(o);
-    }
-
     // glow() + fit() persis prototipe
     function glow(g: THREE.Group, col: number, op: number) {
       g.traverse((o) => {
@@ -255,12 +270,41 @@ export default function IntroScene3D({
         }
       });
     }
-    function fit(g: THREE.Group, size: number, col: number): THREE.Group {
-      glow(g, col, 0.28);
+    function fit(g: THREE.Group, size: number, col: number, edgeGlow = true): THREE.Group {
+      if (edgeGlow) glow(g, col, 0.28);
       const bb = new THREE.Box3().setFromObject(g);
       const s = bb.getSize(V(0, 0, 0));
       const k = size / Math.max(s.x, s.y * 1.25, s.z);
       const c = bb.getCenter(V(0, 0, 0));
+      g.position.set(-c.x * k, -bb.min.y * k, -c.z * k);
+      g.scale.setScalar(k);
+      const w = new THREE.Group();
+      w.add(g);
+      (w.userData as Record<string, unknown>).g = g;
+      return w;
+    }
+
+    /**
+     * Fit model divisi berdasarkan jari-jari jejak (footprint) terjauh di bidang XZ, bukan bounding box,
+     * sehingga model yang berputar tidak pernah keluar dari lingkaran R dan tak saling menimpa.
+     * Tinggi dibatasi hMax agar model jangkung tetap proporsional.
+     */
+    function fitFootprint(g: THREE.Group, R: number, hMax: number): THREE.Group {
+      g.updateMatrixWorld(true);
+      const bb = new THREE.Box3().setFromObject(g);
+      const c = bb.getCenter(V(0, 0, 0));
+      const v = V(0, 0, 0);
+      let r2 = 1e-6;
+      g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || (m as THREE.InstancedMesh).isInstancedMesh) return;
+        const pos = m.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+          r2 = Math.max(r2, (v.x - c.x) ** 2 + (v.z - c.z) ** 2);
+        }
+      });
+      const k = Math.min(R / Math.sqrt(r2), hMax / Math.max(1e-3, bb.max.y - bb.min.y));
       g.position.set(-c.x * k, -bb.min.y * k, -c.z * k);
       g.scale.setScalar(k);
       const w = new THREE.Group();
@@ -298,110 +342,9 @@ export default function IntroScene3D({
       g.add(d);
       return g;
     }
-    function bendungan(): THREE.Group {
-      const g = new THREE.Group();
-      const sh = new THREE.Shape();
-      sh.moveTo(-2, 0); sh.lineTo(12, 0); sh.lineTo(3, 16); sh.lineTo(-1, 16); sh.closePath();
-      const body = new THREE.Mesh(
-        track(new THREE.ExtrudeGeometry(sh, { depth: 44, bevelEnabled: false })), C.conc
-      );
-      body.position.z = -22;
-      g.add(body);
-      b(22, 12, 40, C.water, -13, 6, 0, g);
-      b(3, 1, 44, C.grey, 1, 16.5, 0, g);
-      for (let i = -2; i <= 2; i++) b(1.2, 3.5, 3, C.grey, 1, 18, i * 3, g);
-      for (let i = -1; i <= 1; i++) b(0.5, 3, 4.6, C.dgrey, -0.6, 16.6, i * 3, g);
-      b(3.2, 0.6, 18, C.grey, 1, 19.6, 0, g);
-      const ang = Math.atan2(-16, 9), n = V(16, 9, 0).normalize();
-      const ch = b(18.4, 0.5, 13, C.grey, 7.5 + n.x * 0.3, 8 + n.y * 0.3, 0, g);
-      ch.rotation.z = ang;
-      const st = b(18.4, 0.3, 9, C.water, 7.5 + n.x * 0.6, 8 + n.y * 0.6, 0, g);
-      st.rotation.z = ang;
-      b(10, 1, 14, C.grey, 15, 0.5, 0, g);
-      b(11, 6, 14, C.grey, 19, 3, -11, g);
-      b(12, 0.8, 15, C.dgrey, 19, 6.4, -11, g);
-      [[-14], [-9]].forEach(([z]) =>
-        cyl(V(4, 14, z + 0.5), V(14, 3.5, -10 + (z + 14) * 0.4), 0.9, C.dgrey, g, 8)
-      );
-      b(16, 1, 26, C.water, 31, 0.5, -4, g);
-      const rk = (x: number, y: number, z: number, s: number) => {
-        const o = new THREE.Mesh(track(new THREE.DodecahedronGeometry(s, 0)), C.rock);
-        o.position.set(x, y, z);
-        o.scale.y = 0.75;
-        g.add(o);
-      };
-      for (let i = 0; i < 7; i++) {
-        const s = 7 + ((i * 5) % 4);
-        rk(i * 3 - 8, s * 0.5, -34 - (i % 2) * 3, s);
-        rk(i * 3 - 8, s * 0.5, 34 + (i % 2) * 3, s);
-      }
-      rk(-3, 18, -31, 8); rk(-3, 18, 31, 8); rk(8, 9, -34, 9); rk(8, 9, 34, 9);
-      rk(20, 5, -28, 6); rk(20, 5, 28, 6); rk(-18, 5, -37, 8); rk(-18, 5, 37, 8);
-      return g;
-    }
-    function tol(): THREE.Group {
-      const g = new THREE.Group();
-      const Y = 7;
-      b(94, 0.8, 5.4, C.asph, 2, Y, 0, g);
-      for (let x = -44; x < 48; x += 4) b(1.6, 0.05, 0.25, C.white, x, Y + 0.43, 0, g);
-      [-1, 1].forEach((s) => b(94, 0.6, 0.4, C.orange, 2, Y + 0.7, s * 2.9, g));
-      for (let x = -40; x <= 46; x += 12) {
-        b(1.4, Y - 0.4, 1.4, C.dgrey, x, (Y - 0.4) / 2, 0, g);
-        b(3.2, 0.6, 1.8, C.amber, x, Y - 0.7, 0, g);
-      }
-      b(4.4, 0.3, 60, C.asph, 0, 0.2, 0, g);
-      for (let z = -28; z < 30; z += 4) b(0.25, 0.05, 1.6, C.white, 0, 0.4, z, g);
-      (
-        [
-          [1, 1],
-          [1, -1],
-          [-1, 1],
-          [-1, -1],
-        ] as const
-      ).forEach(([sx, sz]) => {
-        const P0 = V(sx * 12, Y, sz * 2.6),
-          P1 = V(sx * 25, 3.6, sz * 9),
-          P2 = V(sx * 2.6, 0.3, sz * 20);
-        const pts: THREE.Vector3[] = [];
-        for (let i = 0; i <= 14; i++) {
-          const t = i / 14, u = 1 - t;
-          pts.push(
-            V(
-              u * u * P0.x + 2 * u * t * P1.x + t * t * P2.x,
-              Y + (0.3 - Y) * t,
-              u * u * P0.z + 2 * u * t * P1.z + t * t * P2.z
-            )
-          );
-        }
-        for (let i = 0; i < 14; i++) segm(pts[i], pts[i + 1], 3.6, 0.7, C.asph, g);
-        pts.forEach((p, i) => {
-          if (i % 3 === 1 && p.y > 1.6) {
-            b(1.1, p.y - 0.5, 1.1, C.dgrey, p.x, (p.y - 0.5) / 2, p.z, g);
-            b(2.4, 0.5, 2.4, C.amber, p.x, p.y - 0.55, p.z, g);
-          }
-        });
-        for (let i = 0; i < 14; i++) {
-          const a = pts[i].clone(), c = pts[i + 1].clone();
-          const nx = c.z - a.z, nz = -(c.x - a.x), l = Math.hypot(nx, nz) || 1;
-          const ov = V((nx / l) * 1.9, 0.6, (nz / l) * 1.9);
-          segm(a.clone().add(ov), c.clone().add(ov), 0.3, 0.5, C.orange, g);
-        }
-      });
-      [-1, 1].forEach((s) => b(1.3, 24, 1.3, C.conc, 30, 12, s * 3.4, g));
-      b(1.3, 1.2, 8.2, C.conc, 30, 17, 0, g);
-      b(1.5, 1.2, 8.2, C.conc, 30, 23.2, 0, g);
-      [-1, 1].forEach((s) => {
-        for (let i = 0; i < 6; i++) {
-          const top = V(30, 23 - i * 1.6, s * 3.4);
-          [-1, 1].forEach((d) =>
-            cyl(top, V(30 + d * (5 + i * 2.6), Y + 0.4, s * 2.9), 0.1, C.amber, g, 4)
-          );
-        }
-      });
-      return g;
-    }
-
-    const BUILD = { gedung, bendungan, tol };
+    // Model divisi HD (material PBR, tekstur, instancing) ada di divisionModels.ts
+    const divModels = createDivisionModels(track, lowPower);
+    const BUILD = divModels.build;
 
     // ---- Grid lantai amber bergerak (persis prototipe) --------------------
     const grid = new THREE.GridHelper(260, 90, 0xf59e0b, 0x22304d);
@@ -457,12 +400,17 @@ export default function IntroScene3D({
       const bg = light ? 0xe9eef5 : 0x070d18;
       ren.setClearColor(bg, 0);
       if (scene.fog) (scene.fog as THREE.FogExp2).color.setHex(light ? 0xe9eef5 : 0x0a1220);
-      (scene.fog as THREE.FogExp2).density = light ? 0.0075 : 0.011;
+      fogBase = light ? 0.0075 : 0.011;
+      (scene.fog as THREE.FogExp2).density = fogBase;
       hemi.color.setHex(light ? 0xffffff : 0xaec6ff);
       hemi.groundColor.setHex(light ? 0xaab4c4 : 0x1a2233);
-      hemi.intensity = light ? 1.0 : 0.85;
+      // Layar potret: kamera jauh & model kecil, jadi cahaya dinaikkan agar tidak suram.
+      const boost = W() / H() < 1 ? 1.7 : 1;
+      baseHemi = (light ? 1.0 : 0.85) * boost;
+      baseSun = (light ? 1.05 : 0.9) * boost;
+      hemi.intensity = baseHemi;
       sun.color.setHex(light ? 0xfff1d6 : 0xffe2b0);
-      sun.intensity = light ? 1.05 : 0.9;
+      sun.intensity = baseSun;
       if (stars) stars.visible = !light;
       gridMats.forEach((m) => {
         (m as THREE.LineBasicMaterial).opacity = light ? 0.4 : 0.22;
@@ -476,10 +424,54 @@ export default function IntroScene3D({
     scene.add(hqW);
     const hqP = platform(15, 0xf59e0b);
 
-    // ---- Cinematic explode (gerak normal, ±4.9s) [Bagian A] ----
-    const EX = { antic: 0.6, apart: 1.6, hold: 0.6, fly: 1.2 };
-    const EX_FLY0 = EX.antic + EX.apart + EX.hold; // 2.8
-    const EX_TOTAL = 4.9;
+    // Penangkap bayangan di alas gedung (kepingan yang terbang ikut menjatuhkan bayangan).
+    const catcher = new THREE.Mesh(
+      track(new THREE.CircleGeometry(24, 48)),
+      track(new THREE.ShadowMaterial({ opacity: 0.32, transparent: true }))
+    );
+    catcher.rotation.x = -Math.PI / 2;
+    catcher.position.y = 0.04;
+    catcher.receiveShadow = true;
+    catcher.visible = false;
+    scene.add(catcher);
+
+    // Gedung HQ asli (GLB). Model prosedural di atas jadi cadangan sampai GLB siap.
+    let hqEnv: THREE.Texture | null = null;
+    let hqModel: HqModel | null = null;
+    const installHq = (m: HqModel) => {
+      const old = hqW.userData.g as THREE.Object3D;
+      hqW.remove(old);
+      hqW.add(m.root);
+      hqW.userData.g = m.shards;
+      hqW.userData.model = m;
+      hqModel = m;
+      if (hqEnv) m.applyEnv(hqEnv);
+    };
+    loadHqModel({ size: 16, lowPower })
+      .then((m) => {
+        // Jangan menukar model di tengah animasi pecah.
+        if (isDisposed || stateRef.current.phase === "explode") return;
+        installHq(m);
+      })
+      .catch((err) => console.warn("[Intro3D] GLB gedung gagal dimuat, pakai model prosedural:", err));
+    loadHqEnv()
+      .then((tex) => {
+        if (isDisposed) {
+          tex.dispose();
+          return;
+        }
+        hqEnv = track(tex);
+        hqModel?.applyEnv(tex);
+        divModels.applyEnv(tex);
+      })
+      .catch(() => {
+        /* tanpa HDR: refleksi kaca sederhana, tetap tampil */
+      });
+
+    // ---- Cinematic explode (gerak normal, ±3.6s) [Bagian A] ----
+    const EX = { antic: 0.5, apart: 1.2, hold: 0.35, fly: 1.0 };
+    const EX_FLY0 = EX.antic + EX.apart + EX.hold; // 2.05
+    const EX_TOTAL = EX_FLY0 + EX.fly + 0.5;
     const cl = (x: number) => Math.min(1, Math.max(0, x));
     const eio = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
     const eiC = (x: number) => x * x * x;
@@ -499,6 +491,8 @@ export default function IntroScene3D({
     let cine: CineShard[] = [];
     let edges: THREE.LineSegments[] = [];
     let explodeDone = false;
+    // Mode pecah halus (model GLB): kepingan bergeser pelan, tanpa percikan & gelombang kejut.
+    let gentle = false;
     let fxSpawned = false;
     let fxT0 = 0;
 
@@ -539,25 +533,24 @@ export default function IntroScene3D({
     debris.frustumCulled = false;
     scene.add(debris);
 
-    // ---- 3 divisi: model (scale=0) + platform + PointLight ----------------
-    // Skala visual seimbang per model di atas platform r=8.8 (gedung 1.0, bendungan 1.35, tol 1.20)
-    const MODEL_SCALES: Record<DivisionModelKey, number> = {
-      gedung: 1.0,
-      bendungan: 1.35,
-      tol: 1.2,
+    // ---- 3 divisi: model (scale=0) + platform ----------------
+    // Jari-jari jejak per model (platform r=8.8): ketiganya seragam, gedung sedikit lebih kecil karena jangkung.
+    const FOOTPRINT: Record<DivisionModelKey, number> = {
+      gedung: 7,
+      bendungan: 6.3,
+      tol: 6.3,
     };
     const divColors3 = [...divisionColors].slice(0, 3);
     const mods = MODEL_KEYS.map((key, i) => {
       const col = new THREE.Color(divColors3[i] ?? "#f59e0b").getHex();
-      const scaleMultiplier = MODEL_SCALES[key] ?? 1.0;
-      const w = fit(BUILD[key](), 14 * scaleMultiplier, col);
+      const w = fitFootprint(BUILD[key](), FOOTPRINT[key], 13);
       w.position.x = XS[i];
       w.scale.setScalar(0.0001); // hampir nol; visible=false saat scale < 0.02
       w.visible = false;
       (w.userData as Record<string, unknown>).i = i;
       (w.userData as Record<string, unknown>).s = 0; // smooth scale state
       scene.add(w);
-      const r = 8.8;
+      const r = 8;
       const p = platform(r, col);
       p.position.x = XS[i];
       p.visible = false;
@@ -579,10 +572,7 @@ export default function IntroScene3D({
       p.add(statusRing);
       p.userData.statusRing = statusRing;
 
-      const light = new THREE.PointLight(col, 0.6, 34);
-      light.position.set(XS[i], 12, 14);
-      scene.add(light);
-      return { w, p, light };
+      return { w, p };
     });
 
     // Putar awal model bendungan agar sisi hilir menghadap kamera (V4)
@@ -842,7 +832,13 @@ export default function IntroScene3D({
       if (ph !== lastPhase) {
         if (ph === "explode") {
           t0 = now;
+          hqModel?.setShattered(true);
           const g = hqW.userData.g as THREE.Group;
+          // Offset ledakan dirancang untuk skala model prosedural (~0.5); sesuaikan ke skala model aktif.
+          const offK = THREE.MathUtils.clamp(0.5 / Math.max(1e-3, g.getWorldScale(V(0, 0, 0)).x), 0.4, 1.6);
+          gentle = Boolean(g.userData.gentle);
+          const ws = Math.max(1e-3, g.getWorldScale(V(0, 0, 0)).x);
+          const rotK = gentle ? 0.1 : 1;
           console.debug(
             `[Intro3D] Animasi pecah (explode) dimulai. Jumlah kepingan HQ (children): ${g.children.length} (reducedMotion: ${isRed})`
           );
@@ -867,7 +863,12 @@ export default function IntroScene3D({
               if (dir.lengthSq() < 1e-3) dir.set(0, 1, 0);
               dir.normalize();
               const hN = (c.position.y - yMin) / span; // 0 bawah … 1 atas
-              const off = dir.multiplyScalar(12 + Math.random() * 10).add(V(0, (hN - 0.35) * 16, 0));
+              // Pecah halus: bergeser 2,6 s/d 4,2 satuan dunia; model prosedural lama memakai lontaran besar.
+              const off = gentle
+                ? dir.multiplyScalar((2.6 + Math.random() * 1.6) / ws).add(V(0, ((hN - 0.35) * 2.2) / ws, 0))
+                : dir.multiplyScalar((12 + Math.random() * 10) * offK).add(V(0, (hN - 0.35) * 16 * offK, 0));
+              // Kepingan alas/tanah tidak boleh tenggelam di bawah lantai: bergeser menyamping & sedikit naik.
+              if (c.userData.low) off.y = gentle ? (0.4 + Math.random() * 0.8) / ws : (1 + Math.random() * 3) * offK;
               const tl = g.worldToLocal(V(XS[idx % 3], 5, 0)); // tujuan = platform divisi
               return {
                 c,
@@ -877,12 +878,12 @@ export default function IntroScene3D({
                 off,
                 tl,
                 rot: V(
-                  (Math.random() - 0.5) * 0.9,
-                  (Math.random() - 0.5) * 1.6,
-                  (Math.random() - 0.5) * 0.9
+                  (Math.random() - 0.5) * 0.9 * rotK,
+                  (Math.random() - 0.5) * 1.6 * rotK,
+                  (Math.random() - 0.5) * 0.9 * rotK
                 ),
-                sd: (1 - hN) * 0.35, // atas lepas duluan
-                fd: Math.random() * 0.4,
+                sd: (1 - hN) * (gentle ? 0.25 : 0.35), // atas lepas duluan
+                fd: Math.random() * (gentle ? 0.25 : 0.4),
               };
             });
           } else {
@@ -909,6 +910,7 @@ export default function IntroScene3D({
           });
         } else if (ph === "hq") {
           hqW.position.set(0, 0, 0);
+          hqModel?.heat(0);
           edges.forEach((l) => ((l.material as THREE.LineBasicMaterial).opacity = 0.28));
           shock.visible = false;
           debris.visible = false;
@@ -927,6 +929,7 @@ export default function IntroScene3D({
               k.c.scale.copy(k.s);
             });
           }
+          hqModel?.setShattered(false);
           hqW.visible = true;
           hqP.visible = true;
           hqP.scale.setScalar(1);
@@ -952,11 +955,11 @@ export default function IntroScene3D({
       const f = Math.max(1, 1.75 / cam.aspect);
       let P: THREE.Vector3, L: THREE.Vector3;
       if (ph === "hq") {
-        P = V(0, 9 * f, 34 * f);
+        P = V(0, 9 * f * 1.2, 34 * f * 1.2);
         L = V(0, 4, 0);
       } else if (ph === "explode" && !isRed) {
         const fly = exT > EX_FLY0 - 0.2; // dekat saat terurai, mundur saat terbang
-        P = fly ? V(0, 11 * f, 40 * f) : V(0, 10 * f, 34 * f);
+        P = fly ? V(0, 11 * f, 40 * f) : V(0, 10 * f * 1.2, 34 * f * 1.2);
         L = fly ? V(0, 4, 0) : V(0, 10, 0);
       } else if (ph === "detail") {
         const X = XS[sel] ?? 0;
@@ -969,8 +972,12 @@ export default function IntroScene3D({
         P = V(X + 2, 8 * f, dist);
         L = V(X + shift, 5, 0);
       } else {
-        // split / explode (isRed)
-        P = V(0, 11 * f, 40 * f);
+        // split / explode (isRed): 3 platform (x ±19, r 8.8) harus muat di lebar layar.
+        // Jarak kamera dihitung dari lebar horizontal yang terlihat, bukan rasio kasar.
+        const tanHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+        const halfNeed = cam.aspect < 1 ? 24 : XS[2] + 8;
+        const fitSplit = Math.max(1, halfNeed / (tanHalf * cam.aspect) / Math.hypot(11, 40));
+        P = V(0, 11 * fitSplit, 40 * fitSplit);
         L = V(0, 4, 0);
       }
       camP.lerp(P, 0.045);
@@ -978,6 +985,31 @@ export default function IntroScene3D({
       par.lerp(V(mx.x * 2.2, -mx.y * 1.2, 0), 0.05);
       cam.position.copy(camP).add(par);
       cam.lookAt(lookTgt);
+      (scene.fog as THREE.FogExp2).density = fogBase * Math.min(1, (42 / cam.position.length()) ** 2);
+
+      // Rig siang gedung HQ: menyala di fase hq, memudar saat kepingan terbang ke divisi.
+      let hqTarget = 0;
+      if (ph === "hq") hqTarget = 1;
+      else if (ph === "explode")
+        hqTarget = isRed ? 1 - Math.min(1, (now - t0) / 400) : 1 - cl((exT - EX_FLY0) / 1.4);
+      hqMix += (hqTarget - hqMix) * Math.min(1, dt * 5);
+      let divTarget = 0;
+      if (ph === "split" || ph === "detail") divTarget = 1;
+      else if (ph === "explode")
+        divTarget = isRed ? Math.min(1, (now - t0) / 400) : cl((exT - (EX_FLY0 + 0.4)) / 1.4);
+      divMix += (divTarget - divMix) * Math.min(1, dt * 5);
+      const dayMix = Math.max(hqMix, divMix);
+      keyLight.intensity = 1.0 * hqMix;
+      fillLight.intensity = 0.25 * Math.max(hqMix, divMix);
+      divLight.intensity = 1.05 * divMix;
+      hemi.intensity = baseHemi * (1 - 0.4 * dayMix);
+      sun.intensity = baseSun * (1 - 0.7 * dayMix);
+      // Hanya lampu yang aktif yang merender peta bayangannya (hemat satu pass tiap frame).
+      keyLight.shadow.autoUpdate = hqMix > 0.02;
+      divLight.shadow.autoUpdate = divMix > 0.02;
+      divModels.animate(dt);
+      catcher.visible = !lowPower && hqMix > 0.02;
+      (catcher.material as THREE.ShadowMaterial).opacity = 0.32 * hqMix;
 
       const tt = now / 1000;
 
@@ -985,10 +1017,12 @@ export default function IntroScene3D({
       if (ph === "explode" && !isRed) {
         const t = exT;
         // 1) getar + garis tepi menyala
-        const amp = cl(t / EX.antic) * (1 - cl((t - EX.antic) / 0.15)) * 0.18;
+        const amp = cl(t / EX.antic) * (1 - cl((t - EX.antic) / 0.15)) * (gentle ? 0.05 : 0.18);
         hqW.position.set(Math.sin(t * 70) * amp, 0, Math.cos(t * 63) * amp);
         const eOp = 0.28 + 0.72 * cl(t / (EX.antic + 0.4));
         edges.forEach((l) => ((l.material as THREE.LineBasicMaterial).opacity = eOp));
+        // bara oranye memanas saat antisipasi, bertahan sampai kepingan terbang
+        hqModel?.heat(cl(t / EX.antic) * (1 - cl((t - EX_FLY0) / 1.0)) * (gentle ? 0.4 : 1));
 
         // 2-4) kepingan
         cine.forEach((k) => {
@@ -1002,7 +1036,7 @@ export default function IntroScene3D({
         });
 
         // shockwave + percikan (sekali, di awal tahap 2)
-        if (!fxSpawned && t >= EX.antic) {
+        if (!gentle && !fxSpawned && t >= EX.antic) {
           fxSpawned = true;
           fxT0 = t;
           for (let i = 0; i < DN; i++) {

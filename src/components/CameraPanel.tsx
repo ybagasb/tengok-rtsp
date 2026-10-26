@@ -257,7 +257,65 @@ const WEEK_KEYS = [
     { w: 'W4', ra: 'w4Ra', ri: 'w4Ri' },
 ] as const;
 
-function WeeklyProgressCard({ row }: { row: IProgressMinggu }) {
+// Baris bulan terbaru yang ada datanya (dipakai bila bulan berjalan belum diisi).
+function findLatestRow(rows: IProgressMinggu[]): IProgressMinggu | undefined {
+    let best: IProgressMinggu | undefined;
+    let bestKey = -1;
+    rows.forEach((r) => {
+        const m = monthIndexOf(r.bulan);
+        const yearInText = Number((r.bulan || '').match(/\b(20\d{2})\b/)?.[1]);
+        const y = Number(r.tahun) || yearInText;
+        if (m < 0 || !y) return;
+        const key = y * 12 + m;
+        if (key >= bestKey) { best = r; bestKey = key; }
+    });
+    return best;
+}
+
+// Posisi RA/RI kumulatif (s.d. sekarang / bulan terakhir) untuk label di samping legenda.
+interface WeeklySnapshot { ra?: number; ri?: number; caption: string }
+const pct = (n?: number) => (Number.isFinite(n as number) ? `${(n as number).toFixed(1)}%` : '—');
+const monShort = (i: number) => MONTH_LABELS[i].slice(0, 3);
+
+// Sumber utama: Kurva S. RA = rencana kumulatif s.d. bulan berjalan; RI = realisasi (PU) s.d. bulan laporan terakhir.
+// Tanpa `thruMonth` (tahun lampau) dipakai bulan terakhir yang berisi data.
+function kurvaSnapshot(series: ReturnType<typeof kurvaSSeries>, thruMonth?: number): WeeklySnapshot | undefined {
+    if (!series) return undefined;
+    const last = (arr: (number | undefined)[]) => {
+        for (let i = Math.min(thruMonth ?? 11, 11); i >= 0; i--) if (Number.isFinite(arr[i] as number)) return i;
+        return -1;
+    };
+    const rkap = last(series.rkap);
+    const raIdx = rkap >= 0 ? rkap : last(series.eksternal);
+    const ra = raIdx >= 0 ? (rkap >= 0 ? series.rkap : series.eksternal)[raIdx] : undefined;
+    const riIdx = last(series.ri);
+    const ri = riIdx >= 0 ? series.ri[riIdx] : undefined;
+    if (raIdx < 0 && riIdx < 0) return undefined;
+    const caption =
+        riIdx < 0 ? `RA s.d. ${monShort(raIdx)} · RI belum ada`
+        : raIdx < 0 ? `RI s.d. ${monShort(riIdx)}`
+        : raIdx === riIdx ? `s.d. ${monShort(riIdx)} ${series.tahun}`
+        : `RA s.d. ${monShort(raIdx)} · RI s.d. ${monShort(riIdx)}`;
+    return { ra, ri, caption };
+}
+
+// Cadangan bila Kurva S belum diisi: RA = rencana minggu berjalan, RI = realisasi minggu terakhir yang terisi.
+function weeklySnapshot(row: IProgressMinggu, now?: Date): WeeklySnapshot {
+    const cur = now ? Math.min(3, Math.floor((now.getDate() - 1) / 7)) : 3;
+    const ok = (n?: number) => Number.isFinite(n as number);
+    let raWeek = 0, riWeek = 0;
+    for (let i = cur; i >= 0 && !raWeek; i--) if (ok(row[WEEK_KEYS[i].ra])) raWeek = i + 1;
+    for (let i = cur; i >= 0 && !riWeek; i--) if (ok(row[WEEK_KEYS[i].ri]) && (row[WEEK_KEYS[i].ri] as number) > 0) riWeek = i + 1;
+    return {
+        ra: raWeek ? row[WEEK_KEYS[raWeek - 1].ra] : undefined,
+        ri: riWeek ? row[WEEK_KEYS[riWeek - 1].ri] : undefined,
+        caption: !riWeek ? `RA s.d. W${raWeek || 1} · RI belum ada`
+            : raWeek === riWeek ? `s.d. W${riWeek}`
+            : `RA s.d. W${raWeek} · RI s.d. W${riWeek}`,
+    };
+}
+
+function WeeklyProgressCard({ row, snap }: { row: IProgressMinggu; snap?: WeeklySnapshot }) {
     const reduce = useReducedMotion();
     const clamp = (n?: number) => Math.max(0, Math.min(100, Number.isFinite(n as number) ? (n as number) : 0));
     return (
@@ -267,9 +325,18 @@ function WeeklyProgressCard({ row }: { row: IProgressMinggu }) {
                     <div className="text-xs font-black text-slate-900 dark:text-white truncate">{row.bulan || '-'}</div>
                     {row.tahun ? <div className="text-[11px] text-slate-500 font-mono">Tahun {row.tahun}</div> : null}
                 </div>
-                <div className="flex items-center gap-2.5 text-[11px] font-bold shrink-0">
-                    <span className="flex items-center gap-1 text-sky-500"><span className="w-2 h-2 rounded-sm bg-sky-400" />RA</span>
-                    <span className="flex items-center gap-1 text-amber-500"><span className="w-2 h-2 rounded-sm bg-amber-400" />RI</span>
+                <div className="flex flex-col items-end gap-0.5 shrink-0" title={snap ? 'Posisi kumulatif: rencana (RA) s.d. bulan berjalan, realisasi (RI) s.d. bulan laporan terakhir' : undefined}>
+                    <div className="flex items-center gap-2.5 text-[11px] font-bold">
+                        <span className="flex items-center gap-1 text-sky-500">
+                            <span className="w-2 h-2 rounded-sm bg-sky-400" />RA
+                            {snap && <span className="text-[10px] font-mono font-semibold text-sky-500/80">{pct(snap.ra)}</span>}
+                        </span>
+                        <span className="flex items-center gap-1 text-amber-500">
+                            <span className="w-2 h-2 rounded-sm bg-amber-400" />RI
+                            {snap && <span className="text-[10px] font-mono font-semibold text-amber-500/80">{pct(snap.ri)}</span>}
+                        </span>
+                    </div>
+                    {snap && <span className="text-[10px] font-mono text-slate-500">{snap.caption}</span>}
                 </div>
             </div>
             <div className="grid grid-cols-4 gap-2">
@@ -1080,6 +1147,12 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             {location.progressMinggu && location.progressMinggu.length > 0 && (() => {
                                 const now = new Date();
                                 const row = findCurrentMonthRow(location.progressMinggu, now);
+                                const lastRow = row ? undefined : findLatestRow(location.progressMinggu);
+                                // Kurva S tahun berjalan dulu; bila kosong pakai tahun laporan terbaru, lalu cadangan data mingguan.
+                                const kSeries = kurvaSSeries(location, now.getFullYear()) ?? kurvaS;
+                                const kSnap = kurvaSnapshot(kSeries, kSeries?.tahun === now.getFullYear() ? now.getMonth() : undefined);
+                                const snapNow = kSnap ?? (row ? weeklySnapshot(row, now) : undefined);
+                                const lastSnap = kSnap ?? (lastRow ? weeklySnapshot(lastRow) : undefined);
                                 const nowLabel = `${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`;
                                 return (
                                     <div className="space-y-2.5">
@@ -1091,10 +1164,15 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <span className="text-[11px] text-slate-500 font-mono">{nowLabel}</span>
                                         </div>
                                         {row ? (
-                                            <WeeklyProgressCard row={row} />
+                                            <WeeklyProgressCard row={row} snap={snapNow} />
                                         ) : (
                                             <div className="p-3 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.05] dark:border-white/[0.05] text-center">
                                                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Belum ada data RA / RI untuk {nowLabel}</p>
+                                                {lastSnap && (
+                                                    <p className="text-[10px] font-mono text-slate-500 mt-1">
+                                                        Terakhir: <span className="text-sky-500">RA {pct(lastSnap.ra)}</span> · <span className="text-amber-500">RI {pct(lastSnap.ri)}</span> · {lastSnap.caption}
+                                                    </p>
+                                                )}
                                                 <p className="text-[11px] text-slate-500 mt-0.5">Riwayat bulan lain ada di Detail Proyek → Operasi.</p>
                                             </div>
                                         )}

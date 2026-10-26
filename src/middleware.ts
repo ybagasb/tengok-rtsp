@@ -26,6 +26,7 @@ export function middleware(request: NextRequest) {
         pathname.startsWith('/api/stats/track') ||  // Public analytics tracking
         (pathname === '/api/settings/notifications' && request.method === 'GET') || // Public read of notice config (shared view)
         pathname.startsWith('/static') ||
+        pathname.startsWith('/models/') ||      // Aset 3D statis intro (GLB/HDR); boleh di-cache browser
         pathname.startsWith('/shared') ||       // Shared CCTV links (public, token-verified in page)
         pathname === '/login' ||
         pathname === '/favicon.ico' ||

@@ -873,10 +873,10 @@ export default function CategoriesPage() {
                   <ShieldAlert className="w-8 h-8" aria-hidden="true" />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400 font-orbitron">
+                  <span className="text-sm sm:text-base font-black uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">
                     Scene 3D Belum Siap
                   </span>
-                  <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 font-rajdhani tracking-wider">
+                  <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 tracking-wider">
                     Scene 3D belum siap. Muat ulang atau masuk langsung ke peta.
                   </p>
                 </div>
@@ -886,7 +886,7 @@ export default function CategoriesPage() {
                       window.location.reload();
                     }
                   }}
-                  className="mt-1 flex items-center gap-2 px-6 py-2.5 min-h-10 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-orbitron font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] active:scale-95 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                  className="mt-1 flex items-center gap-2 px-6 py-2.5 min-h-10 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(245,158,11,0.5)] active:scale-95 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                 >
                   <RotateCcw className="w-4 h-4" aria-hidden="true" />
                   Muat ulang
@@ -894,7 +894,7 @@ export default function CategoriesPage() {
 
                 {/* 3 Tombol Akses Peta Langsung bila WebGL tidak tersedia */}
                 <div className="w-full pt-3 mt-1 border-t border-black/10 dark:border-white/10 flex flex-col gap-2">
-                  <p className="text-[11px] uppercase font-bold tracking-widest text-slate-500 dark:text-slate-400 font-orbitron">
+                  <p className="text-[11px] uppercase font-bold tracking-widest text-slate-500 dark:text-slate-400">
                     Masuk Langsung ke Peta Divisi:
                   </p>
                   <div className="grid grid-cols-3 gap-2 w-full">
@@ -904,7 +904,7 @@ export default function CategoriesPage() {
                         <a
                           key={div}
                           href={`/map?division=${encodeURIComponent(div)}`}
-                          className="flex items-center justify-center min-h-10 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/15 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white font-orbitron text-[11px] sm:text-xs font-bold uppercase tracking-wider text-center transition-all hover:border-amber-500/50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                          className="flex items-center justify-center min-h-10 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/15 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider text-center transition-all hover:border-amber-500/50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                           style={{ borderLeft: `3px solid ${t.accentHex}` }}
                         >
                           {t.short}
@@ -916,7 +916,7 @@ export default function CategoriesPage() {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
-                <span className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-amber-700 dark:text-amber-400 font-orbitron dark:drop-shadow-[0_0_14px_rgba(245,158,11,0.5)]">
+                <span className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-amber-700 dark:text-amber-400 dark:drop-shadow-[0_0_14px_rgba(245,158,11,0.5)]">
                   MEMUAT SCENE…
                 </span>
                 {/* Bar tipis beranimasi gaya HUD */}
@@ -974,7 +974,7 @@ export default function CategoriesPage() {
           {phase !== "hq" && (
             <button
               onClick={handleReplayIntro}
-              className="flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2 min-h-10 min-w-10 rounded-xl bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all cursor-pointer font-orbitron focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+              className="flex items-center justify-center gap-1.5 px-2 sm:px-3 py-2 min-h-10 min-w-10 rounded-xl bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
               title="Putar ulang intro gedung 3D (reset intro)"
               aria-label="Putar ulang intro gedung 3D"
             >
@@ -1177,7 +1177,7 @@ export default function CategoriesPage() {
                     Divisi
                   </span>
                 </h1>
-                <p className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 tracking-wider font-rajdhani font-medium dark:drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+                <p className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 tracking-wider font-medium dark:drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
                   <span className="sm:hidden">Pilih kartu untuk masuk</span>
                   <span className="hidden sm:inline">Klik model 3D atau kartu untuk masuk</span>
                 </p>
@@ -1316,7 +1316,7 @@ export default function CategoriesPage() {
                   {/* Tombol Back */}
                   <button
                     onClick={handleBackToSplit}
-                    className="flex items-center gap-2 px-3 py-1.5 min-h-10 mb-3 text-[11px] font-bold tracking-[0.18em] uppercase border border-black/20 dark:border-white/20 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-black/40 dark:hover:border-white/50 bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer font-orbitron focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                    className="flex items-center gap-2 px-3 py-1.5 min-h-10 mb-3 text-[11px] font-bold tracking-[0.18em] uppercase border border-black/20 dark:border-white/20 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-black/40 dark:hover:border-white/50 bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
                     KEMBALI
@@ -1326,7 +1326,7 @@ export default function CategoriesPage() {
                   <div className="mb-3">
                     <div className="flex items-center justify-between gap-2">
                       <small
-                        className="font-bold text-[11px] uppercase tracking-[0.22em] font-orbitron"
+                        className="font-bold text-[11px] uppercase tracking-[0.22em]"
                         style={{ color: accentText(currentTheme.accentHex) }}
                       >
                         {currentTheme.short}
@@ -1350,10 +1350,10 @@ export default function CategoriesPage() {
                         </span>
                       </div>
                     </div>
-                    <h2 className="mt-0.5 text-lg sm:text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white font-orbitron">
+                    <h2 className="mt-0.5 text-lg sm:text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white">
                       {currentTheme.title}
                     </h2>
-                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-rajdhani flex items-center gap-1.5 font-medium">
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-medium">
                       <span className="font-mono font-bold text-slate-900 dark:text-white">{totalProjects} proyek</span>
                       <span aria-hidden="true" className="text-slate-400 dark:text-slate-500">·</span>
                       <span>urut dari proyek terbanyak</span>
@@ -1370,7 +1370,7 @@ export default function CategoriesPage() {
                       handleLevelClick(currentDivKey);
                     }}
                     onFocus={() => setFocusRowIndex(0)}
-                    className={`w-full flex items-center justify-between px-4 py-3 min-h-11 mb-3.5 text-slate-950 dark:text-white dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.35)] font-orbitron font-black text-xs sm:text-sm tracking-wider uppercase transition-all shadow-lg hover:brightness-110 active:scale-[0.99] cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
+                    className={`w-full flex items-center justify-between px-4 py-3 min-h-11 mb-3.5 text-slate-950 dark:text-white dark:[text-shadow:0_1px_2px_rgba(0,0,0,0.35)] font-black text-xs sm:text-sm tracking-wider uppercase transition-all shadow-lg hover:brightness-110 active:scale-[0.99] cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
                       isDivisionsLoading ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                     } ${
                       focusRowIndex === 0 ? "ring-2 ring-white shadow-[0_0_20px_rgba(255,255,255,0.3)]" : ""
@@ -1400,7 +1400,7 @@ export default function CategoriesPage() {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Cari kategori... (tekan / untuk fokus)"
                         aria-label="Cari kategori"
-                        className="w-full pl-9 pr-10 py-2 min-h-10 text-xs bg-white/70 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:border-black/30 dark:focus:border-white/30 transition-all font-rajdhani font-medium focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                        className="w-full pl-9 pr-10 py-2 min-h-10 text-xs bg-white/70 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:border-black/30 dark:focus:border-white/30 transition-all font-medium focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                       />
                       {searchQuery && (
                         <button
@@ -1417,7 +1417,7 @@ export default function CategoriesPage() {
 
                   {/* Bar Header Kategori */}
                   <div className="flex items-center justify-between mb-2 pb-2 border-b border-black/10 dark:border-white/10">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 font-orbitron">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                       {isSearching ? "HASIL PENCARIAN" : "PILIH LEVEL / KATEGORI"}
                     </span>
                     <span className="text-[11px] font-bold tracking-wider text-slate-500 dark:text-slate-400 font-mono">
@@ -1447,7 +1447,7 @@ export default function CategoriesPage() {
                       ))}
                     </div>
                   ) : displayedItems.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 font-rajdhani">
+                    <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
                       Tidak ada kategori yang cocok dengan &ldquo;{searchQuery}&rdquo;.
                     </div>
                   ) : (
@@ -1482,7 +1482,7 @@ export default function CategoriesPage() {
                         >
                           {/* Nomor urut */}
                           <span
-                            className="font-bold text-xs font-orbitron shrink-0"
+                            className="font-bold text-xs shrink-0"
                             style={{ color: accentText(currentTheme.accentHex) }}
                           >
                             {String(idx + 1).padStart(2, "0")}
@@ -1490,7 +1490,7 @@ export default function CategoriesPage() {
 
                           {/* Nama & Jumlah Proyek + Chip CCTV */}
                           <div className="flex-1 min-w-0 pr-2">
-                            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-amber-700 dark:group-hover:text-yellow-300 transition-colors truncate font-rajdhani">
+                            <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-amber-700 dark:group-hover:text-yellow-300 transition-colors truncate">
                               {cat.name}
                             </p>
                             <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
@@ -1517,7 +1517,7 @@ export default function CategoriesPage() {
 
                           {/* Aksi Masuk */}
                           <span
-                            className="ml-auto flex items-center gap-1 font-bold text-[11px] tracking-[0.15em] shrink-0 font-orbitron"
+                            className="ml-auto flex items-center gap-1 font-bold text-[11px] tracking-[0.15em] shrink-0"
                             style={{ color: accentText(currentTheme.accentHex) }}
                           >
                             MASUK{" "}
@@ -1542,7 +1542,7 @@ export default function CategoriesPage() {
                   {!isSearching && remainingCount > 0 && (
                     <button
                       onClick={() => setShowAllCategories((prev) => !prev)}
-                      className="w-full py-2.5 px-3 mt-1 min-h-10 text-center text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 rounded-lg transition-colors flex items-center justify-center gap-1.5 font-orbitron cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                      className="w-full py-2.5 px-3 mt-1 min-h-10 text-center text-[11px] font-bold tracking-wider text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white/70 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     >
                       {showAllCategories ? (
                         <>
@@ -1560,7 +1560,7 @@ export default function CategoriesPage() {
 
                 {/* ── Area Bawah / Footer Note ──────────────────────────────── */}
                 <div className="shrink-0 pt-3 border-t border-black/10 dark:border-white/10 mt-3">
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal font-rajdhani">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
                     Daftar level bersumber dari kategori proyek Tengok. Klik level atau tekan Enter untuk membuka peta &amp; CCTV proyek.
                   </p>
                 </div>
@@ -1573,7 +1573,7 @@ export default function CategoriesPage() {
       {(phase === "hq" || phase === "explode") && (
         <button
           onClick={handleSkipIntro}
-          className="absolute bottom-6 right-6 z-30 px-3.5 py-2 min-h-10 rounded-xl bg-white/80 hover:bg-white dark:bg-white/10 dark:hover:bg-white/20 border border-black/10 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[11px] font-orbitron font-bold uppercase tracking-wider backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+          className="absolute bottom-6 right-6 z-30 px-3.5 py-2 min-h-10 rounded-xl bg-white/80 hover:bg-white dark:bg-white/10 dark:hover:bg-white/20 border border-black/10 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white text-[11px] font-bold uppercase tracking-wider backdrop-blur-md transition-all cursor-pointer shadow-lg active:scale-95 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
           title="Lewati intro gedung ke pilihan divisi (Esc/Enter)"
         >
           <span>LEWATI</span>

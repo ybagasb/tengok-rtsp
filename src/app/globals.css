@@ -3,8 +3,6 @@
 /* Font dimuat lewat next/font (layout.tsx) → variabel CSS di <html>. */
 @theme inline {
   --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
-  --font-orbitron: var(--font-orbitron), ui-sans-serif, sans-serif;
-  --font-rajdhani: var(--font-rajdhani), ui-sans-serif, sans-serif;
 }
 
 /* Tailwind v4: aktifkan dark mode berbasis class <html class="dark">.
