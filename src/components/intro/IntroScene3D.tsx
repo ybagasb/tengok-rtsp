@@ -508,26 +508,72 @@ export default function IntroScene3D({
       hqModel = m;
       if (hqEnv) m.applyEnv(hqEnv);
     };
-    loadHqModel({ size: 16, lowPower })
-      .then((m) => {
-        // Jangan menukar model di tengah animasi pecah.
-        if (isDisposed || stateRef.current.phase === "explode") return;
-        installHq(m);
-      })
-      .catch((err) => console.warn("[Intro3D] GLB gedung gagal dimuat, pakai model prosedural:", err));
-    loadHqEnv()
+    // Model prosedural hanya cadangan. Selama GLB belum siap, sembunyikan supaya tidak
+    // tampil gedung lama yang lalu "melompat" ke model asli. onReady (overlay loading)
+    // menunggu sampai GLB siap, gagal, atau lewat batas waktu.
+    let hqSettled = stateRef.current.phase !== "hq";
+    const settleHq = () => {
+      if (hqSettled) return;
+      hqSettled = true;
+      if (stateRef.current.phase === "hq") hqW.visible = true;
+    };
+    if (!hqSettled) hqW.visible = false;
+    const hqTimer = window.setTimeout(() => {
+      if (!hqSettled) console.warn("[Intro3D] GLB gedung belum siap setelah 7 dtk, pakai model prosedural.");
+      settleHq();
+    }, 7000);
+
+    // Render sekali ke target 1x1 agar shader, tekstur, dan geometri 300+ kepingan sudah
+    // di-upload ke GPU sebelum pengguna menekan Mulai. Tanpa ini, frame pertama fase explode macet.
+    const warmRT = track(new THREE.WebGLRenderTarget(1, 1));
+    const prewarmHq = (m: HqModel) => {
+      const prevHq = hqW.visible;
+      const prevShards = m.shards.visible;
+      hqW.visible = true;
+      m.shards.visible = true;
+      m.shards.traverse((o) => (o.frustumCulled = false));
+      try {
+        ren.setRenderTarget(warmRT);
+        ren.render(scene, cam);
+      } catch (err) {
+        console.warn("[Intro3D] Prewarm GLB gagal:", err);
+      } finally {
+        ren.setRenderTarget(null);
+        m.shards.traverse((o) => (o.frustumCulled = true));
+        m.shards.visible = prevShards;
+        hqW.visible = prevHq;
+      }
+    };
+
+    const envP = loadHqEnv()
       .then((tex) => {
         if (isDisposed) {
           tex.dispose();
-          return;
+          return null;
         }
         hqEnv = track(tex);
-        hqModel?.applyEnv(tex);
         divModels.applyEnv(tex);
+        return tex;
       })
-      .catch(() => {
-        /* tanpa HDR: refleksi kaca sederhana, tetap tampil */
-      });
+      .catch(() => null /* tanpa HDR: refleksi kaca sederhana, tetap tampil */);
+    const modelP = loadHqModel({ size: 16, lowPower }).catch((err) => {
+      console.warn("[Intro3D] GLB gedung gagal dimuat, pakai model prosedural:", err);
+      return null;
+    });
+    Promise.all([modelP, envP]).then(([m]) => {
+      try {
+        if (!m) return;
+        // Jangan menukar model di tengah animasi pecah, atau bila scene sudah dilepas.
+        if (isDisposed || stateRef.current.phase === "explode") {
+          m.dispose();
+          return;
+        }
+        installHq(m); // sekaligus memasang HDR bila sudah ada
+        prewarmHq(m);
+      } finally {
+        settleHq();
+      }
+    });
 
     // ---- Cinematic explode (gerak normal, ±3.6s) [Bagian A] ----
     const EX = { antic: 0.5, apart: 1.2, hold: 0.35, fly: 1.0 };
@@ -714,7 +760,7 @@ export default function IntroScene3D({
       const { phase: ph } = stateRef.current;
       if (phone && ph === "split") return; // sentuh: tanpa hover, gestur di pointerup
       if (ph === "hq") {
-        ren.domElement.style.cursor = pickFrom([hqW]) ? "pointer" : "default";
+        ren.domElement.style.cursor = hqSettled && pickFrom([hqW]) ? "pointer" : "default";
       } else if (ph === "split") {
         const hit = pickFrom(mods.map((m) => m.w));
         const i = idxOf(hit);
@@ -732,7 +778,7 @@ export default function IntroScene3D({
         gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
         return;
       }
-      if (ph === "hq" && pickFrom([hqW])) {
+      if (ph === "hq" && hqSettled && pickFrom([hqW])) {
         cbRef.current.onBuildingClick();
       } else if (ph === "split") {
         const i = idxOf(pickFrom(mods.map((m) => m.w)));
@@ -1343,7 +1389,7 @@ export default function IntroScene3D({
       renderCount++;
 
       // 2c. Panggil onReady SEKALI setelah frame pertama selesai dirender (frame ke-2 setelah build)
-      if (!hasReportedReady && renderCount >= 2) {
+      if (!hasReportedReady && renderCount >= 2 && hqSettled) {
         hasReportedReady = true;
         cbRef.current.onReady?.();
       }
@@ -1354,6 +1400,7 @@ export default function IntroScene3D({
     return () => {
       applyThemeRef.current = null;
       isDisposed = true;
+      window.clearTimeout(hqTimer);
       stopLoop();
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("resize", onResize);

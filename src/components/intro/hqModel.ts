@@ -43,6 +43,8 @@ export interface HqModel {
   heat: (v: number) => void;
   /** Pasang environment map (refleksi kaca) khusus pada material gedung */
   applyEnv: (tex: THREE.Texture) => void;
+  /** Lepas geometri, material, dan tekstur (dipakai bila scene sudah di-unmount sebelum model siap) */
+  dispose: () => void;
 }
 
 function readComp(a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number, c: number) {
@@ -137,6 +139,9 @@ export async function loadHqModel(opts: { size: number; lowPower: boolean }): Pr
     copy.name = m.name;
     copy.castShadow = true;
     copy.receiveShadow = true;
+    // Raycast ke ~25 ribu segitiga di tiap pointermove membuat hover terasa berat;
+    // klik/hover cukup lewat kotak pembatas (lihat `pickProxy` di bawah).
+    copy.raycast = () => {};
     whole.add(copy);
     flat.push({ mesh: copy, role: roleOf(m.name) });
     m.geometry.dispose();
@@ -179,6 +184,17 @@ export async function loadHqModel(opts: { size: number; lowPower: boolean }): Pr
   const sz = bb.getSize(new THREE.Vector3());
   const k = opts.size / Math.max(sz.x, sz.y * 1.25, sz.z);
   const ctr = bb.getCenter(new THREE.Vector3());
+
+  // Proxy klik: kotak tak terlihat seukuran model. Raycaster tidak memeriksa `visible`,
+  // jadi cukup disembunyikan lewat material.
+  const pickProxy = new THREE.Mesh(
+    new THREE.BoxGeometry(sz.x, sz.y, sz.z),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  pickProxy.position.copy(ctr);
+  pickProxy.name = "pick_proxy";
+  whole.add(pickProxy);
+
   holder.position.set(-ctr.x * k, -bb.min.y * k, -ctr.z * k);
   holder.scale.setScalar(k);
 
@@ -213,6 +229,18 @@ export async function loadHqModel(opts: { size: number; lowPower: boolean }): Pr
         s.envMap = tex;
         s.envMapIntensity = info.glass ? 0.88 : 0.45;
         s.needsUpdate = true;
+      });
+    },
+    dispose() {
+      const texKeys = ["map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap", "alphaMap"] as const;
+      holder.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+      });
+      mats.forEach((_, m) => {
+        const s = m as unknown as Record<string, THREE.Texture | null | undefined>;
+        texKeys.forEach((k) => s[k]?.dispose());
+        m.dispose();
       });
     },
   };
