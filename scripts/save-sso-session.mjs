@@ -20,6 +20,8 @@ const STATE_FILE = path.resolve(process.cwd(), '.auth', 'sso-state.json');
 const TIMEOUT_MS = 5 * 60 * 1000;
 
 async function launch() {
+    // Linux tanpa Edge/Chrome: CHROME_PATH=/snap/bin/chromium npm run shots:login
+    if (process.env.CHROME_PATH) return chromium.launch({ executablePath: process.env.CHROME_PATH, headless: false });
     for (const channel of ['msedge', 'chrome']) {
         try {
             return await chromium.launch({ channel, headless: false });
