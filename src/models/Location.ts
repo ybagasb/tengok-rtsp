@@ -165,12 +165,12 @@ export interface ILocationData {
     endDate?: Date | string;
     contractNumber?: string;
     contractValue?: number;
-    contractFileKey?: string;
 
     // ── Progress fisik ───────────────────────────────────────────────────────
     progressPercent?: number;    // Realisasi fisik (0..100)
     progressRencana?: number;    // Rencana fisik (0..100)
     progressDeviasi?: number;    // Deviasi = realisasi - rencana (bisa negatif)
+    progressPeriode?: string;    // Progres fisik s.d. bulan ini, format 'YYYY-MM'
 
     // ── Progress keuangan per DIPA ───────────────────────────────────────────
     progressKeuangan?: IProgressKeuangan[];
@@ -203,6 +203,9 @@ export interface ILocationData {
     rencanaKurvaS?: RencanaKurvaS[];
     cashInAwal?: number;         // Total cash in SEBELUM laporan bulanan pertama (IDR)
     cashOutAwal?: number;        // Total cash out SEBELUM laporan bulanan pertama (IDR)
+
+    // Waktu & pelaku pembaruan terakhir per dimensi data (lihat lib/projectSections).
+    sectionUpdates?: Record<string, { at: Date | string; by?: string }>;
 
     milestones?: IMilestone[];
     gallery?: IGalleryItem[];
@@ -428,12 +431,12 @@ const LocationSchema: Schema = new Schema({
     endDate: { type: Date },
     contractNumber: { type: String },
     contractValue: { type: Number },
-    contractFileKey: { type: String },
 
     // Progress fisik
     progressPercent: { type: Number, min: 0, max: 100, default: 0 },
     progressRencana: { type: Number, min: 0, max: 100, default: 0 },
     progressDeviasi: { type: Number, default: 0 },
+    progressPeriode: { type: String, match: /^20\d{2}-(0[1-9]|1[0-2])$/ },
 
     // Progress keuangan
     progressKeuangan: { type: [ProgressKeuanganSchema], default: [] },
@@ -465,6 +468,8 @@ const LocationSchema: Schema = new Schema({
     rencanaKurvaS: { type: [RencanaKurvaSSchema], default: [] },
     cashInAwal: { type: Number, min: 0 },
     cashOutAwal: { type: Number, min: 0 },
+
+    sectionUpdates: { type: Schema.Types.Mixed },
 
     milestones: { type: [MilestoneSchema], default: [] },
     gallery: { type: [GalleryItemSchema], default: [] },

@@ -1186,7 +1186,7 @@ export default function MapComponent({
                                 onBlur={() => setSearchFocused(false)}
                                 onKeyDown={handleKeyDown}
                                 aria-label="Cari lokasi proyek"
-                                placeholder={`Cari ${category || (division ? `proyek ${division}` : 'lokasi')}...`}
+                                placeholder={`Cari ${effectiveCategory || (effectiveDivision ? `proyek ${effectiveDivision}` : 'semua proyek')}...`}
                                 className="w-full min-h-11 bg-white/85 dark:bg-slate-900/80 backdrop-blur-2xl text-slate-900 dark:text-white placeholder:text-slate-400 text-base sm:text-sm py-3 sm:py-4 pl-9 sm:pl-11 pr-10 sm:pr-12 rounded-2xl border border-black/10 dark:border-white/10 focus:border-[rgba(var(--div-accent-rgb),0.5)] focus:ring-4 focus:ring-[rgba(var(--div-accent-rgb),0.1)] transition-all outline-none shadow-2xl"
                             />
                             {searchQuery && (

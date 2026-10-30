@@ -1,13 +1,25 @@
 "use client";
 
-import { Fragment, useId, useMemo, useState } from 'react';
+import { Fragment, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { Loader2, Pencil, Check, X, Plus, Trash2, Copy, ChevronDown } from 'lucide-react';
+import { Loader2, Pencil, Check, X, Plus, Trash2, Copy, ChevronDown, Clock } from 'lucide-react';
+import { formatStampTime, type SectionStamp } from '@/lib/projectSections';
 import {
     BULAN_SINGKAT, computeEvm, derivedFromLaporan, hppPersen, huRencanaPeriode, periodeLabel, periodeOf, periodeRange, prevPeriode, sortLaporan,
     type LaporanBulanan, type RencanaKurvaS,
 } from '@/lib/projectReport';
+
+// Desktop (lg ke atas): tiap bagian setinggi layar dan data dibagi per langkah supaya tanpa scroll.
+const LG_QUERY = '(min-width: 1024px)';
+function subscribeLg(cb: () => void) {
+    const m = window.matchMedia(LG_QUERY);
+    m.addEventListener('change', cb);
+    return () => m.removeEventListener('change', cb);
+}
+function useIsDesktop() {
+    return useSyncExternalStore(subscribeLg, () => window.matchMedia(LG_QUERY).matches, () => false);
+}
 
 // ── Satuan input ──────────────────────────────────────────────────────────────
 // PIC mengetik dalam satuan pilihan (Rp / Juta / Miliar); disimpan sebagai IDR penuh.
@@ -290,7 +302,7 @@ function NumField({ spec, value, onChange, unit, readOnly, warning }: { spec: Fi
                 <p className="mt-1 text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtRp(n * UNITS[unit])}</p>
             )}
             {warning && <p role="status" className="mt-1 text-[11px] font-semibold text-orange-700 dark:text-orange-400">⚠ {warning}</p>}
-            {spec.hint && <p className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-400">{spec.hint}</p>}
+            {spec.hint && <p className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-400 lg:hidden">{spec.hint}</p>}
         </div>
     );
 }
@@ -315,10 +327,10 @@ function UnitPicker({ unit, onChange }: { unit: UnitKey; onChange: (u: UnitKey) 
 function KpiCard({ label, value, hint, tone }: { label: string; value: string; hint: string; tone: 'good' | 'bad' | 'none' }) {
     const color = tone === 'good' ? 'text-emerald-700 dark:text-emerald-400' : tone === 'bad' ? 'text-rose-700 dark:text-rose-400' : 'text-slate-400';
     return (
-        <div className={CARD_CLS}>
+        <div className={`${CARD_CLS} lg:!p-3 min-w-0`}>
             <div className={LABEL_CLS}>{label}</div>
-            <div className={`text-2xl font-black mt-1 ${color}`}>{value}</div>
-            <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">{hint}</div>
+            <div className={`text-2xl lg:text-xl font-black mt-1 lg:mt-0.5 truncate ${color}`}>{value}</div>
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 truncate lg:hidden">{hint}</div>
         </div>
     );
 }
@@ -346,33 +358,65 @@ interface Props {
     isAdmin: boolean;
     onSaved: () => void;
     onGoContract: () => void;
+    /** Pembaruan terakhir data laporan (laporan/rencana/saldo awal); null = belum tercatat. */
+    lastUpdated?: SectionStamp | null;
     errorMessage: (err: unknown) => string;
 }
 type Section = 'bulanan' | 'rencana' | 'saldo';
 
 export default function LaporanBulananTab(props: Props) {
     const [section, setSection] = useState<Section>('bulanan');
+    const desktop = useIsDesktop();
+    const stampText = (() => {
+        if (props.lastUpdated === undefined) return undefined;
+        const t = props.lastUpdated ? formatStampTime(props.lastUpdated.at) : undefined;
+        return t ? `Diperbarui ${t}${props.lastUpdated?.by ? ` · ${props.lastUpdated.by}` : ''}` : 'Belum ada catatan pembaruan';
+    })();
+    const tabs = (
+        <div role="tablist" aria-label="Jenis data" className="inline-flex flex-wrap p-1 rounded-xl bg-black/[0.04] dark:bg-white/5 gap-1 lg:shrink-0">
+            {([['bulanan', 'Laporan Bulanan'], ['rencana', 'Rencana Tahunan'], ['saldo', 'Saldo Awal Kas']] as const).map(([id, label]) => (
+                <button
+                    key={id}
+                    role="tab"
+                    aria-selected={section === id}
+                    onClick={() => setSection(id)}
+                    className={`px-4 py-2 lg:py-1.5 rounded-lg text-xs font-bold transition-colors ${FOCUS_CLS} ${section === id ? 'div-accent-solid text-slate-950' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
+                >{label}</button>
+            ))}
+        </div>
+    );
+    const stamp = stampText && (
+        <p className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1 lg:shrink-0">
+            <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />{stampText}
+        </p>
+    );
+    const body = section === 'bulanan' ? <BulananSection {...props} /> : section === 'rencana' ? <RencanaSection {...props} /> : <SaldoAwalSection {...props} />;
+
+    if (desktop) {
+        // Satu baris atas (bagian + status setup + waktu pembaruan) agar sisa tinggi untuk data.
+        return (
+            <div className="flex flex-col gap-3 h-[calc(100dvh-var(--ph-h,5.5rem)-1.5rem)]">
+                <div className="shrink-0 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    {tabs}
+                    <SetupPills {...props} onGoSection={setSection} />
+                    <div className="ml-auto">{stamp}</div>
+                </div>
+                <div className="flex-1 min-h-0">{body}</div>
+            </div>
+        );
+    }
     return (
         <div className="space-y-5">
             <SetupCard {...props} onGoSection={setSection} />
-            <div role="tablist" aria-label="Jenis data" className="inline-flex flex-wrap p-1 rounded-xl bg-black/[0.04] dark:bg-white/5 gap-1">
-                {([['bulanan', 'Laporan Bulanan'], ['rencana', 'Rencana Tahunan'], ['saldo', 'Saldo Awal Kas']] as const).map(([id, label]) => (
-                    <button
-                        key={id}
-                        role="tab"
-                        aria-selected={section === id}
-                        onClick={() => setSection(id)}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${FOCUS_CLS} ${section === id ? 'div-accent-solid text-slate-950' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
-                    >{label}</button>
-                ))}
-            </div>
-            {section === 'bulanan' ? <BulananSection {...props} /> : section === 'rencana' ? <RencanaSection {...props} /> : <SaldoAwalSection {...props} />}
+            {tabs}
+            {stamp}
+            <div>{body}</div>
         </div>
     );
 }
 
 // ── Setup awal (sekali) ───────────────────────────────────────────────────────
-function SetupCard({ rencana, saldoAwal, contractValue, isAdmin, onGoContract, onGoSection }: Props & { onGoSection: (s: Section) => void }) {
+function setupItems({ rencana, saldoAwal, contractValue, isAdmin, onGoContract, onGoSection }: Props & { onGoSection: (s: Section) => void }) {
     const thisYear = new Date().getFullYear();
     const items = [
         {
@@ -383,7 +427,7 @@ function SetupCard({ rencana, saldoAwal, contractValue, isAdmin, onGoContract, o
         {
             label: `Rencana tahunan ${thisYear}`, required: true,
             done: (rencana.find(r => r.tahun === thisYear)?.raRkap.length ?? 0) === 12,
-            hint: 'Kurva S RA RKAP + rencana hasil usaha, diisi sekali setahun.',
+            hint: 'Kurva S Rencana Internal + rencana hasil usaha, diisi sekali setahun.',
             action: isAdmin ? { label: 'Isi rencana', run: () => onGoSection('rencana') } : undefined,
         },
         {
@@ -393,6 +437,26 @@ function SetupCard({ rencana, saldoAwal, contractValue, isAdmin, onGoContract, o
             action: isAdmin ? { label: 'Isi saldo awal', run: () => onGoSection('saldo') } : undefined,
         },
     ];
+    return items;
+}
+
+/** Ringkas satu baris untuk desktop: status setup + tombol isi. */
+function SetupPills(props: Props & { onGoSection: (s: Section) => void }) {
+    const items = setupItems(props);
+    return (
+        <div className="flex flex-wrap items-center gap-1.5" aria-label="Setup awal">
+            {items.map(i => (
+                <span key={i.label} title={i.hint} className={`inline-flex items-center gap-1.5 pl-2.5 ${!i.done && i.action ? 'pr-1' : 'pr-2.5'} py-1 rounded-lg border text-[11px] font-bold ${i.done ? 'text-emerald-700 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-slate-700 dark:text-slate-200 border-black/10 dark:border-white/10'}`}>
+                    {i.done ? '✓' : '○'} {i.label}{!i.required && ' (opsional)'}
+                    {!i.done && i.action && <button type="button" onClick={i.action.run} className={`px-2 py-0.5 rounded-md div-accent-solid text-slate-950 ${FOCUS_CLS}`}>{i.action.label}</button>}
+                </span>
+            ))}
+        </div>
+    );
+}
+
+function SetupCard(props: Props & { onGoSection: (s: Section) => void }) {
+    const items = setupItems(props);
     const requiredDone = items.filter(i => i.required).every(i => i.done);
     const [open, setOpen] = useState(!requiredDone);
     const uid = useId();
@@ -411,7 +475,7 @@ function SetupCard({ rencana, saldoAwal, contractValue, isAdmin, onGoContract, o
                 <ChevronDown className={`w-4 h-4 text-slate-600 dark:text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
             {open && (
-                <ul className="mt-3 space-y-2">
+                <ul className="mt-3 space-y-2 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-4">
                     {items.map(i => (
                         <li key={i.label} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                             <div className="min-w-0">
@@ -442,6 +506,8 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
     const [form, setForm] = useState<FormState>({});
     const [sdAuto, setSdAuto] = useState(true);
     const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
+    const [activeGroup, setActiveGroup] = useState<string>(GROUPS[0].id);
+    const desktop = useIsDesktop();
     const monthUid = useId();
 
     const entry = sorted.find(l => l.periode === periode);
@@ -493,6 +559,8 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
         const m: Record<string, boolean> = {};
         for (const g of GROUPS) m[g.id] = g.fields.some(fld => (f[fld.path] ?? '').trim() === '');
         setOpenMap(m);
+        const firstIncomplete = GROUPS.find(g => g.fields.some(fld => (f[fld.path] ?? '').trim() === ''));
+        setActiveGroup((firstIncomplete ?? GROUPS[0]).id);
         setEditing(true);
     };
     const finishEdit = () => { setEditing(false); setOpenMap({}); };
@@ -571,10 +639,13 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
 
     const huPlan = huRencanaPeriode(rencana, periode);
 
+    const activeIdx = Math.max(0, GROUPS.findIndex(g => g.id === activeGroup));
+    const shownGroups = desktop ? [GROUPS[activeIdx]] : GROUPS;
+
     return (
-        <div className="space-y-5">
+        <div className="space-y-5 lg:space-y-0 lg:flex lg:flex-col lg:gap-3 lg:h-full lg:min-h-0">
             {/* Pemilih periode + aksi */}
-            <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="flex flex-wrap items-end justify-between gap-3 lg:shrink-0">
                 <div className="flex flex-wrap items-end gap-3">
                     <div>
                         <label htmlFor={`${monthUid}-sel`} className={LABEL_CLS}>Periode laporan</label>
@@ -590,6 +661,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                             ))}
                         </select>
                     </div>
+                    {editing && <div className="hidden lg:block"><UnitPicker unit={unit} onChange={changeUnit} /></div>}
                     {isAdmin && !editing && (
                         <div>
                             <label htmlFor={`${monthUid}-new`} className={LABEL_CLS}>Periode lain</label>
@@ -629,7 +701,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
 
             {/* Bulan yang belum dilaporkan */}
             {!editing && missing.length > 0 && (
-                <div role="status" className="flex flex-wrap items-center gap-2 px-4 py-3 rounded-xl bg-orange-500/10 border border-orange-500/25 text-xs text-slate-700 dark:text-slate-200">
+                <div role="status" className="lg:shrink-0 flex flex-wrap lg:flex-nowrap lg:overflow-hidden items-center gap-2 px-4 py-3 lg:py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/25 text-xs text-slate-700 dark:text-slate-200">
                     <span className="font-bold">Belum dilaporkan:</span>
                     {missing.map(p => (
                         <button
@@ -643,10 +715,10 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                 </div>
             )}
 
-            {editing && <UnitPicker unit={unit} onChange={changeUnit} />}
+            {editing && <div className="lg:hidden"><UnitPicker unit={unit} onChange={changeUnit} /></div>}
 
             {!entry && !editing ? (
-                <div className="py-14 px-4 text-center text-slate-600 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
+                <div className="py-14 lg:py-8 px-4 text-center text-slate-600 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
                     {sorted.length === 0
                         ? 'Belum ada laporan bulanan untuk proyek ini.'
                         : `Laporan ${periodeLabel(periode)} belum diisi.`}
@@ -654,17 +726,47 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                 </div>
             ) : (
                 <>
-                    <EvmSummary evm={evm} />
-                    {GROUPS.map(g => {
+                    <div className="lg:shrink-0"><EvmSummary evm={evm} /></div>
+                    {desktop && (
+                        <div className="shrink-0 flex items-center gap-2" role="tablist" aria-label="Bagian laporan">
+                            <div className="flex-1 min-w-0 flex flex-wrap gap-1.5">
+                                {GROUPS.map(g => {
+                                    const n = filledIn(g);
+                                    const done = n === g.fields.length;
+                                    const on = g.id === GROUPS[activeIdx].id;
+                                    return (
+                                        <button
+                                            key={g.id}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={on}
+                                            onClick={() => setActiveGroup(g.id)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 border transition-colors ${FOCUS_CLS} ${on ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border-[rgba(var(--div-accent-rgb),0.3)]' : 'text-slate-600 dark:text-slate-300 border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10'}`}
+                                        >
+                                            {g.title.replace('Hasil Usaha – ', 'HU · ').replace(' (EVM)', '')}
+                                            <span className={`text-[11px] font-mono ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>{done ? '✓' : `${n}/${g.fields.length}`}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <div className="shrink-0 flex gap-1.5">
+                                <button type="button" disabled={activeIdx <= 0} onClick={() => setActiveGroup(GROUPS[activeIdx - 1].id)} className={`${BTN_GHOST} disabled:opacity-40`}>‹ Sebelumnya</button>
+                                <button type="button" disabled={activeIdx >= GROUPS.length - 1} onClick={() => setActiveGroup(GROUPS[activeIdx + 1].id)} className={`${BTN_GHOST} disabled:opacity-40`}>Berikutnya ›</button>
+                            </div>
+                        </div>
+                    )}
+                    <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+                    <div className="space-y-5">
+                    {shownGroups.map(g => {
                         const filled = filledIn(g);
                         const complete = filled === g.fields.length;
-                        const open = openMap[g.id] ?? true;
+                        const open = desktop ? true : (openMap[g.id] ?? true);
                         const bodyId = `g-body-${g.id}`;
                         return (
-                            <section key={g.id} aria-labelledby={`g-${g.id}`} className="space-y-3">
+                            <section key={g.id} aria-labelledby={`g-${g.id}`} className="space-y-3 lg:mb-6 lg:break-inside-avoid">
                                 <button
                                     type="button"
-                                    onClick={() => setOpenMap(m => ({ ...m, [g.id]: !open }))}
+                                    onClick={() => { if (!desktop) setOpenMap(m => ({ ...m, [g.id]: !open })); }}
                                     aria-expanded={open}
                                     aria-controls={bodyId}
                                     className={`w-full flex items-center justify-between gap-3 text-left rounded-lg ${FOCUS_CLS}`}
@@ -677,7 +779,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                                         <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${complete ? 'text-emerald-700 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-slate-600 dark:text-slate-400 border-black/10 dark:border-white/10'}`}>
                                             {complete ? '✓ ' : ''}{filled}/{g.fields.length}
                                         </span>
-                                        <ChevronDown className={`w-4 h-4 text-slate-600 dark:text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+                                        <ChevronDown className={`w-4 h-4 text-slate-600 dark:text-slate-400 transition-transform lg:hidden ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
                                     </span>
                                 </button>
                                 <div id={bodyId} hidden={!open} className="space-y-3">
@@ -694,7 +796,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                                                     Hitung otomatis (s.d bulan lalu + bulan ini)
                                                 </label>
                                             )}
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                                                 {g.fields.map(spec => (
                                                     <NumField
                                                         key={spec.path}
@@ -709,7 +811,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                                             </div>
                                         </>
                                     ) : (
-                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                        <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                                             {g.fields.map(spec => {
                                                 const v = getPath(entry, spec.path);
                                                 return (
@@ -739,7 +841,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                                         <div className="space-y-2">
                                             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Rencana s.d {periodeLabel(periode)} (dari Rencana Tahunan)</div>
                                             {huPlan ? (
-                                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                                <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                                                     {HU_KEYS.map(k => (
                                                         <div key={k} className={CARD_CLS}>
                                                             <div className={LABEL_CLS}>{HU_LABEL[k]}</div>
@@ -756,8 +858,10 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                             </section>
                         );
                     })}
+                    </div>
+                    </div>
                     {!editing && entry?.updatedAt && (
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                        <p className="lg:shrink-0 text-[11px] text-slate-600 dark:text-slate-400">
                             Terakhir disimpan: {new Date(entry.updatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
                         </p>
                     )}
@@ -771,7 +875,7 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
 type SeriesId = 'raRkap' | 'raEksternal' | 'huHpp' | 'huEbitda' | 'huLabaBersih';
 interface SeriesSpec { id: SeriesId; label: string; block: 'kurva' | 'hu'; signed?: boolean }
 const SERIES: SeriesSpec[] = [
-    { id: 'raRkap', label: 'RA RKAP (= rencana pendapatan)', block: 'kurva' },
+    { id: 'raRkap', label: 'Rencana Internal (= rencana pendapatan)', block: 'kurva' },
     { id: 'raEksternal', label: 'RA Eksternal', block: 'kurva' },
     { id: 'huHpp', label: 'HPP', block: 'hu' },
     { id: 'huEbitda', label: 'EBITDA', block: 'hu', signed: true },
@@ -910,12 +1014,12 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
         toast.success('Data ditempel. Periksa angkanya, lalu simpan.');
     };
 
-    const cellCls = 'w-24 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs font-mono outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]';
+    const cellCls = 'w-full min-w-[4.5rem] px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs font-mono outline-none focus:border-[rgba(var(--div-accent-rgb),0.5)]';
     const stickyTh = 'text-left px-3 py-2 font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap sticky left-0 bg-slate-100 dark:bg-slate-900';
 
     return (
-        <div className="space-y-5">
-            <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-5 lg:space-y-0 lg:flex lg:flex-col lg:gap-3 lg:h-full lg:min-h-0">
+            <div className="flex flex-wrap items-end justify-between gap-3 lg:shrink-0">
                 <div>
                     <label htmlFor={`${uid}-y`} className={LABEL_CLS}>Tahun</label>
                     <select
@@ -928,6 +1032,7 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                         {years.map(y => <option key={y} value={y} className="bg-white dark:bg-slate-900">{y}{rencana.some(r => r.tahun === y) ? ' · terisi' : ''}</option>)}
                     </select>
                 </div>
+                {editing && <div className="hidden lg:block"><UnitPicker unit={unit} onChange={changeUnit} /></div>}
                 {isAdmin && (editing ? (
                     <div className="flex gap-2">
                         <button type="button" onClick={() => setEditing(false)} className={BTN_GHOST}><X className="w-3.5 h-3.5" aria-hidden="true" /> Batal</button>
@@ -946,16 +1051,17 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                 ))}
             </div>
 
-            {editing && <UnitPicker unit={unit} onChange={changeUnit} />}
+            {editing && <div className="lg:hidden"><UnitPicker unit={unit} onChange={changeUnit} /></div>}
 
             {!current && !editing ? (
-                <div className="py-14 px-4 text-center text-slate-600 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
+                <div className="py-14 lg:py-8 px-4 text-center text-slate-600 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
                     Rencana tahunan {tahun} belum diisi.
                     {!isAdmin && <p className="mt-1 text-xs">Hanya super-admin atau PIC proyek yang dapat mengisi rencana.</p>}
                 </div>
             ) : (
                 <>
-                    <div className="max-w-xs">
+                    <div className="lg:shrink-0 lg:flex lg:items-end lg:gap-4">
+                    <div className="max-w-xs lg:w-64 lg:shrink-0">
                         {editing ? (
                             <NumField
                                 spec={{ path: 'puRkap', label: 'Target PU RKAP', short: 'Target PU RKAP (setahun)', kind: 'money' }}
@@ -971,12 +1077,13 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                         )}
                     </div>
 
-                    <div className="space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
-                        <p>Isi nilai <span className="font-bold">kumulatif</span> s.d akhir tiap bulan. Satu seri diisi lengkap 12 bulan, atau dikosongkan seluruhnya. RA RKAP, RA Eksternal, dan HPP tidak boleh turun. RA RKAP sekaligus menjadi rencana pendapatan pada tabel Hasil Usaha.</p>
+                    <div className="space-y-1 text-[11px] text-slate-600 dark:text-slate-400 lg:flex-1 lg:min-w-0 mt-5 lg:mt-0">
+                        <p>Isi nilai <span className="font-bold">kumulatif</span> s.d akhir tiap bulan. Satu seri diisi lengkap 12 bulan, atau dikosongkan seluruhnya. Rencana Internal, RA Eksternal, dan HPP tidak boleh turun. Rencana Internal sekaligus menjadi rencana pendapatan pada tabel Hasil Usaha.</p>
                         {editing && <p><span className="font-bold">Tempel dari Excel:</span> salin sel (satu baris atau beberapa baris) lalu Ctrl+V di sel mana pun. Baris tempel mengisi seri di bawahnya; satuan mengikuti pilihan di atas.</p>}
                     </div>
+                    </div>
 
-                    <div className="overflow-x-auto rounded-2xl border border-black/5 dark:border-white/5">
+                    <div className="overflow-x-auto lg:overflow-auto lg:flex-1 lg:min-h-0 rounded-2xl border border-black/5 dark:border-white/5">
                         <table className="w-full text-xs">
                             <caption className="sr-only">Rencana tahunan {tahun}, nilai kumulatif per bulan</caption>
                             <thead>
@@ -1080,7 +1187,7 @@ function SaldoAwalSection({ projectId, laporan, saldoAwal, isAdmin, onSaved, err
     };
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-5 lg:space-y-4 lg:h-full lg:min-h-0 lg:overflow-y-auto">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xl">
                     Isi total cash in/out sejak proyek mulai sampai <span className="font-bold">sebelum</span> laporan bulanan pertama. Total di tab Finansial dihitung otomatis: saldo awal + arus kas semua laporan bulanan. Kosongkan (atau 0) bila laporan bulanan mulai dari awal proyek.

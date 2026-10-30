@@ -120,8 +120,16 @@ export function publicUrl(key: string): string {
 }
 
 /** Short-lived presigned GET url for reading a private object. */
-export async function getPresignedUrl(key: string, expiresInSec = 3600): Promise<string> {
-    return getSignedUrl(client(), new GetObjectCommand({ Bucket: BUCKET, Key: key }), { expiresIn: expiresInSec });
+export async function getPresignedUrl(key: string, expiresInSec = 3600, opts?: { downloadName?: string }): Promise<string> {
+    // downloadName: paksa unduh (attachment) dengan nama asli, sehingga file unggahan tidak pernah dirender di origin storage.
+    const disposition = opts?.downloadName
+        ? `attachment; filename*=UTF-8''${encodeURIComponent(opts.downloadName).replace(/['()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`
+        : undefined;
+    return getSignedUrl(
+        client(),
+        new GetObjectCommand({ Bucket: BUCKET, Key: key, ResponseContentDisposition: disposition }),
+        { expiresIn: expiresInSec },
+    );
 }
 
 /** Delete an object. Best-effort. */

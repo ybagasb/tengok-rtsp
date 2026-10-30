@@ -22,7 +22,7 @@ const LOCATION_EDITABLE_FIELDS = [
     'penggunaJasa', 'pengawas', 'penyediaJasa',
     'contractor', 'startDate', 'endDate', 'contractNumber', 'contractValue',
     // Progress fisik + keuangan
-    'progressPercent', 'progressRencana', 'progressDeviasi', 'progressKeuangan', 'tagihanBelumDiproses',
+    'progressPercent', 'progressRencana', 'progressDeviasi', 'progressPeriode', 'progressKeuangan', 'tagihanBelumDiproses',
     // Ikhtiar
     'cpi', 'spi', 'ccc',
     // Finansial (ringkas)

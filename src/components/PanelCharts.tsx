@@ -303,7 +303,7 @@ export function StackedBar({
 }
 
 // ── Kurva S ──────────────────────────────────────────────────────────────────
-// Tiga seri kumulatif Jan–Des (persen terhadap nilai kontrak): RA RKAP, RA
+// Tiga seri kumulatif Jan–Des (persen terhadap nilai kontrak): Rencana Internal (RA), RA
 // Eksternal (garis putus), dan RI/realisasi internal (garis tebal, berhenti di
 // bulan terakhir yang dilaporkan). Di bawah grafik: legenda berisi nilai % | Rp
 // bulan terpilih, penanda PU terhadap RKAP, dan tabel nilai Rp miliar per bulan.
@@ -366,7 +366,7 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
     const y = (v: number) => T + (H - T - B) * (1 - v / yMax);
     const points = (a: (number | undefined)[]): Pt[] => a.flatMap((v, i) => (typeof v === 'number' ? [[x(i), y(v)] as Pt] : []));
     const path = (a: (number | undefined)[]) => smoothSegment(points(a));
-    // Area di bawah RI dan pita selisih terhadap rencana RKAP (hanya sepanjang bulan yang sudah dilaporkan).
+    // Area di bawah RI dan pita selisih terhadap rencana internal (hanya sepanjang bulan yang sudah dilaporkan).
     const riIdxLast = lastIdx(data.ri);
     const riPts = points(data.ri);
     const areaPath = riPts.length > 1
@@ -404,10 +404,10 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
     const dev = ri != null && rkap != null ? ri - rkap : undefined;
     const puPct = data.pu != null && data.puRkap ? (data.pu / data.puRkap) * 100 : undefined;
     const valueText = (pct?: number) => (pct == null ? '-' : `${fPct(pct)} | Rp${fMil1(rp(pct) as number)} M`);
-    const readout = `${BULAN_SINGKAT[idx]} ${data.tahun}: RKAP ${valueText(rkap)}, Eksternal ${valueText(eks)}, Realisasi ${valueText(ri)}`;
+    const readout = `${BULAN_SINGKAT[idx]} ${data.tahun}: Rencana Internal ${valueText(rkap)}, Eksternal ${valueText(eks)}, Realisasi ${valueText(ri)}`;
 
     const rows = [
-        { label: 'RA RKAP', color: cRkap, vals: data.rkap },
+        { label: 'RA Internal', color: cRkap, vals: data.rkap },
         { label: 'RA Extern', color: cEks, vals: data.eksternal },
         { label: 'RI', color: cRi, vals: data.ri },
     ];
@@ -418,9 +418,9 @@ export function SCurveChart({ data }: { data: KurvaSData }) {
     ];
     const devText = dev === undefined ? '-' : `${dev >= 0 ? '+' : ''}${dev.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`;
     const chips = [
-        { key: 'rkap' as const, label: 'Rencana (RKAP)', value: rkap, swatch: <i className="w-4 border-t-2 border-dashed" style={{ borderColor: cRkap }} aria-hidden="true" /> },
+        { key: 'rkap' as const, label: 'Rencana Internal', value: rkap, swatch: <i className="w-4 border-t-2 border-dashed" style={{ borderColor: cRkap }} aria-hidden="true" /> },
         { key: 'eks' as const, label: 'Eksternal', value: eks, swatch: <i className="w-4 border-t-2 border-dotted" style={{ borderColor: cEks }} aria-hidden="true" /> },
-        { key: 'ri' as const, label: 'Internal (RI)', value: ri, swatch: <i className="w-4 border-t-[3px]" style={{ borderColor: cRi }} aria-hidden="true" /> },
+        { key: 'ri' as const, label: 'Realisasi (RI)', value: ri, swatch: <i className="w-4 border-t-[3px]" style={{ borderColor: cRi }} aria-hidden="true" /> },
     ];
 
     return (

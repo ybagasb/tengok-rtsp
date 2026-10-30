@@ -327,7 +327,7 @@ export default function LoginForm() {
 
                     <div className="mt-6 max-sm:mt-4 pt-5 max-sm:pt-3 border-t border-black/10 dark:border-white/10 text-center">
                         <a
-                            href="/Panduan-Input-Detail-Proyek.pdf?v=20261024"
+                            href="/Panduan-Input-Detail-Proyek.pdf?v=20261030"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 min-h-11 px-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-yellow-400 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"

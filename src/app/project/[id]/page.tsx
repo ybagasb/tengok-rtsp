@@ -1,24 +1,29 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, use, useId } from 'react';
+import { useEffect, useState, useCallback, useRef, use, useId, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
-    ArrowLeft, Loader2, MapPin, FileText, Image as ImageIcon, TrendingUp, Info, LayoutDashboard, Upload, Trash2, Pencil, Check, X,
-    User, Building2, Clock, CircleDollarSign, ExternalLink,
+    ArrowLeft, Loader2, MapPin, FileText, Image as ImageIcon, TrendingUp, Info, Upload, Trash2, Pencil, Check, X,
+    User, Clock, CircleDollarSign, ExternalLink,
     AlertTriangle, Plus, Minus,
     ArrowUpRight, ArrowDownRight, Layers, Target, Wallet, Receipt,
-    Menu, GitBranch, ChevronLeft, ChevronRight, BookOpen, CalendarDays
+    Menu, GitBranch, ChevronLeft, ChevronRight, BookOpen, CalendarDays, Video, FolderOpen, Download
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
+import OptimizedVideoPlayer from '@/components/OptimizedVideoPlayer';
+import { useStreamManager } from '@/lib/StreamManager';
+import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 import type { FootprintPoint } from '@/components/FootprintEditor';
 import { getDivisionCssVars } from '@/lib/divisionTheme';
-import { computeEvm, derivedFromLaporan, isLaporanFresh, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
+import { BULAN_NAMA, computeEvm, derivedFromLaporan, isLaporanFresh, isValidPeriode, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
 import LaporanBulananTab from '@/components/project/LaporanBulananTab';
-import DashboardRingkasan from '@/components/project/DashboardRingkasan';
+import ProjectDashboard from '@/components/project/ProjectDashboard';
+import { fRpShort } from '@/components/PanelCharts';
+import { formatStampTime, type ProjectSection, type SectionStamp, type SectionUpdates } from '@/lib/projectSections';
 
 // Leaflet butuh browser (window) -> muat hanya di klien.
 const FootprintEditor = dynamic(() => import('@/components/FootprintEditor'), {
@@ -29,15 +34,16 @@ const FootprintEditor = dynamic(() => import('@/components/FootprintEditor'), {
 });
 
 type Tab =
-    | 'summary'
     | 'ikhtiar'
     | 'finansial'
     | 'operasi'
     | 'changemgmt'
     | 'issues'
     | 'laporan'
+    | 'cctv' | 'dokumen'
     | 'info' | 'location' | 'contract' | 'progress' | 'gallery';
 
+interface DocumentItem { name: string; key?: string; size?: number; contentType?: string; uploadedAt: string; url?: string | null; }
 interface GalleryItem { key: string; caption?: string; uploadedAt: string; url: string | null; }
 interface Milestone { title: string; done: boolean; date?: string; progress?: number; }
 interface HasilUsaha { pendapatan: number; biaya: number; laba: number; }
@@ -111,6 +117,7 @@ interface Project {
     progressPercent?: number;
     progressRencana?: number;
     progressDeviasi?: number;
+    progressPeriode?: string;
     // Progress keuangan
     progressKeuangan?: ProgressKeuangan[];
     tagihanBelumDiproses?: number;
@@ -127,10 +134,13 @@ interface Project {
     cashOutAwal?: number;
     milestones?: Milestone[];
     gallery?: GalleryItem[];
+    documents?: DocumentItem[];
     cameras?: { _id: string; name: string; status: string }[];
     progressMinggu?: ProgressMinggu[];
     // Kontrol akses (dihitung server) — gating kosmetik; server tetap penegak.
     access?: { canEdit: boolean; isSuperAdmin: boolean; isPic: boolean };
+    // Waktu & pelaku pembaruan terakhir per dimensi data
+    sectionUpdates?: SectionUpdates;
     // Timestamp (dikirim sebagai JSON string dari API)
     createdAt?: string;
     updatedAt?: string;
@@ -152,12 +162,6 @@ interface TabGroup { group: string; items: TabItem[] }
 
 const TAB_GROUPS: TabGroup[] = [
     {
-        group: 'Beranda',
-        items: [
-            { id: 'summary', label: 'Beranda', icon: LayoutDashboard },
-        ],
-    },
-    {
         group: 'Ringkasan',
         items: [
             { id: 'ikhtiar', label: 'Ringkasan', icon: Target },
@@ -173,6 +177,12 @@ const TAB_GROUPS: TabGroup[] = [
         group: 'Operasi',
         items: [
             { id: 'operasi', label: 'Operasi', icon: Layers },
+        ],
+    },
+    {
+        group: 'Pemantauan',
+        items: [
+            { id: 'cctv', label: 'CCTV', icon: Video },
         ],
     },
     {
@@ -201,6 +211,7 @@ const TAB_GROUPS: TabGroup[] = [
             { id: 'contract',  label: 'Kontrak',   icon: FileText },
             { id: 'progress',  label: 'Progres',   icon: TrendingUp },
             { id: 'gallery',   label: 'Galeri',    icon: ImageIcon },
+            { id: 'dokumen',   label: 'Dokumen',   icon: FolderOpen },
         ],
     },
 ];
@@ -269,7 +280,6 @@ function formatDate(d?: string) {
     if (!d) return '-';
     return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 }
-function pct(n?: number) { return `${(n ?? 0).toFixed(2)}%`; }
 
 // Kerangka pemuatan: menjaga tata letak stabil (tanpa lompatan) saat data masuk.
 function ProjectSkeleton() {
@@ -320,7 +330,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
     const [project, setProject] = useState<Project | null>(null);
     const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState<Tab>('summary');
+    const [tab, setTab] = useState<Tab>('ikhtiar');
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const [loadError, setLoadError] = useState<{ status: number | null; message: string } | null>(null);
@@ -386,11 +396,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
     const selectTab = (t: Tab) => { setTab(t); setSidebarOpen(false); };
 
-    const sidebarNav = (
-        <nav className="space-y-5">
+    // compact = rail ikon di desktop (label muncul saat hover/fokus); false = daftar penuh (drawer mobile).
+    const renderNav = (compact: boolean) => (
+        <nav className="space-y-3" aria-label="Bagian proyek">
             {TAB_GROUPS.map(grp => (
                 <div key={grp.group}>
-                    <div className="px-3 mb-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-600">{grp.group}</div>
+                    <div className={`px-3 mb-1 text-[11px] font-bold uppercase tracking-widest text-slate-600 ${compact ? 'h-4 overflow-hidden whitespace-nowrap opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 transition-opacity' : ''}`}>{grp.group}</div>
                     <div className="space-y-0.5">
                         {grp.items.map(t => {
                             const Icon = t.icon;
@@ -399,13 +410,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                 <button
                                     key={t.id}
                                     onClick={() => selectTab(t.id)}
-                                    className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full max-sm:min-h-11 flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                                    title={t.label}
+                                    aria-label={t.label}
+                                    aria-current={active ? 'page' : undefined}
+                                    className={`focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-full max-sm:min-h-11 flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
                                         active
                                             ? 'bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text border border-[rgba(var(--div-accent-rgb),0.3)]'
                                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
                                     }`}
                                 >
-                                    <Icon className="w-4 h-4 shrink-0" /> {t.label}
+                                    <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                                    <span className={compact ? 'opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 transition-opacity' : ''}>{t.label}</span>
                                 </button>
                             );
                         })}
@@ -444,7 +459,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         boxShadow: '0 0 12px rgba(var(--div-accent-rgb),0.45)',
                     }}
                 />
-                <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top,0px))] max-sm:pb-3 flex items-center gap-3">
+                <div className="px-4 sm:px-6 py-3 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top,0px))] max-sm:pb-3 flex items-center gap-3">
                     <button onClick={() => router.back()} aria-label="Kembali" className="p-3 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                         <ArrowLeft className="w-5 h-5" aria-hidden="true" />
                     </button>
@@ -472,7 +487,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         </div>
                     </div>
                     <a
-                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261024"
+                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261030"
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Buka panduan pengisian (PDF)"
@@ -494,11 +509,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <PhoneTabStrip tab={tab} onSelect={selectTab} />
             </header>
 
-            <div className="relative z-[1] max-w-7xl mx-auto px-4 sm:px-8 py-6 flex gap-6">
+            <div className="relative z-[1] w-full px-3 sm:px-4 py-3 flex gap-3">
                 {/* Sidebar (desktop) */}
-                <aside className="hidden lg:block w-60 shrink-0">
-                    <div className="sticky top-24 p-3 rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-black/5 dark:border-white/5">
-                        {sidebarNav}
+                <aside className="hidden lg:block w-[3.75rem] shrink-0 relative z-20">
+                    <div className="group sticky top-[calc(var(--ph-h,5.5rem)+0.75rem)] w-[3.75rem] hover:w-56 has-[:focus-visible]:w-56 transition-[width] duration-200 motion-reduce:transition-none overflow-x-hidden overflow-y-auto max-h-[calc(100dvh-var(--ph-h,5.5rem)-1.5rem)] p-1.5 rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-black/5 dark:border-white/10 shadow-sm">
+                        {renderNav(true)}
                     </div>
                 </aside>
 
@@ -524,7 +539,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                     <span className="text-sm font-bold text-slate-900 dark:text-white">Menu Proyek</span>
                                     <button ref={drawerCloseRef} onClick={() => setSidebarOpen(false)} aria-label="Tutup menu" className="p-3 max-sm:p-3.5 rounded-lg bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-4 h-4" aria-hidden="true" /></button>
                                 </div>
-                                {sidebarNav}
+                                {renderNav(false)}
                                 {/* Phone: aksi header yang disembunyikan di layar kecil dipindah ke sini */}
                                 <div className="sm:hidden mt-5 pt-4 border-t border-black/10 dark:border-white/10 space-y-2">
                                     <button
@@ -537,7 +552,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                         <MapPin className="w-4 h-4 shrink-0" aria-hidden="true" /> Lihat di Peta
                                     </button>
                                     <a
-                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261024"
+                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261030"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="w-full min-h-11 flex items-center gap-2.5 px-3 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 bg-black/[0.04] dark:bg-white/5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
@@ -552,16 +567,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
                 {/* Content */}
                 <main className="flex-1 min-w-0">
+                    <div className={tab === 'laporan' ? 'w-full pb-8 pt-1 lg:pb-0 lg:pt-0' : ''}>
                     <div className="mb-4 flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-widest lg:hidden max-sm:hidden">
                         {activeLabel}
                     </div>
                     <AnimatePresence mode="wait">
                         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-                            {tab === 'summary'    && <SummaryTab project={project} status={status} onlineCams={onlineCams} onGoTab={selectTab} />}
-                            {tab === 'ikhtiar'    && <IkhtiarTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
+                            {tab === 'ikhtiar'    && <IkhtiarTab project={project} status={status} onlineCams={onlineCams} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
                             {tab === 'finansial'  && <FinansialTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
                             {tab === 'operasi'    && <OperasiTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
-                            {tab === 'laporan'    && <LaporanBulananTab projectId={project._id} laporan={project.laporanBulanan ?? []} rencana={project.rencanaKurvaS ?? []} saldoAwal={{ cashInAwal: project.cashInAwal, cashOutAwal: project.cashOutAwal }} contractValue={project.contractValue} onGoContract={() => selectTab('contract')} isAdmin={canEdit} onSaved={fetchProject} errorMessage={saveErrorMessage} />}
+                            {tab === 'laporan'    && <LaporanBulananTab projectId={project._id} laporan={project.laporanBulanan ?? []} rencana={project.rencanaKurvaS ?? []} saldoAwal={{ cashInAwal: project.cashInAwal, cashOutAwal: project.cashOutAwal }} contractValue={project.contractValue} onGoContract={() => selectTab('contract')} lastUpdated={project.sectionUpdates?.laporan ?? null} isAdmin={canEdit} onSaved={fetchProject} errorMessage={saveErrorMessage} />}
                             {tab === 'changemgmt' && <ChangeManagementTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'issues'     && <IssuesTab project={project} isAdmin={canEdit} onSaved={fetchProject} onToChangeMgmt={() => setTab('changemgmt')} />}
                             {tab === 'info'       && <InfoTab project={project} isAdmin={canEdit} isSuperAdmin={isSuperAdmin} onSaved={fetchProject} />}
@@ -569,8 +584,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             {tab === 'contract'   && <ContractTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'progress'   && <ProgressTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'gallery'    && <GalleryTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
+                            {tab === 'cctv'       && <CctvTab project={project} />}
+                            {tab === 'dokumen'    && <DocumentsTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
                         </motion.div>
                     </AnimatePresence>
+                    </div>
                 </main>
             </div>
         </div>
@@ -594,23 +612,6 @@ function spiStatus(v?: number) {
         : { label: 'Behind Schedule', color: 'text-rose-400 bg-rose-500/10 border-rose-500/30' };
 }
 
-function IndexGauge({ title, hint, value, kind }: { title: string; hint: string; value?: number; kind: 'cpi' | 'spi' }) {
-    const meta = kind === 'cpi' ? cpiStatus(value) : spiStatus(value);
-    return (
-        <div className="p-6 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex flex-col items-center text-center">
-            <div className="flex items-center gap-2 mb-1">
-                <Target className="w-4 h-4 div-accent-text" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">{title}</h3>
-            </div>
-            <p className="text-[11px] text-slate-500 mb-4">{hint}</p>
-            <div className="text-5xl font-black text-slate-900 dark:text-white leading-none mb-3">
-                {value != null ? value.toFixed(2) : '—'}
-            </div>
-            <span className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${meta.color}`}>{meta.label}</span>
-        </div>
-    );
-}
-
 // Catatan untuk field yang diisi otomatis dari Laporan Bulanan (satu sumber kebenaran).
 function DerivedNote({ periode, onGo, what, tail = 'Ubah di sana agar tidak perlu mengetik dua kali.' }: { periode?: string; onGo?: () => void; what: string; tail?: string }) {
     return (
@@ -627,7 +628,17 @@ function DerivedNote({ periode, onGo, what, tail = 'Ubah di sana agar tidak perl
     );
 }
 
-function IkhtiarTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
+function IndeksCompact({ title, value, meta }: { title: string; value?: number; meta: { label: string; color: string } }) {
+    return (
+        <div className="flex-1 min-h-0 rounded-xl bg-black/[0.03] dark:bg-white/[0.04] px-2 py-2 text-center flex flex-col items-center justify-center">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{title}</div>
+            <div className="text-3xl font-black leading-none text-slate-900 dark:text-white my-1.5">{value != null ? value.toFixed(2) : '—'}</div>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${meta.color}`}>{meta.label}</span>
+        </div>
+    );
+}
+
+function IkhtiarTab({ project, status, onlineCams, isAdmin, onSaved, onGoTab }: { project: Project; status: { label: string; color: string }; onlineCams: number; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({
         cpi: project.cpi?.toString() ?? '',
@@ -642,13 +653,14 @@ function IkhtiarTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
     const cpiLocked = derived.cpi !== undefined;
     const spiLocked = derived.spi !== undefined;
     const anyLocked = cpiLocked || spiLocked;
+    const canEditIndeks = isAdmin && !(cpiLocked && spiLocked);
 
     const save = async () => {
         setSaving(true);
         try {
             await axios.patch(`/api/projects/${project._id}`, {
-                ...(cpiLocked ? {} : { cpi: form.cpi === '' ? undefined : Number(form.cpi) }),
-                ...(spiLocked ? {} : { spi: form.spi === '' ? undefined : Number(form.spi) }),
+                ...(cpiLocked ? {} : { cpi: form.cpi === '' ? null : Number(form.cpi) }),
+                ...(spiLocked ? {} : { spi: form.spi === '' ? null : Number(form.spi) }),
             });
             toast.success('Ringkasan tersimpan');
             setEditing(false);
@@ -656,57 +668,79 @@ function IkhtiarTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
         } catch (err) { toast.error(saveErrorMessage(err)); }
         finally { setSaving(false); }
     };
+    const cancel = () => { setForm({ cpi: project.cpi?.toString() ?? '', spi: project.spi?.toString() ?? '' }); setEditing(false); };
+
+    const field = (key: 'cpi' | 'spi', label: string) => (
+        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+            {label}
+            <input
+                type="number" min={0} max={5} step="0.01" inputMode="decimal"
+                value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono outline-none focus-visible:ring-2 focus-visible:ring-[var(--div-accent)]"
+            />
+        </label>
+    );
+
+    const indeks = (
+        <div className="flex-1 min-h-0 flex flex-col gap-2">
+            <UpdatedStamp stamp={stampOf(project, 'ikhtiar')} className="!mt-0 justify-center" />
+            {editing ? (
+                <>
+                    {cpiLocked ? <IndeksCompact title="CPI" value={project.cpi} meta={cpiStatus(project.cpi)} /> : field('cpi', 'CPI (mis. 1.02)')}
+                    {spiLocked ? <IndeksCompact title="SPI" value={project.spi} meta={spiStatus(project.spi)} /> : field('spi', 'SPI (mis. 0.98)')}
+                    <div className="flex gap-2">
+                        <button type="button" onClick={cancel} className="flex-1 min-h-9 rounded-lg bg-black/[0.04] dark:bg-white/5 text-xs font-bold text-slate-700 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">Batal</button>
+                        <button type="button" onClick={save} disabled={saving} className="flex-1 min-h-9 rounded-lg div-accent-solid text-slate-950 text-xs font-bold disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">{saving ? 'Menyimpan…' : 'Simpan'}</button>
+                    </div>
+                </>
+            ) : (
+                <>
+                    <IndeksCompact title="CPI" value={project.cpi} meta={cpiStatus(project.cpi)} />
+                    <IndeksCompact title="SPI" value={project.spi} meta={spiStatus(project.spi)} />
+                    {(evm.cv !== undefined || evm.sv !== undefined) && (
+                        <p className="text-[11px] font-mono text-slate-600 dark:text-slate-400 text-center">
+                            CV {fRpShort(evm.cv)} · SV {fRpShort(evm.sv)}
+                        </p>
+                    )}
+                    {anyLocked && (
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 text-center">
+                            Otomatis dari Laporan Bulanan{latest ? ` (${periodeLabel(latest.periode)})` : ''}.
+                        </p>
+                    )}
+                    {canEditIndeks && (
+                        <button type="button" onClick={() => setEditing(true)} className="min-h-9 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-xs font-bold text-slate-700 dark:text-slate-300 inline-flex items-center justify-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
+                            <Pencil className="w-3.5 h-3.5" aria-hidden="true" /> Ubah
+                        </button>
+                    )}
+                </>
+            )}
+        </div>
+    );
 
     return (
-        <div className="space-y-4">
-            <SectionHeader title="Ringkasan: CPI / SPI" isAdmin={isAdmin && !(cpiLocked && spiLocked)} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setForm({ cpi: project.cpi?.toString() ?? '', spi: project.spi?.toString() ?? '' }); setEditing(false); }} onSave={save} saving={saving} />
-            {anyLocked && <DerivedNote what={cpiLocked && spiLocked ? 'CPI dan SPI' : cpiLocked ? 'CPI' : 'SPI'} periode={latest?.periode} onGo={isAdmin ? () => onGoTab('laporan') : undefined} />}
-            {!editing ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <IndexGauge title="CPI" hint="Cost Performance Index (kinerja biaya)" value={project.cpi} kind="cpi" />
-                    <IndexGauge title="SPI" hint="Schedule Performance Index (kinerja jadwal)" value={project.spi} kind="spi" />
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {cpiLocked ? (
-                        <IndexGauge title="CPI" hint="Cost Performance Index (kinerja biaya)" value={project.cpi} kind="cpi" />
-                    ) : (
-                        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                            <Input label="CPI (mis. 1.02)" type="number" min={0} max={5} step="0.01" value={form.cpi} onChange={v => setForm({ ...form, cpi: v })} hint="Cost Performance Index — nilai kinerja biaya dari laporan EVA. 1 ke atas = hemat/efisien, di bawah 1 = boros." />
-                            <p className="mt-2 text-[11px] text-slate-500">≥ 1 = biaya efisien, &lt; 1 = over budget.</p>
-                        </div>
-                    )}
-                    {spiLocked ? (
-                        <IndexGauge title="SPI" hint="Schedule Performance Index (kinerja jadwal)" value={project.spi} kind="spi" />
-                    ) : (
-                        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                            <Input label="SPI (mis. 0.98)" type="number" min={0} max={5} step="0.01" value={form.spi} onChange={v => setForm({ ...form, spi: v })} hint="Schedule Performance Index — nilai kinerja jadwal dari laporan EVA. 1 ke atas = sesuai/lebih cepat, di bawah 1 = terlambat." />
-                            <p className="mt-2 text-[11px] text-slate-500">≥ 1 = sesuai/lebih cepat jadwal, &lt; 1 = terlambat.</p>
-                        </div>
-                    )}
-                </div>
-            )}
-            {(evm.cv !== undefined || evm.sv !== undefined) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <MoneyCard label="CV: Cost Variance (BCWP − ACWP)" value={evm.cv} icon={CircleDollarSign} tone={(evm.cv ?? 0) >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} />
-                    <MoneyCard label="SV: Schedule Variance (BCWP − BCWS)" value={evm.sv} icon={CircleDollarSign} tone={(evm.sv ?? 0) >= 0 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'} />
-                </div>
-            )}
-            <DashboardRingkasan project={project} canEdit={isAdmin} onGoLaporan={() => onGoTab('laporan')} />
-        </div>
+        <ProjectDashboard
+            project={project}
+            status={status}
+            onlineCams={onlineCams}
+            fisikSampai={fisikSampai(project)}
+            completeness={computeCompleteness(project)}
+            canEdit={isAdmin}
+            onGoTab={onGoTab}
+            onGoLaporan={() => onGoTab('laporan')}
+            indeks={indeks}
+        />
     );
 }
 
 // ── Finansial (ringkas) ───────────────────────────────────────────────────────
 function MoneyCard({ label, value, icon: Icon, tone }: { label: string; value?: number; icon: typeof Wallet; tone: string }) {
     return (
-        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-            <div className="flex items-center gap-2 mb-2">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${tone}`}><Icon className="w-4 h-4" /></div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 dark:text-slate-400">{label}</span>
+        <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 min-w-0" title={value != null ? formatIDR(value) : undefined}>
+            <div className="flex items-center gap-2 mb-1.5">
+                <div className={`w-6 h-6 rounded-lg flex items-center justify-center border shrink-0 ${tone}`}><Icon className="w-3.5 h-3.5" /></div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 truncate">{label}</span>
             </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white font-mono truncate">{formatIDRShort(value)}</div>
-            <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono truncate">{value != null ? formatIDR(value) : ''}</div>
+            <div className="text-lg font-black text-slate-900 dark:text-white font-mono truncate">{formatIDRShort(value)}</div>
         </div>
     );
 }
@@ -726,9 +760,8 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
     const piutangLocked = derivedLap.piutang !== undefined;
     const cccLocked = derivedLap.ccc !== undefined;
     const posisiLocked = hutangLocked || badLocked || piutangLocked || cccLocked;
-    const isKendari = Boolean(project.name?.toLowerCase().includes('kendari'));
     const initForm = () => ({
-        tagihanBruto: project.tagihanBruto?.toString() ?? (isKendari ? '49000000000' : ''),
+        tagihanBruto: project.tagihanBruto?.toString() ?? '',
         cashIn: project.cashIn?.toString() ?? '',
         cashOut: project.cashOut?.toString() ?? '',
         saldoKas: project.saldoKas?.toString() ?? '',
@@ -749,7 +782,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
     // Saldo kas otomatis bila belum diisi manual.
     const autoSaldoKas = (Number(form.cashIn) || 0) - (Number(form.cashOut) || 0);
     const displaySaldoKas = project.saldoKas ?? ((project.cashIn ?? 0) - (project.cashOut ?? 0));
-    const displayTagihanBruto = project.tagihanBruto ?? (isKendari ? 49_000_000_000 : undefined);
+    const displayTagihanBruto = project.tagihanBruto;
 
     const save = async () => {
         setSaving(true);
@@ -757,21 +790,21 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
             const huP = form.huPendapatan === '' ? null : Number(form.huPendapatan);
             const huB = form.huBiaya === '' ? null : Number(form.huBiaya);
             await axios.patch(`/api/projects/${project._id}`, {
-                ...(tagihanLocked ? {} : { tagihanBruto: form.tagihanBruto === '' ? undefined : Number(form.tagihanBruto) }),
-                ...(cashInLocked ? {} : { cashIn: form.cashIn === '' ? undefined : Number(form.cashIn) }),
-                ...(cashOutLocked ? {} : { cashOut: form.cashOut === '' ? undefined : Number(form.cashOut) }),
+                ...(tagihanLocked ? {} : { tagihanBruto: form.tagihanBruto === '' ? null : Number(form.tagihanBruto) }),
+                ...(cashInLocked ? {} : { cashIn: form.cashIn === '' ? null : Number(form.cashIn) }),
+                ...(cashOutLocked ? {} : { cashOut: form.cashOut === '' ? null : Number(form.cashOut) }),
                 ...((cashInLocked && cashOutLocked) ? {} : { saldoKas: form.saldoKas === '' ? autoSaldoKas : Number(form.saldoKas) }),
-                ...(hutangLocked ? {} : { saldoHutang: form.saldoHutang === '' ? undefined : Number(form.saldoHutang) }),
-                ...(badLocked ? {} : { bad: form.bad === '' ? undefined : Number(form.bad) }),
-                ...(piutangLocked ? {} : { piutang: form.piutang === '' ? undefined : Number(form.piutang) }),
-                ...(cccLocked ? {} : { ccc: form.ccc === '' ? undefined : Number(form.ccc) }),
+                ...(hutangLocked ? {} : { saldoHutang: form.saldoHutang === '' ? null : Number(form.saldoHutang) }),
+                ...(badLocked ? {} : { bad: form.bad === '' ? null : Number(form.bad) }),
+                ...(piutangLocked ? {} : { piutang: form.piutang === '' ? null : Number(form.piutang) }),
+                ...(cccLocked ? {} : { ccc: form.ccc === '' ? null : Number(form.ccc) }),
                 ...(huLocked ? {} : {
                     hasilUsaha: (huP != null || huB != null)
                         ? { pendapatan: huP ?? 0, biaya: huB ?? 0, laba: (huP ?? 0) - (huB ?? 0) }
-                        : undefined,
+                        : null,
                 }),
                 progressKeuangan: form.progressKeuangan,
-                tagihanBelumDiproses: form.tagihanBelumDiproses === '' ? undefined : Number(form.tagihanBelumDiproses),
+                tagihanBelumDiproses: form.tagihanBelumDiproses === '' ? null : Number(form.tagihanBelumDiproses),
             });
             toast.success('Finansial tersimpan');
             setEditing(false);
@@ -781,9 +814,11 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
     };
 
     return (
-        <div className="space-y-4">
-            <SectionHeader title="Finansial" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { resetForm(); setEditing(false); }} onSave={save} saving={saving} />
-
+        <TabShell header={
+            <SectionHeader title="Finansial" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { resetForm(); setEditing(false); }} onSave={save} saving={saving} stamp={stampOf(project, 'finansial')} />
+        } scroll={false}>
+            <div className="lg:h-full flex flex-col gap-4 lg:grid lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)]">
+                <div className="lg:col-span-8 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1 space-y-3">
             {(tagihanLocked || huLocked || cashInLocked || cashOutLocked || posisiLocked) && (
                 <DerivedNote
                     what={[tagihanLocked && 'Tagihan bruto', huLocked && 'hasil usaha', (cashInLocked || cashOutLocked) && 'cash in/out', posisiLocked && 'saldo hutang, BAD, piutang, CCC'].filter(Boolean).join(', ')}
@@ -794,7 +829,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
             )}
             {!editing ? (
                 <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                         {!tagihanLocked && <MoneyCard label="Tagihan Bruto"          value={displayTagihanBruto} icon={Receipt}            tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />}
                         {!cashInLocked && <MoneyCard label="Cash In (Penerimaan)"   value={project.cashIn}      icon={ArrowDownRight}     tone="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />}
                         {!cashOutLocked && <MoneyCard label="Cash Out (Pengeluaran)" value={project.cashOut}     icon={ArrowUpRight}       tone="bg-rose-500/10 border-rose-500/20 text-rose-400" />}
@@ -816,7 +851,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                     )}
                 </>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-3 gap-y-2">
                     {!tagihanLocked && <MoneyInput label="Tagihan Bruto" value={form.tagihanBruto} onChange={v => setForm({ ...form, tagihanBruto: v })} hint="Total tagihan bruto proyek (Rp)." />}
                     {!cashInLocked && <MoneyInput label="Cash In" value={form.cashIn} onChange={v => setForm({ ...form, cashIn: v })} hint="Total uang yang sudah masuk/diterima proyek." />}
                     {!cashOutLocked && <MoneyInput label="Cash Out" value={form.cashOut} onChange={v => setForm({ ...form, cashOut: v })} hint="Total uang yang sudah keluar/dibelanjakan." />}
@@ -879,41 +914,81 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                 </div>
             )}
 
+                </div>
+                <div className="lg:col-span-4 min-w-0 lg:min-h-0 flex flex-col">
             {/* Progress keuangan per DIPA */}
             {!editing ? (
-                <div className="pt-2">
+                <div className="lg:flex-1 lg:min-h-0 flex flex-col">
                     <ProgressKeuanganCard
                         progressKeuangan={project.progressKeuangan || []}
                         tagihanBelumDiproses={project.tagihanBelumDiproses}
                     />
                 </div>
             ) : (
-                <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Progress Keuangan (DIPA)</h3>
+                <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex flex-col gap-2 lg:flex-1 lg:min-h-0">
+                    <div className="flex items-center justify-between shrink-0">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Progress Keuangan (DIPA)</h3>
                         <button onClick={() => setForm(f => ({ ...f, progressKeuangan: [...f.progressKeuangan, { tahun: new Date().getFullYear(), rencana: 0, realisasi: 0 }] }))}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
                             <Plus className="w-3.5 h-3.5" /> Tambah Tahun
                         </button>
                     </div>
-                    {form.progressKeuangan.length === 0
-                        ? <p className="text-sm text-slate-500 italic">Belum ada data DIPA.</p>
-                        : form.progressKeuangan.map((pk, i) => (
-                            <div key={i} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5">
-                                <Input label="Tahun" type="number" min={2000} max={2100} step={1} value={String(pk.tahun ?? "")} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], tahun: Number(v) }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
-                                <MoneyInput label="Pagu/Rencana" value={pk.rencana ? String(pk.rencana) : ""} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], rencana: Number(v) || 0 }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
-                                <MoneyInput label="Realisasi" value={pk.realisasi ? String(pk.realisasi) : ""} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], realisasi: Number(v) || 0 }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
-                                <button type="button" aria-label={`Hapus data tahun ${pk.tahun}`} onClick={() => setForm(f => ({ ...f, progressKeuangan: f.progressKeuangan.filter((_, j) => j !== i) }))} className="sm:col-span-3 justify-self-end inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
-                                    <Minus className="w-4 h-4" aria-hidden="true" /> Hapus tahun ini
-                                </button>
+                    <Paged
+                        items={form.progressKeuangan}
+                        itemH={305}
+                        empty={<p className="text-sm text-slate-600 dark:text-slate-400 italic">Belum ada data DIPA.</p>}
+                        render={(pk, i) => (
+                            <div className="p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
+                                <div className="flex items-end gap-2">
+                                    <div className="flex-1">
+                                        <Input label="Tahun" type="number" min={2000} max={2100} step={1} value={String(pk.tahun ?? '')} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], tahun: Number(v) }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
+                                    </div>
+                                    <button type="button" aria-label={`Hapus data tahun ${pk.tahun}`} onClick={() => setForm(f => ({ ...f, progressKeuangan: f.progressKeuangan.filter((_, j) => j !== i) }))} className="shrink-0 min-h-10 inline-flex items-center gap-1.5 px-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
+                                        <Minus className="w-4 h-4" aria-hidden="true" /> Hapus
+                                    </button>
+                                </div>
+                                <MoneyInput label="Pagu/Rencana" value={pk.rencana ? String(pk.rencana) : ''} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], rencana: Number(v) || 0 }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
+                                <MoneyInput label="Realisasi" value={pk.realisasi ? String(pk.realisasi) : ''} onChange={v => { const a = [...form.progressKeuangan]; a[i] = { ...a[i], realisasi: Number(v) || 0 }; setForm(f => ({ ...f, progressKeuangan: a })); }} />
                             </div>
-                        ))
-                    }
-                    <MoneyInput label="Progress Belum Ditagihkan" value={form.tagihanBelumDiproses} onChange={v => setForm(f => ({ ...f, tagihanBelumDiproses: v }))} />
+                        )}
+                    />
+                    <div className="shrink-0">
+                        <MoneyInput label="Progress Belum Ditagihkan" value={form.tagihanBelumDiproses} onChange={v => setForm(f => ({ ...f, tagihanBelumDiproses: v }))} />
+                    </div>
                 </div>
             )}
-        </div>
+                </div>
+            </div>
+        </TabShell>
     );
+}
+
+// Kunci bulan 'YYYY-MM' dari baris progress mingguan ('Oktober 2026' + tahun, atau 'Oktober' + tahun).
+function mingguRowKey(row: { bulan?: string; tahun?: number }): string | undefined {
+    const name = (row.bulan || '').toLowerCase();
+    const m = BULAN_NAMA.findIndex(n => name.includes(n.toLowerCase()));
+    const y = Number(row.tahun) || Number((row.bulan || '').match(/\b(20\d{2})\b/)?.[1]);
+    return m >= 0 && y ? `${y}-${String(m + 1).padStart(2, '0')}` : undefined;
+}
+// Posisi progress terbaru: baris bulan paling akhir, minggu terakhir yang realisasinya terisi (cadangan: rencananya).
+function mingguLatest(list: ProgressMinggu[]): { key?: string; bulan: string; week: number; ra: number; ri: number } | undefined {
+    const sorted = [...list].sort((a, b) => (mingguRowKey(b) ?? '').localeCompare(mingguRowKey(a) ?? ''));
+    const row = sorted[0] as unknown as Record<string, number | string> | undefined;
+    if (!row) return undefined;
+    const val = (w: number, t: 'Ra' | 'Ri') => Number(row[`w${w}${t}`]) || 0;
+    let week = 0;
+    for (let w = 4; w >= 1 && !week; w--) if (val(w, 'Ri') > 0) week = w;
+    for (let w = 4; w >= 1 && !week; w--) if (val(w, 'Ra') > 0) week = w;
+    if (!week) return undefined;
+    const key = mingguRowKey(row as unknown as ProgressMinggu);
+    return { key, bulan: key ? periodeLabel(key) : String(row.bulan ?? ''), week, ra: val(week, 'Ra'), ri: val(week, 'Ri') };
+}
+// Nilai RA/RI yang sudah tersimpan untuk bulan + minggu tertentu (minggu 0..3), untuk mengisi form.
+function mingguPrefill(list: ProgressMinggu[], bulan: string, minggu: number): { ra: string; ri: string } {
+    const row = list.find(r => mingguRowKey(r) === bulan) as unknown as Record<string, number> | undefined;
+    const ra = row?.[`w${minggu + 1}Ra`];
+    const ri = row?.[`w${minggu + 1}Ri`];
+    return { ra: ra ? String(ra) : '', ri: ri ? String(ri) : '' };
 }
 
 // ── Operasi (Kinerja Operasi + Progress Mingguan W1-W4 + Milestone + Sumber Daya) ──────────
@@ -934,8 +1009,22 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
     const [editingMinggu, setEditingMinggu] = useState(false);
     const [mingguList, setMingguList] = useState<ProgressMinggu[]>(project.progressMinggu ?? []);
     const [savingMinggu, setSavingMinggu] = useState(false);
-
-    const reduceMotion = useReducedMotion();
+    // Progress "sampai dengan": PIC cukup mengisi satu posisi (bulan + minggu) berisi RA dan RI kumulatif, bukan tiap bulan.
+    const [sdBulan, setSdBulan] = useState(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    });
+    const [sdMinggu, setSdMinggu] = useState(() => Math.min(3, Math.floor((new Date().getDate() - 1) / 7)));
+    const [sdVal, setSdVal] = useState(() => {
+        const d = new Date();
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return mingguPrefill(project.progressMinggu ?? [], key, Math.min(3, Math.floor((d.getDate() - 1) / 7)));
+    });
+    const changeSdPeriod = (bulan: string, minggu: number) => {
+        setSdBulan(bulan);
+        setSdMinggu(minggu);
+        setSdVal(mingguPrefill(mingguList, bulan, minggu));
+    };
 
     // ── State untuk Milestone (reuse MilestonesTab logic) ──
     const [editingMs, setEditingMs] = useState(false);
@@ -956,11 +1045,11 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
             const puV = kinerjaForm.pu === '' ? null : Number(kinerjaForm.pu);
             const bkV = kinerjaForm.bk === '' ? null : Number(kinerjaForm.bk);
             await axios.patch(`/api/projects/${project._id}`, puLocked
-                ? { bk: bkV ?? undefined }   // PU dari laporan; server menghitung LK = PU − BK
+                ? { bk: bkV }   // PU dari laporan; server menghitung LK = PU − BK
                 : {
-                    pu: puV ?? undefined,
-                    bk: bkV ?? undefined,
-                    lk: (puV != null && bkV != null) ? puV - bkV : undefined,
+                    pu: puV,
+                    bk: bkV,
+                    lk: (puV != null && bkV != null) ? puV - bkV : null,
                 });
             toast.success('Kinerja Operasi tersimpan');
             setEditingKinerja(false);
@@ -969,17 +1058,39 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
         finally { setSavingKinerja(false); }
     };
 
-    const saveMinggu = async () => {
+    const saveMingguSd = async () => {
+        const ra = Number(sdVal.ra);
+        const ri = Number(sdVal.ri);
+        if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(sdBulan)) { toast.error('Pilih bulan progres'); return; }
+        if (sdVal.ra === '' || sdVal.ri === '' || !Number.isFinite(ra) || !Number.isFinite(ri) || ra < 0 || ra > 100 || ri < 0 || ri > 100) {
+            toast.error('RA dan RI harus berupa angka 0 sampai 100');
+            return;
+        }
+        const [y, m] = sdBulan.split('-').map(Number);
+        const n = sdMinggu + 1;
+        // Gabungkan ke riwayat: baris bulan yang sama diperbarui hanya pada minggu terpilih,
+        // bulan lain dipertahankan (tidak lagi menimpa seluruh array).
+        const namaBulan = BULAN_NAMA[m - 1];
+        const existing = mingguList.find(r => mingguRowKey(r) === sdBulan);
+        const base: Record<string, number | string> = existing
+            ? { ...(existing as unknown as Record<string, number | string>) }
+            : { bulan: namaBulan, tahun: y, w1Ra: 0, w1Ri: 0, w2Ra: 0, w2Ri: 0, w3Ra: 0, w3Ri: 0, w4Ra: 0, w4Ri: 0 };
+        base[`w${n}Ra`] = ra;
+        base[`w${n}Ri`] = ri;
+        const row = base as unknown as ProgressMinggu;
+        const list: ProgressMinggu[] = existing
+            ? mingguList.map(r => (mingguRowKey(r) === sdBulan ? row : r))
+            : [...mingguList, row];
         setSavingMinggu(true);
         try {
-            await axios.patch(`/api/projects/${project._id}`, { progressMinggu: mingguList });
+            await axios.patch(`/api/projects/${project._id}`, { progressMinggu: list });
             toast.success('Progress mingguan tersimpan');
+            setMingguList(list);
             setEditingMinggu(false);
             onSaved();
         } catch (err) { toast.error(saveErrorMessage(err)); }
         finally { setSavingMinggu(false); }
     };
-
     const saveMs = async () => {
         setSavingMs(true);
         try {
@@ -1022,31 +1133,29 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
         setMsList(a);
     };
 
-    const groupedSd = sumberDaya.reduce<Record<string, { item: SumberDaya; idx: number }[]>>((acc, sd, idx) => {
-        const key = (sd.kategori || '').trim() || 'Lainnya';
-        (acc[key] ||= []).push({ item: sd, idx });
-        return acc;
-    }, {});
-
     const lk = project.lk ?? ((project.pu ?? 0) - (project.bk ?? 0));
     const rugiKinerja = lk < 0;
     const marginKinerja = (project.pu && project.pu > 0) ? (lk / project.pu) * 100 : null;
 
     // W1-W4 visual chart helper
     const WEEKS = ['W1', 'W2', 'W3', 'W4'] as const;
-    type WKey = typeof WEEKS[number];
-    const getW = (row: ProgressMinggu, w: WKey, type: 'Ra' | 'Ri') => {
-        const key = `${w.toLowerCase()}${type}` as keyof ProgressMinggu;
-        return (row[key] as number) ?? 0;
-    };
+
+    const cardBtn = 'px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none';
+    const cellCls = 'w-full mt-1 px-2.5 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--div-accent)]';
+    const miniLabel = 'text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold';
+    const rowCard = 'p-2.5 rounded-xl bg-white/70 dark:bg-slate-950/40 border border-black/5 dark:border-white/5';
+    const cur = mingguLatest(mingguList);
 
     return (
-        <div className="space-y-8">
+        <TabShell scroll={false}>
+        <div className="flex flex-col gap-3 lg:h-full lg:grid lg:grid-cols-3 lg:grid-rows-2">
 
             {/* ── 1. KINERJA OPERASI PU / BK / LK ── */}
-            <div className="space-y-4">
+            <SectionCard className="lg:col-start-1 lg:row-start-1">
                 <SectionHeader
-                    title="Kinerja Operasi (PU / BK / LK)"
+                    compact
+                    title="Kinerja Operasi"
+                    stamp={stampOf(project, 'kinerja')}
                     isAdmin={isAdmin}
                     editing={editingKinerja}
                     onEdit={() => setEditingKinerja(true)}
@@ -1054,393 +1163,295 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                     onSave={saveKinerja}
                     saving={savingKinerja}
                 />
-                {puLocked && <DerivedNote what="PU (pendapatan s.d bulan ini)" periode={latestLap?.periode} onGo={isAdmin ? () => onGoTab('laporan') : undefined} />}
-                {!editingKinerja ? (
-                    (project.pu != null || project.bk != null || project.lk != null) ? (
-                        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-xs text-slate-500 dark:text-slate-400">Hasil kinerja operasi proyek periode berjalan.</span>
+                <div className="flex-1 min-h-0 flex flex-col gap-2 lg:overflow-hidden">
+                    {puLocked && (
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                            PU otomatis dari Laporan Bulanan{latestLap ? ` (${periodeLabel(latestLap.periode)})` : ''}.{' '}
+                            {isAdmin && <button type="button" onClick={() => onGoTab('laporan')} className="font-bold underline focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none rounded">Buka</button>}
+                        </p>
+                    )}
+                    {!editingKinerja ? (
+                        (project.pu != null || project.bk != null || project.lk != null) ? (
+                            <>
                                 {marginKinerja != null && (
-                                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${rugiKinerja ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
-                                        LK {marginKinerja.toFixed(1)}%
+                                    <span className={`self-start text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${rugiKinerja ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'}`}>
+                                        Margin LK {marginKinerja.toFixed(1)}%
                                     </span>
                                 )}
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="p-2 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center min-w-0" title={project.pu != null ? formatIDR(project.pu) : undefined}>
+                                        <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">PU</div>
+                                        <div className="text-sm font-black text-sky-700 dark:text-sky-400 font-mono truncate">{formatIDRShort(project.pu)}</div>
+                                    </div>
+                                    <div className="p-2 rounded-xl bg-rose-500/5 border border-rose-500/20 text-center min-w-0" title={project.bk != null ? formatIDR(project.bk) : undefined}>
+                                        <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">BK</div>
+                                        <div className="text-sm font-black text-rose-700 dark:text-rose-400 font-mono truncate">{formatIDRShort(project.bk)}</div>
+                                    </div>
+                                    <div className={`p-2 rounded-xl text-center border min-w-0 ${rugiKinerja ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`} title={formatIDR(lk)}>
+                                        <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">{rugiKinerja ? 'LK (Rugi)' : 'LK'}</div>
+                                        <div className={`text-sm font-black font-mono truncate ${rugiKinerja ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{formatIDRShort(lk)}</div>
+                                    </div>
+                                </div>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-400">PU pendapatan usaha · BK beban konstruksi · LK laba kotor (PU − BK)</p>
+                            </>
+                        ) : <EmptyState compact text="Belum ada data kinerja operasi." action={isAdmin ? { label: 'Isi sekarang', onClick: () => setEditingKinerja(true) } : undefined} />
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-2 gap-3">
+                                {puLocked
+                                    ? <MoneyCard label="PU (Laporan Bulanan)" value={project.pu} icon={CircleDollarSign} tone="bg-sky-500/10 border-sky-500/20 text-sky-400" />
+                                    : <MoneyInput label="PU: Pendapatan" value={kinerjaForm.pu} onChange={v => setKinerjaForm({ ...kinerjaForm, pu: v })} hint="Pendapatan usaha dari sisi operasi proyek (IDR)." />}
+                                <MoneyInput label="BK: Beban Konstruksi" value={kinerjaForm.bk} onChange={v => setKinerjaForm({ ...kinerjaForm, bk: v })} hint="Beban/biaya konstruksi operasi (IDR)." />
                             </div>
-                            <div className="grid grid-cols-1 min-[480px]:grid-cols-3 gap-3">
-                                <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center space-y-1">
-                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">PU</div>
-                                    <div className="text-base font-black text-sky-400 font-mono">{formatIDRShort(project.pu)}</div>
-                                    <div className="text-[11px] text-slate-500 font-mono break-all">{project.pu != null ? formatIDR(project.pu) : ''}</div>
-                                </div>
-                                <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/20 text-center space-y-1">
-                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">BK</div>
-                                    <div className="text-base font-black text-rose-400 font-mono">{formatIDRShort(project.bk)}</div>
-                                    <div className="text-[11px] text-slate-500 font-mono break-all">{project.bk != null ? formatIDR(project.bk) : ''}</div>
-                                </div>
-                                <div className={`p-4 rounded-xl text-center border space-y-1 ${rugiKinerja ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
-                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{rugiKinerja ? 'LK (Rugi)' : 'LK'}</div>
-                                    <div className={`text-base font-black font-mono ${rugiKinerja ? 'text-rose-400' : 'text-emerald-400'}`}>{formatIDRShort(lk)}</div>
-                                    <div className="text-[11px] text-slate-500 font-mono break-all">{formatIDR(lk)}</div>
-                                </div>
-                            </div>
-                            <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold border-t border-black/5 dark:border-white/5 pt-3">
-                                PU · Pendapatan Usaha &nbsp;·&nbsp; BK · Beban Konstruksi &nbsp;·&nbsp; LK · Laba Kotor
-                            </p>
-                        </div>
-                    ) : <EmptyState text="Belum ada data Kinerja Operasi (PU / BK / LK)." />
-                ) : (
-                    <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {puLocked
-                                ? <MoneyCard label="PU (dari Laporan Bulanan)" value={project.pu} icon={CircleDollarSign} tone="bg-sky-500/10 border-sky-500/20 text-sky-400" />
-                                : <MoneyInput label="PU: Pendapatan Usaha" value={kinerjaForm.pu} onChange={v => setKinerjaForm({ ...kinerjaForm, pu: v })} hint="Pendapatan usaha dari sisi operasi proyek (IDR)." />}
-                            <MoneyInput label="BK: Beban Konstruksi" value={kinerjaForm.bk} onChange={v => setKinerjaForm({ ...kinerjaForm, bk: v })} hint="Beban/biaya konstruksi operasi (IDR)." />
-                        </div>
-                        <p className="text-[11px] text-slate-500">LK (Laba Kotor) dihitung otomatis: {formatIDR(((puLocked ? project.pu : Number(kinerjaForm.pu)) || 0) - (Number(kinerjaForm.bk) || 0))}</p>
-                    </div>
-                )}
-            </div>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400">LK otomatis: {formatIDR(((puLocked ? project.pu : Number(kinerjaForm.pu)) || 0) - (Number(kinerjaForm.bk) || 0))}</p>
+                        </>
+                    )}
+                </div>
+            </SectionCard>
 
             {/* ── 2. PROGRESS MINGGUAN W1–W4 RA/RI ── */}
-            <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Mingguan (W1–W4) · RA / RI</h3>
+            <SectionCard className="lg:col-start-1 lg:row-start-2">
+                <div className="flex items-center justify-between gap-2 shrink-0">
+                    <div className="min-w-0">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Mingguan · RA / RI</h3>
+                        <UpdatedStamp stamp={stampOf(project, 'mingguan')} />
+                    </div>
                     {isAdmin && (editingMinggu ? (
                         <div className="flex gap-2">
-                            <button onClick={() => { setMingguList(project.progressMinggu ?? []); setEditingMinggu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveMinggu} disabled={savingMinggu} className="px-3 py-2 max-sm:min-h-11 max-sm:px-4 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={() => { setMingguList(project.progressMinggu ?? []); setEditingMinggu(false); }} className={cardBtn}><X className="w-3.5 h-3.5" /> Batal</button>
+                            <button onClick={saveMingguSd} disabled={savingMinggu} className="px-2.5 py-1.5 rounded-lg div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
+                                {savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan
+                            </button>
                         </div>
                     ) : (
-                        <div className="flex gap-2">
-                            <button onClick={() => setMingguList(s => [...s, { bulan: '', tahun: new Date().getFullYear(), w1Ra: 0, w1Ri: 0, w2Ra: 0, w2Ri: 0, w3Ra: 0, w3Ri: 0, w4Ra: 0, w4Ri: 0 }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Plus className="w-3.5 h-3.5" /> Tambah Bulan</button>
-                            <button onClick={() => setEditingMinggu(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
-                        </div>
+                        <button onClick={() => { setSdVal(mingguPrefill(mingguList, sdBulan, sdMinggu)); setEditingMinggu(true); }} className={cardBtn}><Pencil className="w-3.5 h-3.5" /> Isi progress s.d.</button>
                     ))}
                 </div>
-
-                {mingguList.length === 0 && !editingMinggu
-                    ? <EmptyState text={isAdmin ? "Belum ada data progress mingguan. Klik '+ Tambah Bulan' untuk mengisi." : "Belum ada data progress mingguan. Klik '+ Tambah Bulan' untuk mengisi. Belum diisi oleh PIC proyek."} action={isAdmin ? { label: "Isi sekarang", onClick: () => setEditingMinggu(true) } : undefined} />
-                    : editingMinggu ? (
-                        <div className="space-y-4">
-                            {mingguList.map((row, i) => (
-                                <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
-                                    <div className="flex items-center gap-3">
-                                        <input aria-label="Bulan (mis. Oktober 2026)" placeholder="Bulan (mis. Oktober 2026)" value={row.bulan} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], bulan: e.target.value }; setMingguList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <input aria-label="Tahun" type="number" placeholder="Tahun" value={row.tahun} onChange={e => { const a = [...mingguList]; a[i] = { ...a[i], tahun: Number(e.target.value) }; setMingguList(a); }} className="w-24 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <button onClick={() => setMingguList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                <div className="flex-1 min-h-0 flex flex-col gap-2 lg:overflow-hidden">
+                    {editingMinggu ? (
+                        <>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400">Isi posisi terakhir (sampai dengan). Menyimpan memperbarui minggu yang dipilih; bulan lain tidak berubah.</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label htmlFor="sd-bulan" className={miniLabel}>Progres s.d. bulan</label>
+                                    <input id="sd-bulan" type="month" min="2000-01" max="2099-12" value={sdBulan} onChange={e => { if (/^20\d{2}-\d{2}$/.test(e.target.value)) changeSdPeriod(e.target.value, sdMinggu); }} className={cellCls} />
+                                </div>
+                                <div>
+                                    <label htmlFor="sd-minggu" className={miniLabel}>Minggu ke-</label>
+                                    <select id="sd-minggu" value={sdMinggu} onChange={e => changeSdPeriod(sdBulan, Number(e.target.value))} className={cellCls}>
+                                        {WEEKS.map((w, i) => <option key={w} value={i} className="bg-white dark:bg-slate-900">{w}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="sd-ra" className={miniLabel}>RA, rencana (%)</label>
+                                    <input id="sd-ra" type="number" inputMode="decimal" min={0} max={100} step={0.01} value={sdVal.ra} onChange={e => setSdVal(v => ({ ...v, ra: e.target.value }))} className={cellCls} />
+                                </div>
+                                <div>
+                                    <label htmlFor="sd-ri" className={miniLabel}>RI, realisasi (%)</label>
+                                    <input id="sd-ri" type="number" inputMode="decimal" min={0} max={100} step={0.01} value={sdVal.ri} onChange={e => setSdVal(v => ({ ...v, ri: e.target.value }))} className={cellCls} />
+                                </div>
+                            </div>
+                            {sdVal.ra !== '' && sdVal.ri !== '' && Number.isFinite(Number(sdVal.ra)) && Number.isFinite(Number(sdVal.ri)) && (
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[11px] text-slate-600 dark:text-slate-400">Deviasi (RI − RA)</span>
+                                    <span className={`text-sm font-bold font-mono ${Number(sdVal.ri) - Number(sdVal.ra) >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                                        {Number(sdVal.ri) - Number(sdVal.ra) >= 0 ? '+' : ''}{(Number(sdVal.ri) - Number(sdVal.ra)).toFixed(2)}%
+                                    </span>
+                                </div>
+                            )}
+                        </>
+                    ) : !cur ? (
+                        <EmptyState compact text="Belum ada data progress mingguan." action={isAdmin ? { label: 'Isi sekarang', onClick: () => { setSdVal(mingguPrefill(mingguList, sdBulan, sdMinggu)); setEditingMinggu(true); } } : undefined} />
+                    ) : (() => {
+                        const dev = cur.ri - cur.ra;
+                        const bar = (label: string, v: number, cls: string) => (
+                            <div>
+                                <div className="flex justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300"><span>{label}</span><span className="font-mono">{v.toFixed(2)}%</span></div>
+                                <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden mt-1"><div className={`h-full rounded-full ${cls}`} style={{ width: `${Math.min(Math.max(v, 0), 100)}%` }} /></div>
+                            </div>
+                        );
+                        return (
+                            <>
+                                <div className="text-xs font-bold text-slate-900 dark:text-white">Progress s.d. W{cur.week} <span className="font-mono font-normal text-slate-600 dark:text-slate-400">· {cur.bulan}</span></div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="p-2 rounded-xl bg-sky-500/5 border border-sky-500/20 text-center">
+                                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">RA</div>
+                                        <div className="text-sm font-black font-mono text-sky-700 dark:text-sky-400">{cur.ra.toFixed(2)}%</div>
                                     </div>
-                                    <div className="grid grid-cols-2 min-[480px]:grid-cols-4 gap-2">
-                                        {WEEKS.map(w => (
-                                            <div key={w} className="space-y-2">
-                                                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
-                                                <div className="space-y-1">
-                                                    <div>
-                                                        <label className="text-[11px] text-sky-400 font-bold uppercase">RA (%)</label>
-                                                        <input aria-label="Rencana (Ra) minggu" type="number" min={0} max={100} step={0.01} value={getW(row, w, 'Ra')} onChange={e => { const a = [...mingguList]; (a[i] as unknown as Record<string, number>)[`${w.toLowerCase()}Ra`] = Number(e.target.value); setMingguList(a); }} className="w-full mt-0.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-sky-500/20 text-slate-900 dark:text-white text-xs outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-sky-500/50" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[11px] text-amber-400 font-bold uppercase">RI (%)</label>
-                                                        <input aria-label="Realisasi (Ri) minggu" type="number" min={0} max={100} step={0.01} value={getW(row, w, 'Ri')} onChange={e => { const a = [...mingguList]; (a[i] as unknown as Record<string, number>)[`${w.toLowerCase()}Ri`] = Number(e.target.value); setMingguList(a); }} className="w-full mt-0.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-amber-500/20 text-slate-900 dark:text-white text-xs outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-amber-500/50" />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
+                                    <div className="p-2 rounded-xl bg-amber-500/5 border border-amber-500/20 text-center">
+                                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">RI</div>
+                                        <div className="text-sm font-black font-mono text-amber-700 dark:text-amber-400">{cur.ri.toFixed(2)}%</div>
+                                    </div>
+                                    <div className={`p-2 rounded-xl border text-center ${dev >= 0 ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
+                                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Deviasi</div>
+                                        <div className={`text-sm font-black font-mono ${dev >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{dev >= 0 ? '+' : ''}{dev.toFixed(2)}</div>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {mingguList.map((row, i) => (
-                                <div key={i} className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-900 dark:text-white">{row.bulan || `Bulan ${i+1}`}</div>
-                                            {row.tahun && <div className="text-[11px] text-slate-500 font-mono">Tahun {row.tahun}</div>}
-                                        </div>
-                                        <div className="flex gap-2 text-[11px] font-bold">
-                                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-400" /> RA (Rencana)</span>
-                                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" /> RI (Realisasi)</span>
-                                        </div>
-                                    </div>
-                                    {/* Bar chart visual */}
-                                    <div className="grid grid-cols-4 gap-3">
-                                        {WEEKS.map(w => {
-                                            const ra = getW(row, w, 'Ra');
-                                            const ri = getW(row, w, 'Ri');
-                                            const ahead = ri >= ra;
-                                            const deviasi = ri - ra;
-                                            return (
-                                                <div key={w} className="space-y-2">
-                                                    <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 text-center">{w}</div>
-                                                    {/* Visual stacked bar */}
-                                                    <div className="relative h-20 rounded-xl bg-black/[0.04] dark:bg-white/[0.04] border border-black/5 dark:border-white/5 overflow-hidden flex flex-col justify-end">
-                                                        {/* RA bar */}
-                                                        <div
-                                                            className="absolute bottom-0 left-0 right-0 bg-sky-500/20 border-t border-sky-500/40 transition-all duration-700"
-                                                            style={{ height: `${Math.min(ra, 100)}%` }}
-                                                        />
-                                                        {/* RI bar */}
-                                                        <motion.div
-                                                            className={`absolute bottom-0 left-0 w-1/2 transition-all duration-700 ${ahead ? 'bg-emerald-500/60' : 'bg-rose-500/60'}`}
-                                                            initial={{ height: 0 }}
-                                                            animate={{ height: `${Math.min(ri, 100)}%` }}
-                                                            transition={{ duration: 0.8, ease: 'easeOut', delay: 0.1 }}
-                                                        />
-                                                    </div>
-                                                    <div className="text-center space-y-0.5">
-                                                        <div className="text-[11px] text-sky-400 font-mono font-bold">{ra.toFixed(1)}%</div>
-                                                        <div className={`text-[11px] font-mono font-bold ${ahead ? 'text-emerald-400' : 'text-rose-400'}`}>{ri.toFixed(1)}%</div>
-                                                        <div className={`text-[11px] font-bold ${ahead ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                                            {deviasi >= 0 ? '+' : ''}{deviasi.toFixed(1)}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                    {/* Tabel ringkas */}
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-xs border-collapse">
-                                            <thead>
-                                                <tr className="border-b border-black/5 dark:border-white/5">
-                                                    <th className="py-1.5 px-2 text-left text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Minggu</th>
-                                                    <th className="py-1.5 px-2 text-center text-[11px] font-bold uppercase tracking-wider text-sky-400">RA (%)</th>
-                                                    <th className="py-1.5 px-2 text-center text-[11px] font-bold uppercase tracking-wider text-amber-400">RI (%)</th>
-                                                    <th className="py-1.5 px-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Deviasi</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {WEEKS.map(w => {
-                                                    const ra = getW(row, w, 'Ra');
-                                                    const ri = getW(row, w, 'Ri');
-                                                    const dev = ri - ra;
-                                                    return (
-                                                        <tr key={w} className="border-b border-black/[0.04] dark:border-white/[0.04] hover:bg-black/[0.02] dark:hover:bg-white/[0.02]">
-                                                            <td className="py-1.5 px-2 font-bold text-slate-700 dark:text-slate-200">{w}</td>
-                                                            <td className="py-1.5 px-2 text-center font-mono text-sky-400 font-bold">{ra.toFixed(2)}</td>
-                                                            <td className="py-1.5 px-2 text-center font-mono text-amber-400 font-bold">{ri.toFixed(2)}</td>
-                                                            <td className={`py-1.5 px-2 text-center font-mono font-bold ${dev >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{dev >= 0 ? '+' : ''}{dev.toFixed(2)}</td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                <div className="space-y-2">
+                                    {bar('RA (Rencana)', cur.ra, 'bg-sky-500')}
+                                    {bar('RI (Realisasi)', cur.ri, dev >= 0 ? 'bg-emerald-500' : 'bg-rose-500')}
                                 </div>
-                            ))}
-                        </div>
-                    )
-                }
-            </div>
+                            </>
+                        );
+                    })()}
+                </div>
+            </SectionCard>
 
-            {/* ── 3. MILESTONE ── */}
-            <div className="space-y-4">
-                <SectionHeader title="Milestone" isAdmin={isAdmin} editing={editingMs} onEdit={() => setEditingMs(true)} onCancel={() => { setMsList(project.milestones ?? []); setEditingMs(false); }} onSave={saveMs} saving={savingMs} />
-
-                {msList.length > 0 && (
-                    <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                        <div className="flex justify-between items-center mb-2 text-xs">
-                            <span className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Progress Keseluruhan</span>
-                            <span className="text-slate-900 dark:text-white font-bold">{overallMs.toFixed(0)}%</span>
-                        </div>
-                        <div className="h-2.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                            <div className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-emerald-500 transition-all duration-500" style={{ width: `${overallMs}%` }} />
-                        </div>
-                    </div>
-                )}
-
-                {editingMs && (
-                    <button onClick={() => setMsList(s => [...s, { title: '', done: false, progress: 0 }])} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
-                        <Plus className="w-3.5 h-3.5" /> Tambah Milestone
-                    </button>
-                )}
-
-                {msList.length === 0 && !editingMs
-                    ? <EmptyState text={isAdmin ? "Belum ada milestone." : "Belum ada milestone. Belum diisi oleh PIC proyek."} action={isAdmin ? { label: "Isi sekarang", onClick: () => setEditingMs(true) } : undefined} />
-                    : editingMs
-                    ? (
-                        <div className="space-y-3">
-                            {msList.map((m, i) => (
-                                <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
-                                    <div className="flex gap-2 items-center">
-                                        <input aria-label="Judul milestone" placeholder="Judul milestone" value={m.title} onChange={e => { const a = [...msList]; a[i] = { ...a[i], title: e.target.value }; setMsList(a); }} className="flex-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <input aria-label="Tanggal milestone" type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...msList]; a[i] = { ...a[i], date: e.target.value }; setMsList(a); }} className="px-2.5 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-xs outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <button onClick={() => setMsList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-16 shrink-0">Progress</span>
-                                        <input aria-label="Progres milestone (slider)" type="range" min={0} max={100} step={1} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="flex-1 accent-[var(--div-accent)]" />
-                                        <input aria-label="Progres milestone (persen)" type="number" min={0} max={100} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        <span className="text-sm font-black div-accent-text w-6">%</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="space-y-2.5">
-                            {msList.map((m, i) => {
-                                const p = progMs(m);
-                                const complete = p >= 100;
-                                return (
-                                    <motion.div
-                                        key={i}
-                                        initial={reduceMotion ? false : { opacity: 0, y: 12 }}
-                                        whileInView={{ opacity: 1, y: 0 }}
-                                        viewport={{ once: true, margin: '0px 0px -40px 0px' }}
-                                        transition={{ duration: 0.4, delay: Math.min(i, 6) * 0.06, ease: [0.23, 1, 0.32, 1] }}
-                                        className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5"
-                                    >
-                                        <div className="flex items-center gap-3 mb-2.5">
-                                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${complete ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-black/[0.04] dark:bg-white/5 text-slate-500 border border-black/10 dark:border-white/10'}`}>
-                                                {complete ? <Check className="w-4 h-4" /> : <span className="text-xs font-black">{i + 1}</span>}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className={`text-sm font-bold ${complete ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{m.title || '-'}</div>
-                                                {m.date && <div className="text-[11px] text-slate-500">{formatDate(typeof m.date === 'string' ? m.date : undefined)}</div>}
-                                            </div>
-                                            <span className={`text-sm font-black font-mono shrink-0 ${complete ? 'text-emerald-400' : 'text-yellow-400'}`}>{p}%</span>
-                                        </div>
-                                        <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                                            <motion.div
-                                                className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`}
-                                                initial={reduceMotion ? false : { width: 0 }}
-                                                whileInView={{ width: `${p}%` }}
-                                                viewport={{ once: true }}
-                                                transition={{ duration: 0.9, delay: 0.15 + Math.min(i, 6) * 0.06, ease: [0.23, 1, 0.32, 1] }}
-                                            />
-                                        </div>
-                                    </motion.div>
-                                );
-                            })}
-                        </div>
-                    )
-                }
-            </div>
-
-            {/* ── 4. SUMBER DAYA ── */}
-            <div className="space-y-4">
-                <SectionHeader title="Sumber Daya" isAdmin={isAdmin} editing={editingSd} onEdit={() => setEditingSd(true)} onCancel={() => { setSumberDaya(project.sumberDaya ?? []); setEditingSd(false); }} onSave={saveSd} saving={savingSd} />
-
+            {/* ── 3. SUMBER DAYA ── */}
+            <SectionCard className="lg:col-start-2 lg:row-start-1 lg:row-span-2">
+                <SectionHeader compact title="Sumber Daya" isAdmin={isAdmin} editing={editingSd} onEdit={() => setEditingSd(true)} onCancel={() => { setSumberDaya(project.sumberDaya ?? []); setEditingSd(false); }} onSave={saveSd} saving={savingSd} stamp={stampOf(project, 'sumberDaya')} />
                 {editingSd && (
-                    <button onClick={() => setSumberDaya(s => [...s, { namaAlat: '', jumlah: 0, kategori: '', satuan: 'Unit' }])}
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                    <button onClick={() => setSumberDaya(s => [...s, { namaAlat: '', jumlah: 0, kategori: '', satuan: 'Unit' }])} className={`${cardBtn} self-start`}>
                         <Plus className="w-3.5 h-3.5" /> Tambah Sumber Daya
                     </button>
                 )}
-
-                {sumberDaya.length === 0 && !editingSd
-                    ? <EmptyState text={isAdmin ? "Belum ada data sumber daya." : "Belum ada data sumber daya. Belum diisi oleh PIC proyek."} action={isAdmin ? { label: "Isi sekarang", onClick: () => setEditingSd(true) } : undefined} />
-                    : editingSd
-                    ? (
-                        <div className="space-y-2">
-                            {sumberDaya.map((sd, i) => (
-                                <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                                    <div className="sm:col-span-4">
-                                        <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Nama</label>
-                                        <input aria-label="mis. Excavator, Tukang, Besi Beton" placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    </div>
-                                    <div className="sm:col-span-3">
-                                        <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Kategori</label>
-                                        <input aria-label="Alat Berat / Tenaga Kerja / Material" list="sd-kategori-op" placeholder="Alat Berat / Tenaga Kerja / Material" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    </div>
-                                    <div className="sm:col-span-2">
-                                        <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Jumlah</label>
-                                        <input aria-label="Jumlah" type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    </div>
-                                    <div className="sm:col-span-2">
-                                        <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Satuan</label>
-                                        <input aria-label="Unit / Orang / m³" list="sd-satuan-op" placeholder="Unit / Orang / m³" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    </div>
-                                    <div className="sm:col-span-1 flex sm:justify-center">
-                                        <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
-                                    </div>
-                                </div>
-                            ))}
-                            <datalist id="sd-kategori-op">
-                                <option value="Alat Berat" /><option value="Tenaga Kerja" /><option value="Material" /><option value="Kendaraan" /><option value="Peralatan" />
-                            </datalist>
-                            <datalist id="sd-satuan-op">
-                                <option value="Unit" /><option value="Orang" /><option value="m³" /><option value="Ton" /><option value="Set" /><option value="Buah" />
-                            </datalist>
+                <Paged
+                    items={sumberDaya}
+                    itemH={editingSd ? 140 : 80}
+                    cols={editingSd ? 1 : 2}
+                    empty={<EmptyState compact text="Belum ada data sumber daya." action={isAdmin ? { label: 'Isi sekarang', onClick: () => setEditingSd(true) } : undefined} />}
+                    render={(sd, i) => editingSd ? (
+                        <div key={i} className={`${rowCard} grid grid-cols-12 gap-2 items-end`}>
+                            <div className="col-span-12">
+                                <label className={miniLabel}>Nama</label>
+                                <input aria-label="Nama sumber daya" placeholder="mis. Excavator, Tukang, Besi Beton" value={sd.namaAlat} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], namaAlat: e.target.value }; setSumberDaya(a); }} className={cellCls} />
+                            </div>
+                            <div className="col-span-4">
+                                <label className={miniLabel}>Kategori</label>
+                                <input aria-label="Kategori" list="sd-kategori-op" placeholder="Alat Berat…" value={sd.kategori ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], kategori: e.target.value }; setSumberDaya(a); }} className={cellCls} />
+                            </div>
+                            <div className="col-span-3">
+                                <label className={miniLabel}>Jumlah</label>
+                                <input aria-label="Jumlah" type="number" min={0} value={sd.jumlah} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], jumlah: Math.max(0, Number(e.target.value)) }; setSumberDaya(a); }} className={cellCls} />
+                            </div>
+                            <div className="col-span-3">
+                                <label className={miniLabel}>Satuan</label>
+                                <input aria-label="Satuan" list="sd-satuan-op" placeholder="Unit" value={sd.satuan ?? ''} onChange={e => { const a = [...sumberDaya]; a[i] = { ...a[i], satuan: e.target.value }; setSumberDaya(a); }} className={cellCls} />
+                            </div>
+                            <div className="col-span-2 flex justify-end">
+                                <button onClick={() => setSumberDaya(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                            </div>
                         </div>
                     ) : (
-                        <div className="space-y-5">
-                            {Object.entries(groupedSd).map(([kategori, items]) => (
-                                <div key={kategori}>
-                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">{kategori}</h3>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                                        {items.map(({ item: sd }, i) => (
-                                            <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 text-center">
-                                                <div className={`text-3xl font-black mb-1 ${sd.jumlah > 0 ? 'div-accent-text' : 'text-slate-600'}`}>{sd.jumlah}</div>
-                                                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{sd.namaAlat || '-'}</div>
-                                                <div className="text-[11px] text-slate-600 uppercase tracking-wider">{sd.satuan || 'Unit'}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
+                        <div key={i} className={`${rowCard} text-center min-w-0`}>
+                            <div className={`text-xl font-black leading-none ${sd.jumlah > 0 ? 'div-accent-text' : 'text-slate-600 dark:text-slate-400'}`}>{sd.jumlah} <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{sd.satuan || 'Unit'}</span></div>
+                            <div className="text-[11px] text-slate-700 dark:text-slate-300 font-medium truncate mt-1" title={sd.namaAlat}>{sd.namaAlat || '-'}</div>
+                            <div className="text-[11px] text-slate-600 dark:text-slate-400 uppercase tracking-wider truncate">{(sd.kategori || '').trim() || 'Lainnya'}</div>
                         </div>
-                    )
-                }
-
-                {/* Monitoring Pengadaan */}
-                <div className="pt-6 mt-2 border-t border-black/5 dark:border-white/5">
-                    <SectionHeader title="Monitoring Pengadaan" isAdmin={isAdmin} editing={editingMon} onEdit={() => setEditingMon(true)} onCancel={() => { setMonitoring(project.monitoringPengadaan ?? []); setEditingMon(false); }} onSave={saveMonitoring} saving={savingMon} />
-                    <p className="text-[11px] text-slate-500">Progres per item major. Jumlah paket dan pagu pengadaan keseluruhan diisi di <button type="button" onClick={() => onGoTab('laporan')} className="font-bold underline focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none rounded">Laporan Bulanan</button>.</p>
-                    <p className="text-xs text-slate-500 -mt-2 mb-3">Major item pengadaan beserta persentase progresnya.</p>
-
-                    {editingMon && (
-                        <button onClick={() => setMonitoring(s => [...s, { nama: '', persentase: 0 }])}
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold mb-3 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
-                            <Plus className="w-3.5 h-3.5" /> Tambah Item
-                        </button>
                     )}
+                />
+                <datalist id="sd-kategori-op">
+                    <option value="Alat Berat" /><option value="Tenaga Kerja" /><option value="Material" /><option value="Kendaraan" /><option value="Peralatan" />
+                </datalist>
+                <datalist id="sd-satuan-op">
+                    <option value="Unit" /><option value="Orang" /><option value="m³" /><option value="Ton" /><option value="Set" /><option value="Buah" />
+                </datalist>
+            </SectionCard>
 
-                    {monitoring.length === 0 && !editingMon
-                        ? <EmptyState text={isAdmin ? "Belum ada data monitoring pengadaan." : "Belum ada data monitoring pengadaan. Belum diisi oleh PIC proyek."} action={isAdmin ? { label: "Isi sekarang", onClick: () => setEditingMon(true) } : undefined} />
-                        : editingMon
-                        ? (
-                            <div className="space-y-2">
-                                {monitoring.map((mp, i) => (
-                                    <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                                        <div className="sm:col-span-8">
-                                            <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Nama Item</label>
-                                            <input aria-label="mis. Pengadaan Besi Beton" placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        </div>
-                                        <div className="sm:col-span-3">
-                                            <label className="text-[11px] text-slate-600 dark:text-slate-400 uppercase font-bold">Persentase (%)</label>
-                                            <input type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className="w-full mt-1 px-3 py-2 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                        </div>
-                                        <div className="sm:col-span-1 flex sm:justify-center">
-                                            <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
-                                        </div>
+            {/* ── 4. MILESTONE ── */}
+            <SectionCard className="lg:col-start-3 lg:row-start-1">
+                <SectionHeader compact title="Milestone" isAdmin={isAdmin} editing={editingMs} onEdit={() => setEditingMs(true)} onCancel={() => { setMsList(project.milestones ?? []); setEditingMs(false); }} onSave={saveMs} saving={savingMs} stamp={stampOf(project, 'milestone')} />
+                {msList.length > 0 && (
+                    <div className="shrink-0 flex items-center gap-2 text-[11px]">
+                        <span className="text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider">Keseluruhan</span>
+                        <div className="flex-1 h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-emerald-500" style={{ width: `${overallMs}%` }} />
+                        </div>
+                        <span className="text-slate-900 dark:text-white font-bold font-mono">{overallMs.toFixed(0)}%</span>
+                    </div>
+                )}
+                {editingMs && (
+                    <button onClick={() => setMsList(s => [...s, { title: '', done: false, progress: 0 }])} className={`${cardBtn} self-start`}>
+                        <Plus className="w-3.5 h-3.5" /> Tambah Milestone
+                    </button>
+                )}
+                <Paged
+                    items={msList}
+                    itemH={editingMs ? 100 : 68}
+                    empty={<EmptyState compact text="Belum ada milestone." action={isAdmin ? { label: 'Isi sekarang', onClick: () => setEditingMs(true) } : undefined} />}
+                    render={(m, i) => editingMs ? (
+                        <div key={i} className={`${rowCard} space-y-2`}>
+                            <div className="flex gap-2 items-center">
+                                <input aria-label="Judul milestone" placeholder="Judul milestone" value={m.title} onChange={e => { const a = [...msList]; a[i] = { ...a[i], title: e.target.value }; setMsList(a); }} className={`${cellCls} !mt-0 flex-1 min-w-0`} />
+                                <input aria-label="Tanggal milestone" type="date" value={typeof m.date === 'string' ? m.date.slice(0, 10) : ''} onChange={e => { const a = [...msList]; a[i] = { ...a[i], date: e.target.value }; setMsList(a); }} className={`${cellCls} !mt-0 !w-32 shrink-0 text-xs`} />
+                                <button onClick={() => setMsList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 shrink-0 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input aria-label="Progres milestone (slider)" type="range" min={0} max={100} step={1} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="flex-1 accent-[var(--div-accent)]" />
+                                <input aria-label="Progres milestone (persen)" type="number" min={0} max={100} value={progMs(m)} onChange={e => setProgressMs(i, Number(e.target.value))} className="w-14 px-1.5 py-1 rounded-lg bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center outline-none focus-visible:ring-2 focus-visible:ring-[var(--div-accent)]" />
+                                <span className="text-sm font-black div-accent-text">%</span>
+                            </div>
+                        </div>
+                    ) : (() => {
+                        const p = progMs(m);
+                        const complete = p >= 100;
+                        return (
+                            <div key={i} className={rowCard}>
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[11px] font-black ${complete ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : 'bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-400 border border-black/10 dark:border-white/10'}`}>
+                                        {complete ? <Check className="w-3.5 h-3.5" /> : i + 1}
                                     </div>
-                                ))}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-bold text-slate-900 dark:text-white truncate" title={m.title}>{m.title || '-'}</div>
+                                        {m.date && <div className="text-[11px] text-slate-600 dark:text-slate-400">{formatDate(typeof m.date === 'string' ? m.date : undefined)}</div>}
+                                    </div>
+                                    <span className={`text-xs font-black font-mono shrink-0 ${complete ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-yellow-400'}`}>{p}%</span>
+                                </div>
+                                <div className="h-1.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden mt-1.5">
+                                    <div className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`} style={{ width: `${p}%` }} />
+                                </div>
                             </div>
-                        ) : (
-                            <div className="space-y-2.5">
-                                {monitoring.map((mp, i) => {
-                                    const p = Math.max(0, Math.min(100, mp.persentase ?? 0));
-                                    const done = p >= 100;
-                                    return (
-                                        <div key={i} className="p-3.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-2">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 min-w-0 truncate">{mp.nama || '-'}</span>
-                                                <span className={`text-xs font-black font-mono shrink-0 ${done ? 'text-emerald-400' : 'text-yellow-400'}`}>{p}%</span>
-                                            </div>
-                                            <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                                                <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`} style={{ width: `${p}%` }} />
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                        );
+                    })()}
+                />
+            </SectionCard>
+
+            {/* ── 5. MONITORING PENGADAAN ── */}
+            <SectionCard className="lg:col-start-3 lg:row-start-2">
+                <SectionHeader compact title="Monitoring Pengadaan" isAdmin={isAdmin} editing={editingMon} onEdit={() => setEditingMon(true)} onCancel={() => { setMonitoring(project.monitoringPengadaan ?? []); setEditingMon(false); }} onSave={saveMonitoring} saving={savingMon} stamp={stampOf(project, 'monitoring')} />
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 shrink-0">Progres per item major. Jumlah paket dan pagu keseluruhan diisi di <button type="button" onClick={() => onGoTab('laporan')} className="font-bold underline focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none rounded">Laporan Bulanan</button>.</p>
+                {editingMon && (
+                    <button onClick={() => setMonitoring(s => [...s, { nama: '', persentase: 0 }])} className={`${cardBtn} self-start`}>
+                        <Plus className="w-3.5 h-3.5" /> Tambah Item
+                    </button>
+                )}
+                <Paged
+                    items={monitoring}
+                    itemH={editingMon ? 66 : 56}
+                    empty={<EmptyState compact text="Belum ada data monitoring pengadaan." action={isAdmin ? { label: 'Isi sekarang', onClick: () => setEditingMon(true) } : undefined} />}
+                    render={(mp, i) => editingMon ? (
+                        <div key={i} className={`${rowCard} grid grid-cols-12 gap-2 items-end`}>
+                            <div className="col-span-8">
+                                <label className={miniLabel}>Nama Item</label>
+                                <input aria-label="Nama item" placeholder="mis. Pengadaan Besi Beton" value={mp.nama} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], nama: e.target.value }; setMonitoring(a); }} className={cellCls} />
                             </div>
-                        )
-                    }
-                </div>
-            </div>
+                            <div className="col-span-3">
+                                <label className={miniLabel}>%</label>
+                                <input aria-label="Persentase" type="number" min={0} max={100} value={mp.persentase} onChange={e => { const a = [...monitoring]; a[i] = { ...a[i], persentase: Math.max(0, Math.min(100, Number(e.target.value))) }; setMonitoring(a); }} className={cellCls} />
+                            </div>
+                            <div className="col-span-1 flex justify-end">
+                                <button onClick={() => setMonitoring(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                            </div>
+                        </div>
+                    ) : (() => {
+                        const p = Math.max(0, Math.min(100, mp.persentase ?? 0));
+                        const done = p >= 100;
+                        return (
+                            <div key={i} className={rowCard}>
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 min-w-0 truncate" title={mp.nama}>{mp.nama || '-'}</span>
+                                    <span className={`text-xs font-black font-mono shrink-0 ${done ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-yellow-400'}`}>{p}%</span>
+                                </div>
+                                <div className="h-1.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden mt-1.5">
+                                    <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-gradient-to-r from-yellow-500 to-amber-400'}`} style={{ width: `${p}%` }} />
+                                </div>
+                            </div>
+                        );
+                    })()}
+                />
+            </SectionCard>
         </div>
+        </TabShell>
     );
 }
 
@@ -1462,110 +1473,126 @@ function ChangeManagementTab({ project, isAdmin, onSaved }: { project: Project; 
         catch (err) { toast.error(saveErrorMessage(err)); } finally { setSaving(false); }
     };
 
+    const rowLabel = 'text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400';
+    const addBtn = 'px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none';
+    const upd = (i: number, patch: Partial<ChangeManagement>) => setList(l => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+
     return (
-        <div className="space-y-4">
-            <SectionHeader title="Change Management" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setList(project.changeManagement ?? []); setEditing(false); }} onSave={save} saving={saving} />
-            <p className="text-xs text-slate-500 -mt-2">Daftar perubahan lingkup/kontrak. Kendala dapat dimasukkan ke sini dari tab Isu &amp; Kendala.</p>
-
-            {editing && (
-                <button onClick={() => setList(s => [...s, { judul: '', status: 'USULAN' }])} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
-                    <Plus className="w-3.5 h-3.5" /> Tambah Perubahan
-                </button>
-            )}
-
-            {list.length === 0 && !editing
-                ? <EmptyState text={isAdmin ? "Belum ada change management." : "Belum ada change management. Belum diisi oleh PIC proyek."} action={isAdmin ? { label: "Isi sekarang", onClick: () => setEditing(true) } : undefined} />
-                : editing
-                ? (
-                    <div className="space-y-3">
-                        {list.map((cm, i) => (
-                            <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-2">
-                                <Input label="Judul Perubahan" value={cm.judul} onChange={v => { const a = [...list]; a[i] = { ...a[i], judul: v }; setList(a); }} />
-                                <Select label="Jenis" value={cm.jenis ?? 'LAINNYA'} onChange={v => { const a = [...list]; a[i] = { ...a[i], jenis: v as ChangeJenis }; setList(a); }} options={CHANGE_JENIS_OPTIONS.map(o => [o.value, o.label])} />
-                                <Textarea label="Deskripsi / Latar Belakang" value={cm.deskripsi ?? ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], deskripsi: v }; setList(a); }} />
-                                <Textarea label="Dampak Perubahan (biaya / waktu / mutu)" value={cm.dampak ?? ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], dampak: v }; setList(a); }} />
-                                <Textarea label="Mitigasi (langkah penanganan dampak)" value={cm.mitigasi ?? ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], mitigasi: v }; setList(a); }} />
-                                <div className="grid sm:grid-cols-2 gap-2">
-                                    <Input label="Nilai Perubahan (Rp)" type="number" value={cm.nilai?.toString() ?? ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], nilai: v === '' ? undefined : Number(v) }; setList(a); }} />
-                                    <Input label="Tanggal" type="date" value={typeof cm.tanggal === 'string' ? cm.tanggal.slice(0, 10) : ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], tanggal: v }; setList(a); }} />
-                                    <Input label="Target Implementasi" value={cm.target ?? ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], target: v }; setList(a); }} />
-                                    <Input label="PIC" value={cm.pic ?? ''} onChange={v => { const a = [...list]; a[i] = { ...a[i], pic: v }; setList(a); }} />
-                                    <div className="sm:col-span-2">
-                                        <Select label="Status" value={cm.status} onChange={v => { const a = [...list]; a[i] = { ...a[i], status: v as ChangeManagement['status'] }; setList(a); }} options={[['USULAN', 'USULAN'], ['DISETUJUI', 'DISETUJUI'], ['DITOLAK', 'DITOLAK']]} />
-                                    </div>
+        <TabShell scroll={false}>
+        <SectionCard className="lg:h-full">
+            <SectionHeader title="Change Management" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setList(project.changeManagement ?? []); setEditing(false); }} onSave={save} saving={saving} stamp={stampOf(project, 'changeMgmt')} compact />
+            <div className="flex items-center justify-between gap-2 shrink-0">
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">Daftar perubahan lingkup/kontrak. Kendala dapat dimasukkan ke sini dari tab Isu &amp; Kendala.</p>
+                {editing && (
+                    <button onClick={() => setList(s => [...s, { judul: '', status: 'USULAN' }])} className={`${addBtn} shrink-0`}>
+                        <Plus className="w-3.5 h-3.5" /> Tambah Perubahan
+                    </button>
+                )}
+            </div>
+            <Paged
+                items={list}
+                itemH={editing ? 400 : 226}
+                cols={editing ? 1 : 2}
+                fixed={!editing}
+                empty={<EmptyState compact text="Belum ada change management." action={isAdmin ? { label: 'Isi sekarang', onClick: () => setEditing(true) } : undefined} />}
+                render={(cm, i) => editing ? (
+                    <div className="p-3 rounded-xl bg-white/70 dark:bg-slate-950/40 border border-black/5 dark:border-white/5">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className={rowLabel}>Perubahan #{i + 1}</span>
+                            <button onClick={() => setList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none rounded"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
+                        </div>
+                        <div className="grid lg:grid-cols-2 gap-x-3 gap-y-1">
+                            <div className="space-y-1">
+                                <Input label="Judul Perubahan" required value={cm.judul} onChange={v => upd(i, { judul: v })} />
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Select label="Jenis" value={cm.jenis ?? 'LAINNYA'} onChange={v => upd(i, { jenis: v as ChangeJenis })} options={CHANGE_JENIS_OPTIONS.map(o => [o.value, o.label])} />
+                                    <Select label="Status" value={cm.status} onChange={v => upd(i, { status: v as ChangeManagement['status'] })} options={[['USULAN', 'USULAN'], ['DISETUJUI', 'DISETUJUI'], ['DITOLAK', 'DITOLAK']]} />
                                 </div>
-                                <button onClick={() => setList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Input label="Nilai Perubahan (Rp)" type="number" value={cm.nilai?.toString() ?? ''} onChange={v => upd(i, { nilai: v === '' ? undefined : Number(v) })} hint="Boleh negatif untuk pengurangan nilai." />
+                                    <Input label="Tanggal" type="date" value={typeof cm.tanggal === 'string' ? cm.tanggal.slice(0, 10) : ''} onChange={v => upd(i, { tanggal: v })} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Input label="Target Implementasi" value={cm.target ?? ''} onChange={v => upd(i, { target: v })} />
+                                    <Input label="Penanggung Jawab" value={cm.pic ?? ''} onChange={v => upd(i, { pic: v })} />
+                                </div>
                             </div>
-                        ))}
+                            <div className="space-y-1">
+                                <Textarea rows={2} label="Deskripsi / Latar Belakang" value={cm.deskripsi ?? ''} onChange={v => upd(i, { deskripsi: v })} />
+                                <Textarea rows={2} label="Dampak (biaya / waktu / mutu)" value={cm.dampak ?? ''} onChange={v => upd(i, { dampak: v })} />
+                                <Textarea rows={2} label="Mitigasi (langkah penanganan)" value={cm.mitigasi ?? ''} onChange={v => upd(i, { mitigasi: v })} />
+                            </div>
+                        </div>
                     </div>
-                ) : (
-                    <div className="space-y-3">
-                        {list.map((cm, i) => {
-                            const st = CM_STATUS[cm.status] ?? CM_STATUS.USULAN;
-                            return (
-                                <div key={i} className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                                    <div className="flex items-start justify-between gap-4 mb-3">
-                                        <div className="flex gap-3 items-start min-w-0">
-                                            <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0 font-black text-xs">{i + 1}</div>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-bold text-slate-900 dark:text-white break-words">{cm.judul || '-'}</p>
-                                                {cm.dariKendala && <span className="text-[11px] text-indigo-300/70 inline-flex items-center gap-1"><GitBranch className="w-3 h-3" /> Dari kendala</span>}
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col items-end gap-1 shrink-0">
-                                            <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${st.color}`}>{st.label}</span>
-                                            <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-white/15 bg-white/[0.04] text-slate-600 dark:text-slate-300">
-                                                {(CHANGE_JENIS_OPTIONS.find(o => o.value === (cm.jenis ?? 'LAINNYA'))?.label) ?? 'Lain-lain'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="grid sm:grid-cols-2 gap-3 ml-10">
-                                        {cm.deskripsi && <MiniField label="Deskripsi / Latar Belakang" value={cm.deskripsi} />}
-                                        {cm.dampak && <MiniField label="Dampak" value={cm.dampak} />}
-                                        {cm.mitigasi && <MiniField label="Mitigasi" value={cm.mitigasi} />}
-                                        {cm.nilai != null && <MiniField label="Nilai Perubahan" value={formatIDR(cm.nilai)} />}
-                                        {cm.tanggal && <MiniField label="Tanggal" value={formatDate(typeof cm.tanggal === 'string' ? cm.tanggal : undefined)} />}
-                                        {cm.target && <MiniField label="Target" value={cm.target} />}
-                                        {cm.pic && <MiniField label="PIC" value={cm.pic} />}
+                ) : (() => {
+                    const st = CM_STATUS[cm.status] ?? CM_STATUS.USULAN;
+                    return (
+                        <div className="h-full p-3 rounded-xl bg-white/70 dark:bg-slate-950/40 border border-black/5 dark:border-white/5 flex flex-col gap-2 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="flex gap-2 items-start min-w-0">
+                                    <div className="w-6 h-6 rounded-md bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-500 dark:text-indigo-400 shrink-0 font-black text-[11px]">{i + 1}</div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2" title={cm.judul}>{cm.judul || '-'}</p>
+                                        {cm.dariKendala && <span className="text-[11px] text-indigo-600 dark:text-indigo-300 inline-flex items-center gap-1"><GitBranch className="w-3 h-3" aria-hidden="true" /> Dari kendala</span>}
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                )
-            }
-        </div>
+                                <div className="flex flex-wrap items-center justify-end gap-1 shrink-0 max-w-[45%]">
+                                    <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${st.color}`}>{st.label}</span>
+                                    <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-black/10 dark:border-white/15 bg-black/[0.03] dark:bg-white/[0.04] text-slate-600 dark:text-slate-300">
+                                        {(CHANGE_JENIS_OPTIONS.find(o => o.value === (cm.jenis ?? 'LAINNYA'))?.label) ?? 'Lain-lain'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 min-h-0 overflow-hidden">
+                                {cm.deskripsi && <MiniField clamp label="Deskripsi" value={cm.deskripsi} />}
+                                {cm.dampak && <MiniField clamp label="Dampak" value={cm.dampak} />}
+                                {cm.mitigasi && <MiniField clamp label="Mitigasi" value={cm.mitigasi} />}
+                                {cm.nilai != null && <MiniField clamp label="Nilai Perubahan" value={formatIDR(cm.nilai)} />}
+                            </div>
+                            <p className="mt-auto text-[11px] text-slate-600 dark:text-slate-400 truncate">
+                                {[cm.tanggal && formatDate(typeof cm.tanggal === 'string' ? cm.tanggal : undefined), cm.target && `Target: ${cm.target}`, cm.pic && `PJ: ${cm.pic}`].filter(Boolean).join(' · ') || ' '}
+                            </p>
+                        </div>
+                    );
+                })()}
+            />
+        </SectionCard>
+        </TabShell>
     );
 }
-
 // ── (B) Indikator kelengkapan data proyek ─────────────────────────────────────
 // Mendata bagian-bagian penting + apakah sudah terisi. Memandu user mengisi
 // tanpa memaksa. "Terisi" = ada nilai yang bermakna.
 function computeCompleteness(p: Project) {
+    // "Terisi" = ada nilai. Angka 0 SAH (proyek 0% progres, kas 0); yang dianggap kosong
+    // hanya null/undefined, string kosong, dan array/objek kosong.
     const has = (v: unknown) => {
         if (v == null) return false;
         if (typeof v === 'string') return v.trim() !== '';
-        // Angka 0 dianggap belum diisi (default Mongoose / input kosong).
-        if (typeof v === 'number') return Number.isFinite(v) && v !== 0;
+        if (typeof v === 'number') return Number.isFinite(v);
         if (Array.isArray(v)) return v.length > 0;
         if (typeof v === 'object') return Object.keys(v as object).length > 0;
         return !!v;
     };
     const hasHasilUsaha = (() => {
         const h = p.hasilUsaha as { pendapatan?: number; biaya?: number } | undefined;
-        return !!h && ((h.pendapatan ?? 0) > 0 || (h.biaya ?? 0) > 0);
+        return !!h && (has(h.pendapatan) || has(h.biaya));
     })();
-    // Aturan "terisi" diperketat: bagian dihitung selesai hanya bila field intinya lengkap.
     const finansialFilled = [p.tagihanBruto, p.cashIn, p.cashOut, p.saldoHutang, p.piutang].filter(has).length;
+    // progressPercent default 0 di database, jadi 0% hanya dianggap terisi bila PIC pernah
+    // menyimpan bulan progres (progressPeriode) atau nilainya sudah > 0.
+    const progresFilled = isValidPeriode(p.progressPeriode) || (p.progressPercent ?? 0) > 0;
     const items: { label: string; done: boolean; tab: Tab }[] = [
-        { label: 'Informasi (PIC, pelaksana, tanggal)', done: has(p.pmName) && (has(p.penyediaJasa) || has(p.contractor)) && has(p.startDate) && has(p.endDate), tab: 'info' },
+        { label: 'Identitas (nama PM, no. HP PM, pengguna jasa)', done: has(p.pmName) && has(p.pmPhone) && has(p.penggunaJasa), tab: 'info' },
+        { label: 'Pelaksana & jadwal (penyedia jasa, tanggal)', done: (has(p.penyediaJasa) || has(p.contractor)) && has(p.startDate) && has(p.endDate), tab: 'info' },
         { label: 'Kontrak (nomor & nilai)', done: has(p.contractNumber) && has(p.contractValue), tab: 'contract' },
         { label: 'Laporan bulanan (bulan ini / bulan lalu)', done: isLaporanFresh(p.laporanBulanan), tab: 'laporan' },
         { label: 'Ringkasan (CPI / SPI)', done: has(p.cpi) && has(p.spi), tab: 'ikhtiar' },
         { label: 'Finansial (cash / hutang / piutang)', done: finansialFilled >= 2, tab: 'finansial' },
         { label: 'Kinerja Operasi (PU / BK / LK)', done: hasHasilUsaha || (has(p.pu) && has(p.bk)), tab: 'operasi' },
-        { label: 'Progres fisik', done: has(p.progressPercent), tab: 'progress' },
-        { label: 'Milestone & Sumber Daya', done: has(p.milestones) && has(p.sumberDaya), tab: 'operasi' },
+        { label: 'Progres fisik', done: progresFilled, tab: 'progress' },
+        { label: 'Milestone', done: has(p.milestones), tab: 'operasi' },
+        { label: 'Sumber Daya', done: has(p.sumberDaya), tab: 'operasi' },
         { label: 'Galeri', done: has(p.gallery), tab: 'gallery' },
     ];
     const doneCount = items.filter(i => i.done).length;
@@ -1573,108 +1600,15 @@ function computeCompleteness(p: Project) {
     return { items, doneCount, total: items.length, percent };
 }
 
-function CompletenessCard({ project, onGoTab }: { project: Project; onGoTab: (t: Tab) => void }) {
-    const { items, doneCount, total, percent } = computeCompleteness(project);
-    const missing = items.filter(i => !i.done);
-    const tone = percent >= 80 ? 'emerald' : percent >= 40 ? 'amber' : 'rose';
-    const barColor = tone === 'emerald' ? 'bg-emerald-500' : tone === 'amber' ? 'bg-amber-500' : 'bg-rose-500';
-    const textColor = tone === 'emerald' ? 'text-emerald-400' : tone === 'amber' ? 'text-amber-400' : 'text-rose-400';
-    return (
-        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-            <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Kelengkapan Data Proyek</h3>
-                <span className={`text-sm font-black font-mono ${textColor}`}>{percent}%</span>
-            </div>
-            <div className="h-2.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${percent}%` }} />
-            </div>
-            <p className="mt-2 text-[11px] text-slate-500">{doneCount} dari {total} bagian sudah terisi.</p>
-            {missing.length > 0 && (
-                <div className="mt-3">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">Belum diisi — klik untuk mengisi:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                        {missing.map((m, i) => (
-                            <button
-                                key={i}
-                                onClick={() => onGoTab(m.tab)}
-                                className="px-2.5 py-1 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-[rgba(var(--div-accent-rgb),0.15)] border border-black/10 dark:border-white/10 hover:border-[rgba(var(--div-accent-rgb),0.4)] text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-[var(--div-accent)] transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
-                            >
-                                {m.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}
-
-// ── Summary ──────────────────────────────────────────────────────────────────
-function SummaryTab({ project, status, onlineCams, onGoTab }: { project: Project; status: { label: string; color: string }; onlineCams: number; onGoTab: (t: Tab) => void }) {
-    const realisasi = project.progressPercent ?? 0;
-    const rencana = project.progressRencana ?? 0;
-    const deviasi = project.progressDeviasi ?? (realisasi - rencana);
-
-    const cards = [
-        { label: 'Status',        value: status.label,                icon: Info },
-        { label: 'Realisasi Fisik', value: pct(realisasi),            icon: TrendingUp },
-        { label: 'Nilai Kontrak', value: formatIDR(project.contractValue), icon: CircleDollarSign },
-        { label: 'Kontraktor',    value: project.contractor || project.penyediaJasa || '-', icon: Building2 },
-        { label: 'CCTV Online',   value: `${onlineCams}/${project.cameras?.length ?? 0}`, icon: MapPin },
-        { label: 'PIC',           value: project.pmName || '-',       icon: User },
-    ];
-
-    return (
-        <div className="space-y-6">
-            {/* Indikator kelengkapan data */}
-            <CompletenessCard project={project} onGoTab={onGoTab} />
-
-            {/* KPI cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {cards.map(c => (
-                    <div key={c.label} className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                        <div className="flex items-center gap-2 text-slate-500 mb-2">
-                            <c.icon className="w-4 h-4" />
-                            <span className="text-[11px] font-bold uppercase tracking-wider">{c.label}</span>
-                        </div>
-                        <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-white break-words leading-snug">{c.value}</div>
-                    </div>
-                ))}
-            </div>
-
-            {/* 2 Kolom: Progress Fisik (Kiri) & Progress Keuangan (Kanan) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-                <ProgressFisikCard rencana={rencana} realisasi={realisasi} deviasi={deviasi} />
-                <ProgressKeuanganCard
-                    progressKeuangan={project.progressKeuangan || []}
-                    tagihanBelumDiproses={project.tagihanBelumDiproses}
-                />
-            </div>
-
-            {/* Lingkup pekerjaan */}
-            {(project.lingkupPekerjaan || []).length > 0 && (
-                <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Lingkup Pekerjaan</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {(project.lingkupPekerjaan || []).map((lp, i) => (
-                            <span key={i} className="px-3 py-1 rounded-full text-xs font-medium bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] div-accent-text">{lp}</span>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {project.description && (
-                <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Deskripsi</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{project.description}</p>
-                </div>
-            )}
-        </div>
-    );
+/** Bulan progres fisik: isian PIC; proyek lama yang belum mengisi memakai bulan laporan terakhir. */
+function fisikSampai(p: Project): string | undefined {
+    if (isValidPeriode(p.progressPeriode)) return periodeLabel(p.progressPeriode);
+    const l = latestLaporan(p.laporanBulanan);
+    return l ? periodeLabel(l.periode) : undefined;
 }
 
 // ── 2-Column Progress Charts ──────────────────────────────────────────────────
-function ProgressFisikCard({ rencana, realisasi, deviasi }: { rencana: number; realisasi: number; deviasi: number }) {
+function ProgressFisikCard({ rencana, realisasi, deviasi, sampai }: { rencana: number; realisasi: number; deviasi: number; sampai?: string }) {
     const isAhead = deviasi >= 0;
     const SIZE = 156;
     const STROKE = 10;
@@ -1694,7 +1628,10 @@ function ProgressFisikCard({ rencana, realisasi, deviasi }: { rencana: number; r
                     <div className="w-6 h-6 rounded-lg bg-[rgba(var(--div-accent-rgb),0.1)] flex items-center justify-center border border-[rgba(var(--div-accent-rgb),0.2)]">
                         <TrendingUp className="w-3.5 h-3.5 div-accent-text" />
                     </div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Fisik</h3>
+                    <div className="min-w-0">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Fisik</h3>
+                        {sampai && <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">s.d. {sampai}</p>}
+                    </div>
                 </div>
                 <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
                     isAhead ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
@@ -1801,15 +1738,15 @@ function ProgressKeuanganCard({
     const totalRealisasi = progressKeuangan.reduce((acc, curr) => acc + (curr.realisasi || 0), 0);
     const totalPct = totalRencana > 0 ? (totalRealisasi / totalRencana) * 100 : 0;
 
-    const SIZE = 156;
-    const STROKE = 11;
+    const SIZE = 124;
+    const STROKE = 10;
     const R = SIZE / 2 - STROKE / 2;
     const C = SIZE / 2;
     const circ = 2 * Math.PI * R;
     const dPct = (Math.min(totalPct, 100) / 100) * circ;
 
     return (
-        <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex flex-col justify-between space-y-4">
+        <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex flex-col gap-2 lg:flex-1 lg:min-h-0">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1824,7 +1761,7 @@ function ProgressKeuanganCard({
             </div>
 
             {/* Donut Chart */}
-            <div className="flex flex-col items-center justify-center py-2">
+            <div className="flex flex-col items-center justify-center shrink-0">
                 <div className="relative" style={{ width: SIZE, height: SIZE }}>
                     <div className="absolute inset-0 rounded-full bg-sky-500/5 blur-xl pointer-events-none" />
                     <svg width={SIZE} height={SIZE} className="-rotate-90 relative z-10">
@@ -1853,7 +1790,7 @@ function ProgressKeuanganCard({
                     {/* Center Hub */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Total Serapan</span>
-                        <div className="text-3xl font-black text-slate-900 dark:text-white leading-none my-0.5">
+                        <div className="text-2xl font-black text-slate-900 dark:text-white leading-none my-0.5">
                             {totalPct.toFixed(1)}<span className="text-sm text-sky-700 dark:text-sky-400 font-extrabold">%</span>
                         </div>
                         <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 font-bold truncate max-w-[130px]">
@@ -1864,12 +1801,16 @@ function ProgressKeuanganCard({
             </div>
 
             {/* Per-DIPA Breakdown List */}
-            <div className="space-y-2 pt-2 border-t border-black/5 dark:border-white/5">
-                {progressKeuangan.length > 0 ? (
-                    progressKeuangan.map(pk => {
+            <div className="flex-1 min-h-0 flex flex-col gap-2 pt-2 border-t border-black/5 dark:border-white/5">
+                <Paged
+                    items={progressKeuangan}
+                    itemH={74}
+                    fixed
+                    empty={<p className="text-xs text-slate-600 dark:text-slate-400 italic text-center py-2">Belum ada data DIPA keuangan.</p>}
+                    render={(pk) => {
                         const pct = pk.rencana > 0 ? (pk.realisasi / pk.rencana) * 100 : 0;
                         return (
-                            <div key={pk.tahun} className="p-2.5 rounded-xl bg-black/[0.03] dark:bg-black/30 border border-black/5 dark:border-white/5 text-xs space-y-1">
+                            <div className="h-full p-2.5 rounded-xl bg-black/[0.03] dark:bg-black/30 border border-black/5 dark:border-white/5 text-xs space-y-1">
                                 <div className="flex justify-between items-center text-[11px]">
                                     <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                                         <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
@@ -1882,21 +1823,15 @@ function ProgressKeuanganCard({
                                     <span>Pagu: <strong className="text-slate-600 dark:text-slate-400 font-normal">{formatIDRShort(pk.rencana)}</strong></span>
                                 </div>
                                 <div className="w-full h-1.5 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-gradient-to-r from-sky-500 to-blue-500"
-                                        style={{ width: `${Math.min(pct, 100)}%` }}
-                                    />
+                                    <div className="h-full rounded-full bg-gradient-to-r from-sky-500 to-blue-500" style={{ width: `${Math.min(pct, 100)}%` }} />
                                 </div>
                             </div>
                         );
-                    })
-                ) : (
-                    <p className="text-xs text-slate-600 dark:text-slate-400 italic text-center py-2">Belum ada data DIPA keuangan.</p>
-                )}
-
+                    }}
+                />
                 {/* Belum ditagihkan callout */}
                 {tagihanBelumDiproses != null && (
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs">
+                    <div className="shrink-0 flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs">
                         <span className="text-slate-600 dark:text-slate-400 text-[11px]">Belum ditagihkan:</span>
                         <span className="text-amber-700 dark:text-amber-400 font-bold font-mono">{formatIDR(tagihanBelumDiproses)}</span>
                     </div>
@@ -1905,7 +1840,6 @@ function ProgressKeuanganCard({
         </div>
     );
 }
-
 // ── Info (editable) ──────────────────────────────────────────────────────────
 function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project; isAdmin: boolean; isSuperAdmin?: boolean; onSaved: () => void }) {
     const [editing, setEditing] = useState(false);
@@ -1935,9 +1869,11 @@ function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project
     };
 
     return (
-        <div className="space-y-4">
-            <SectionHeader title="Informasi Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} />
-            <div className="grid sm:grid-cols-2 gap-4">
+        <TabShell header={
+            <SectionHeader title="Informasi Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} stamp={stampOf(project, 'info')} />
+        } scroll={false}>
+            <div className="lg:h-full flex flex-col gap-4 lg:grid lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)]">
+            <div className={`${isSuperAdmin ? 'lg:col-span-8' : 'lg:col-span-12'} min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-4 content-start`}>
                 {!editing ? (
                     <>
                         <Field label="Pengguna Jasa"  value={project.penggunaJasa} />
@@ -1947,9 +1883,9 @@ function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project
                         <Field label="Status"         value={STATUS_META[project.status || 'ongoing']?.label} />
                         <Field label="Tanggal Mulai"  value={formatDate(project.startDate)} />
                         <Field label="Tanggal Selesai" value={formatDate(project.endDate)} />
-                        <Field label="PIC"            value={project.pmName} />
-                        <Field label="Kontak PIC"     value={project.pmPhone} />
-                        <div className="sm:col-span-2"><Field label="Deskripsi" value={project.description} /></div>
+                        <Field label="Nama PM / PIC"  value={project.pmName} />
+                        <Field label="No. HP PM"      value={project.pmPhone} />
+                        <div className="sm:col-span-2 lg:col-span-3"><Field label="Deskripsi" value={project.description} clamp={6} /></div>
                     </>
                 ) : (
                     <>
@@ -1960,16 +1896,21 @@ function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project
                         <Select label="Status" value={form.status} onChange={v => setForm({ ...form, status: v as 'planning' | 'ongoing' | 'completed' })} options={[['planning', 'Perencanaan'], ['ongoing', 'Berjalan'], ['completed', 'Selesai']]} />
                         <Input label="Tanggal Mulai"  type="date" value={form.startDate} onChange={v => setForm({ ...form, startDate: v })} />
                         <Input label="Tanggal Selesai" type="date" value={form.endDate} onChange={v => setForm({ ...form, endDate: v })} />
-                        <Input label="PIC"            value={form.pmName}        onChange={v => setForm({ ...form, pmName: v })} />
-                        <Input label="Kontak PIC"     value={form.pmPhone}       onChange={v => setForm({ ...form, pmPhone: v })} />
-                        <div className="sm:col-span-2"><Textarea label="Deskripsi" value={form.description} onChange={v => setForm({ ...form, description: v })} /></div>
+                        <Input label="Nama PM / PIC"  value={form.pmName}        onChange={v => setForm({ ...form, pmName: v })} />
+                        <Input label="No. HP PM"      value={form.pmPhone}       onChange={v => setForm({ ...form, pmPhone: v })} hint="Nomor yang bisa dihubungi, 8-15 digit (boleh diawali +62)." />
+                        <div className="sm:col-span-2 lg:col-span-3"><Textarea rows={4} label="Deskripsi" value={form.description} onChange={v => setForm({ ...form, description: v })} /></div>
                     </>
                 )}
             </div>
 
             {/* Panel PIC — hanya super-admin. Server tetap penegak via requireSuperAdmin. */}
-            {isSuperAdmin && <PicPanel projectId={project._id} />}
-        </div>
+            {isSuperAdmin && (
+                <div className="lg:col-span-4 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+                    <PicPanel projectId={project._id} />
+                </div>
+            )}
+            </div>
+        </TabShell>
     );
 }
 
@@ -2170,34 +2111,41 @@ function LocationTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
         }
     };
     return (
-        <div className="space-y-4">
-            <FootprintEditor
-                lat={project.lat}
-                lng={project.lng}
-                footprint={project.footprint ?? []}
-                height={project.footprintHeight}
-                canEdit={isAdmin}
-                onSave={saveFootprint}
-            />
-            <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Latitude"  value={String(project.lat)} />
-                <Field label="Longitude" value={String(project.lng)} />
+        <TabShell scroll={false}>
+            <div className="lg:h-full flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+                <div className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+                    <FootprintEditor
+                        lat={project.lat}
+                        lng={project.lng}
+                        footprint={project.footprint ?? []}
+                        height={project.footprintHeight}
+                        canEdit={isAdmin}
+                        onSave={saveFootprint}
+                    />
+                </div>
+                <div className="min-w-0 lg:min-h-0 flex flex-col gap-4">
+                    <UpdatedStamp stamp={stampOf(project, 'location')} className="shrink-0 !mt-0" />
+                    <div className="grid sm:grid-cols-2 gap-4 shrink-0">
+                        <Field label="Latitude"  value={String(project.lat)} />
+                        <Field label="Longitude" value={String(project.lng)} />
+                    </div>
+                    <a
+                        href={`https://www.google.com/maps?q=${project.lat},${project.lng}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="shrink-0 self-start inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                    >
+                        <ExternalLink className="w-4 h-4" aria-hidden="true" /> Buka di Google Maps
+                    </a>
+                    <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-slate-900 max-lg:aspect-video lg:flex-1 lg:min-h-0">
+                        <iframe
+                            title="Peta lokasi"
+                            className="w-full h-full"
+                            src={`https://www.openstreetmap.org/export/embed.html?bbox=${project.lng - 0.01},${project.lat - 0.01},${project.lng + 0.01},${project.lat + 0.01}&marker=${project.lat},${project.lng}`}
+                        />
+                    </div>
+                </div>
             </div>
-            <a
-                href={`https://www.google.com/maps?q=${project.lat},${project.lng}`}
-                target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-sm font-bold text-slate-700 dark:text-slate-200 transition-colors"
-            >
-                <ExternalLink className="w-4 h-4" /> Buka di Google Maps
-            </a>
-            <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 aspect-video bg-white dark:bg-slate-900">
-                <iframe
-                    title="Peta lokasi"
-                    className="w-full h-full"
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${project.lng - 0.01},${project.lat - 0.01},${project.lng + 0.01},${project.lat + 0.01}&marker=${project.lat},${project.lng}`}
-                />
-            </div>
-        </div>
+        </TabShell>
     );
 }
 
@@ -2215,7 +2163,7 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
         try {
             await axios.patch(`/api/projects/${project._id}`, {
                 contractNumber: form.contractNumber,
-                contractValue: form.contractValue ? Number(form.contractValue) : undefined,
+                contractValue: form.contractValue === '' ? null : Number(form.contractValue),
             });
             toast.success('Kontrak tersimpan');
             setEditing(false);
@@ -2224,10 +2172,20 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
         finally { setSaving(false); }
     };
 
+    // Waktu kontrak dihitung dari tanggal mulai dan selesai di tab Informasi.
+    const t0 = project.startDate ? new Date(project.startDate).getTime() : NaN;
+    const t1 = project.endDate ? new Date(project.endDate).getTime() : NaN;
+    const hasSpan = Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0;
+    const nowMs = new Date().getTime();
+    const totalHari = hasSpan ? Math.round((t1 - t0) / 86_400_000) : undefined;
+    const sisaHari = hasSpan ? Math.ceil((t1 - nowMs) / 86_400_000) : undefined;
+    const terpakai = hasSpan ? Math.min(100, Math.max(0, ((nowMs - t0) / (t1 - t0)) * 100)) : undefined;
+
     return (
-        <div className="space-y-4">
-            <SectionHeader title="Kontrak Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} />
-            <div className="grid sm:grid-cols-2 gap-4">
+        <TabShell header={
+            <SectionHeader title="Kontrak Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} stamp={stampOf(project, 'contract')} />
+        } scroll={false}>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 content-start">
                 {!editing ? (
                     <>
                         <Field label="Nomor Kontrak" value={project.contractNumber} />
@@ -2237,12 +2195,30 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                 ) : (
                     <>
                         <Input label="Nomor Kontrak"   value={form.contractNumber} onChange={v => setForm({ ...form, contractNumber: v })} />
-                        <Input label="Nilai Kontrak (IDR)" type="number" value={form.contractValue} onChange={v => setForm({ ...form, contractValue: v })} />
+                        <MoneyInput label="Nilai Kontrak" value={form.contractValue} onChange={v => setForm({ ...form, contractValue: v })} hint="Nilai kontrak dalam Rupiah penuh. Dipakai sebagai pembagi persen Kurva S di Laporan Bulanan." />
                     </>
                 )}
+                {!editing && (
+                    <div className="sm:col-span-2 lg:col-span-3 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-3">Waktu Kontrak</div>
+                        {hasSpan ? (
+                            <>
+                                <div className="grid grid-cols-3 gap-3 mb-3">
+                                    <MiniField label="Durasi" value={`${totalHari} hari`} />
+                                    <MiniField label="Sisa waktu" value={sisaHari! >= 0 ? `${sisaHari} hari` : `Lewat ${Math.abs(sisaHari!)} hari`} />
+                                    <MiniField label="Waktu terpakai" value={`${terpakai!.toFixed(1)}%`} />
+                                </div>
+                                <div className="h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
+                                    <div className={`h-full rounded-full ${sisaHari! < 0 ? 'bg-rose-500' : 'div-accent-solid'}`} style={{ width: `${terpakai}%` }} />
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-sm text-slate-600 dark:text-slate-400">Isi tanggal mulai dan selesai di tab Informasi untuk melihat sisa waktu kontrak.</p>
+                        )}
+                    </div>
+                )}
             </div>
-
-        </div>
+        </TabShell>
     );
 }
 
@@ -2253,6 +2229,9 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
         progressPercent: project.progressPercent ?? 0,
         progressRencana: project.progressRencana ?? 0,
         progressDeviasi: project.progressDeviasi ?? 0,
+        progressPeriode: isValidPeriode(project.progressPeriode)
+            ? project.progressPeriode
+            : latestLaporan(project.laporanBulanan)?.periode ?? new Date().toISOString().slice(0, 7),
         lingkupPekerjaan: project.lingkupPekerjaan ?? [],
     });
     const [saving, setSaving] = useState(false);
@@ -2264,7 +2243,7 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                 lingkupPekerjaan: form.lingkupPekerjaan,
                 progressPercent: form.progressPercent,
                 progressRencana: form.progressRencana,
-                progressDeviasi: Math.round((form.progressPercent - form.progressRencana) * 100) / 100,
+                progressPeriode: form.progressPeriode,
             });
             toast.success('Progres tersimpan');
             setEditing(false);
@@ -2278,14 +2257,17 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
         : (project.progressDeviasi ?? ((project.progressPercent ?? 0) - (project.progressRencana ?? 0)));
 
     return (
-        <div className="space-y-4">
-            <SectionHeader title="Progres Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} />
-
+        <TabShell header={
+            <SectionHeader title="Progres Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} stamp={stampOf(project, 'progress')} />
+        } scroll={false}>
+            <div className="lg:h-full flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+                <div className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1 space-y-4">
             {!editing ? (
                 <ProgressFisikCard
                     rencana={project.progressRencana ?? 0}
                     realisasi={project.progressPercent ?? 0}
                     deviasi={deviasi}
+                    sampai={fisikSampai(project)}
                 />
             ) : (
                 <div className="space-y-4">
@@ -2293,6 +2275,10 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                     <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-4">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Progress Fisik</h3>
                         <div className="space-y-4">
+                            <div>
+                                <label htmlFor="progress-periode" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Progres s.d. bulan</label>
+                                <input id="progress-periode" type="month" required value={form.progressPeriode} onChange={e => setForm({ ...form, progressPeriode: e.target.value })} className="block mt-2 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                            </div>
                             <div>
                                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Rencana: {form.progressRencana.toFixed(2)}%</label>
                                 <input aria-label="Progres rencana (persen)" type="range" min={0} max={100} step={0.01} value={form.progressRencana} onChange={e => setForm({ ...form, progressRencana: Number(e.target.value) })} className="w-full mt-2 accent-slate-400" />
@@ -2313,36 +2299,39 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                 </div>
             )}
 
-            {/* Lingkup pekerjaan */}
-            <div className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-3">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Lingkup Pekerjaan</h3>
-                    {editing && (
-                        <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: [...f.lingkupPekerjaan, ''] }))}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
-                            <Plus className="w-3.5 h-3.5" /> Tambah
-                        </button>
-                    )}
+            
                 </div>
-                {(editing ? form.lingkupPekerjaan : (project.lingkupPekerjaan || [])).length === 0
-                    ? <p className="text-sm text-slate-500 italic">Belum ada lingkup pekerjaan.</p>
-                    : editing
-                    ? form.lingkupPekerjaan.map((lp, i) => (
-                        <div key={i} className="flex gap-2">
-                            <input aria-label="Lingkup pekerjaan" value={lp} onChange={e => { const a = [...form.lingkupPekerjaan]; a[i] = e.target.value; setForm(f => ({ ...f, lingkupPekerjaan: a })); }} className="flex-1 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                            <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: f.lingkupPekerjaan.filter((_, j) => j !== i) }))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Minus className="w-4 h-4" aria-hidden="true" /></button>
+                <div className="min-w-0 lg:min-h-0 flex flex-col">
+                    {/* Lingkup pekerjaan */}
+                    <SectionCard className="lg:flex-1">
+                        <div className="flex items-center justify-between shrink-0">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Lingkup Pekerjaan</h3>
+                            {editing && (
+                                <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: [...f.lingkupPekerjaan, ''] }))}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
+                                    <Plus className="w-3.5 h-3.5" /> Tambah
+                                </button>
+                            )}
                         </div>
-                    ))
-                    : (
-                        <div className="flex flex-wrap gap-2">
-                            {(project.lingkupPekerjaan || []).map((lp, i) => (
-                                <span key={i} className="px-3 py-1 rounded-full text-xs font-medium bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] div-accent-text">{lp}</span>
-                            ))}
-                        </div>
-                    )
-                }
+                        <Paged
+                            items={editing ? form.lingkupPekerjaan : (project.lingkupPekerjaan || [])}
+                            itemH={editing ? 46 : 36}
+                            cols={editing ? 1 : 2}
+                            baseClass={editing ? '' : 'grid-cols-1 sm:grid-cols-2'}
+                            empty={<p className="text-sm text-slate-600 dark:text-slate-400 italic">Belum ada lingkup pekerjaan.</p>}
+                            render={(lp, i) => editing ? (
+                                <div className="flex gap-2">
+                                    <input aria-label="Lingkup pekerjaan" value={lp} onChange={e => { const a = [...form.lingkupPekerjaan]; a[i] = e.target.value; setForm(f => ({ ...f, lingkupPekerjaan: a })); }} className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                                    <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: f.lingkupPekerjaan.filter((_, j) => j !== i) }))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"><Minus className="w-4 h-4" aria-hidden="true" /></button>
+                                </div>
+                            ) : (
+                                <span className="block truncate px-3 py-1.5 rounded-full text-xs font-medium bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] div-accent-text" title={lp}>{lp}</span>
+                            )}
+                        />
+                    </SectionCard>
+                </div>
             </div>
-        </div>
+        </TabShell>
     );
 }
 
@@ -2390,132 +2379,139 @@ function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Pro
         finally { setPromoting(null); }
     };
 
+    const smallBtn = 'px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none';
+    const saveBtn = 'px-2.5 py-1.5 rounded-lg div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none';
+    const rowCard = 'p-3 rounded-xl bg-white/70 dark:bg-slate-950/40 border border-black/5 dark:border-white/5';
+    const updKendala = (i: number, patch: Partial<Kendala>) => setKendalaList(l => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+    const updIsu = (i: number, patch: Partial<IsuStrategis>) => setIsuList(l => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+    const delBtn = 'text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none rounded';
+
     return (
-        <div className="space-y-6">
+        <TabShell scroll={false}>
+        <div className="flex flex-col gap-3 lg:h-full lg:grid lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
             {/* Isu Strategis */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Isu Strategis</h3>
+            <SectionCard>
+                <div className="flex items-center justify-between gap-2 shrink-0">
+                    <div className="min-w-0">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Isu Strategis</h3>
+                        <UpdatedStamp stamp={stampOf(project, 'isu')} />
+                    </div>
                     {isAdmin && (editingIsu ? (
                         <div className="flex gap-2">
-                            <button onClick={() => { setIsuList(project.isuStrategis ?? []); setEditingIsu(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveIsu} disabled={saving} className="px-3 py-2 max-sm:min-h-11 max-sm:px-4 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={() => { setIsuList(project.isuStrategis ?? []); setEditingIsu(false); }} className={smallBtn}><X className="w-3.5 h-3.5" /> Batal</button>
+                            <button onClick={saveIsu} disabled={saving} className={saveBtn}>{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
-                            {editingIsu === false && <button onClick={() => setIsuList(s => [...s, { isu: '', usulan: '' }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Plus className="w-3.5 h-3.5" /> Tambah</button>}
-                            <button onClick={() => setEditingIsu(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                            <button onClick={() => { setIsuList(s => [...s, { isu: '', usulan: '' }]); setEditingIsu(true); }} className={smallBtn}><Plus className="w-3.5 h-3.5" /> Tambah</button>
+                            <button onClick={() => setEditingIsu(true)} className={smallBtn}><Pencil className="w-3.5 h-3.5" /> Edit</button>
                         </div>
                     ))}
                 </div>
-                {isuList.length === 0
-                    ? <EmptyState text="Belum ada isu strategis." />
-                    : editingIsu
-                    ? isuList.map((isu, i) => (
-                        <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-2">
-                            <div className="flex gap-2">
-                                <div className="flex-1 space-y-2">
-                                    <Textarea label="Isu" value={isu.isu} onChange={v => { const a = [...isuList]; a[i] = { ...a[i], isu: v }; setIsuList(a); }} />
-                                    <Textarea label="Usulan dari Abipraya" value={isu.usulan} onChange={v => { const a = [...isuList]; a[i] = { ...a[i], usulan: v }; setIsuList(a); }} />
-                                </div>
-                                <button onClick={() => setIsuList(s => s.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-11 min-h-11 inline-flex items-center justify-center h-fit rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-4 h-4" aria-hidden="true" /></button>
+                <Paged
+                    items={isuList}
+                    itemH={editingIsu ? 215 : 132}
+                    fixed={!editingIsu}
+                    empty={<EmptyState compact text="Belum ada isu strategis." />}
+                    render={(isu, i) => editingIsu ? (
+                        <div className={rowCard}>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Isu #{i + 1}</span>
+                                <button onClick={() => setIsuList(s => s.filter((_, j) => j !== i))} aria-label="Hapus isu" className={delBtn}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>
+                            </div>
+                            <div className="space-y-1">
+                                <Textarea rows={2} label="Isu" required value={isu.isu} onChange={v => updIsu(i, { isu: v })} />
+                                <Textarea rows={2} label="Usulan dari Abipraya" required value={isu.usulan} onChange={v => updIsu(i, { usulan: v })} />
                             </div>
                         </div>
-                    ))
-                    : (
-                        <div className="space-y-3">
-                            {isuList.map((isu, i) => (
-                                <div key={i} className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                                    <div className="flex gap-3">
-                                        <div className="w-7 h-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400 font-black text-xs shrink-0">{i + 1}</div>
-                                        <div className="space-y-2 flex-1">
-                                            <p className="text-sm text-slate-900 dark:text-white leading-relaxed">{isu.isu}</p>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400"><span className="font-bold text-yellow-400">Usulan: </span>{isu.usulan}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                    ) : (
+                        <div className={`${rowCard} h-full flex gap-2.5`}>
+                            <div className="w-6 h-6 rounded-md bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400 font-black text-[11px] shrink-0">{i + 1}</div>
+                            <div className="min-w-0 flex-1 space-y-1">
+                                <p className="text-sm text-slate-900 dark:text-white leading-snug line-clamp-3" title={isu.isu}>{isu.isu}</p>
+                                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2" title={isu.usulan}><span className="font-bold text-amber-700 dark:text-yellow-400">Usulan: </span>{isu.usulan}</p>
+                            </div>
                         </div>
-                    )
-                }
-            </div>
+                    )}
+                />
+            </SectionCard>
 
             {/* Kendala */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Kendala Operasional & Kontraktual</h3>
+            <SectionCard>
+                <div className="flex items-center justify-between gap-2 shrink-0">
+                    <div className="min-w-0">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Kendala Operasional &amp; Kontraktual</h3>
+                        <UpdatedStamp stamp={stampOf(project, 'kendala')} />
+                    </div>
                     {isAdmin && (editingKendala ? (
                         <div className="flex gap-2">
-                            <button onClick={() => { setKendalaList(project.kendala ?? []); setEditingKendala(false); }} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveKendala} disabled={saving} className="px-3 py-2 max-sm:min-h-11 max-sm:px-4 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
+                            <button onClick={() => { setKendalaList(project.kendala ?? []); setEditingKendala(false); }} className={smallBtn}><X className="w-3.5 h-3.5" /> Batal</button>
+                            <button onClick={saveKendala} disabled={saving} className={saveBtn}>{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
-                            <button onClick={() => setKendalaList(s => [...s, { masalah: '', penyebab: '', tindakan: '', status: 'OPEN' }])} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Plus className="w-3.5 h-3.5" /> Tambah</button>
-                            <button onClick={() => setEditingKendala(true)} className="px-3 py-2 rounded-xl bg-black/[0.04] dark:bg-white/5 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                            <button onClick={() => { setKendalaList(s => [...s, { masalah: '', penyebab: '', tindakan: '', status: 'OPEN' }]); setEditingKendala(true); }} className={smallBtn}><Plus className="w-3.5 h-3.5" /> Tambah</button>
+                            <button onClick={() => setEditingKendala(true)} className={smallBtn}><Pencil className="w-3.5 h-3.5" /> Edit</button>
                         </div>
                     ))}
                 </div>
-                {kendalaList.length === 0
-                    ? <EmptyState text="Belum ada kendala tercatat." />
-                    : editingKendala
-                    ? kendalaList.map((k, i) => (
-                        <div key={i} className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 space-y-2">
-                            <div className="grid sm:grid-cols-2 gap-2">
-                                <Input label="Masalah"  value={k.masalah}  onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], masalah: v }; setKendalaList(a); }} />
-                                <Input label="Penyebab" value={k.penyebab} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], penyebab: v }; setKendalaList(a); }} />
-                                <Input label="Tindakan" value={k.tindakan} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], tindakan: v }; setKendalaList(a); }} />
-                                <Input label="Harapan Dukungan" value={k.harapan ?? ''} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], harapan: v }; setKendalaList(a); }} />
-                                <Input label="Target"   value={k.target ?? ''} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], target: v }; setKendalaList(a); }} />
-                                <Input label="PIC"      value={k.pic ?? ''} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], pic: v }; setKendalaList(a); }} />
-                                <Select label="Status" value={k.status} onChange={v => { const a = [...kendalaList]; a[i] = { ...a[i], status: v as Kendala['status'] }; setKendalaList(a); }} options={[['OPEN','OPEN'],['ON_PROGRESS','ON PROGRESS'],['CLOSED','CLOSED']]} />
+                <Paged
+                    items={kendalaList}
+                    itemH={editingKendala ? 330 : 224}
+                    fixed={!editingKendala}
+                    empty={<EmptyState compact text="Belum ada kendala tercatat." />}
+                    render={(k, i) => editingKendala ? (
+                        <div className={rowCard}>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Kendala #{i + 1}</span>
+                                <button onClick={() => setKendalaList(s => s.filter((_, j) => j !== i))} aria-label="Hapus kendala" className={delBtn}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>
                             </div>
-                            <button onClick={() => setKendalaList(s => s.filter((_, j) => j !== i))} className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Trash2 className="w-3.5 h-3.5" /> Hapus</button>
+                            <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1">
+                                <Input label="Masalah" required value={k.masalah} onChange={v => updKendala(i, { masalah: v })} />
+                                <Input label="Penyebab" required value={k.penyebab} onChange={v => updKendala(i, { penyebab: v })} />
+                                <Input label="Tindakan" required value={k.tindakan} onChange={v => updKendala(i, { tindakan: v })} />
+                                <Input label="Harapan Dukungan" value={k.harapan ?? ''} onChange={v => updKendala(i, { harapan: v })} />
+                                <Input label="Target" value={k.target ?? ''} onChange={v => updKendala(i, { target: v })} />
+                                <Input label="Penanggung Jawab" value={k.pic ?? ''} onChange={v => updKendala(i, { pic: v })} />
+                                <Select label="Status" value={k.status} onChange={v => updKendala(i, { status: v as Kendala['status'] })} options={[['OPEN', 'OPEN'], ['ON_PROGRESS', 'ON PROGRESS'], ['CLOSED', 'CLOSED']]} />
+                            </div>
                         </div>
-                    ))
-                    : (
-                        <div className="space-y-3">
-                            {kendalaList.map((k, i) => {
-                                const ks = KENDALA_STATUS[k.status] ?? KENDALA_STATUS.OPEN;
-                                return (
-                                    <div key={i} className="p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-                                        <div className="flex items-start justify-between gap-4 mb-3">
-                                            <div className="flex gap-3 items-start">
-                                                <div className="w-7 h-7 rounded-lg bg-slate-700/50 flex items-center justify-center text-slate-500 dark:text-slate-400 font-black text-xs shrink-0">{i + 1}</div>
-                                                <p className="text-sm font-bold text-slate-900 dark:text-white">{k.masalah}</p>
-                                            </div>
-                                            <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${ks.color}`}>{ks.label}</span>
-                                        </div>
-                                        <div className="grid sm:grid-cols-2 gap-3 ml-10">
-                                            {k.penyebab && <MiniField label="Penyebab" value={k.penyebab} />}
-                                            {k.tindakan && <MiniField label="Tindakan" value={k.tindakan} />}
-                                            {k.harapan && <MiniField label="Harapan Dukungan" value={k.harapan} />}
-                                            {k.target && <MiniField label="Target" value={k.target} />}
-                                            {k.pic && <MiniField label="PIC" value={k.pic} />}
-                                        </div>
-                                        {isAdmin && (
-                                            <div className="ml-10 mt-3 pt-3 border-t border-black/5 dark:border-white/5">
-                                                <button
-                                                    onClick={() => toChangeMgmt(k, i)}
-                                                    disabled={promoting === i}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[11px] font-bold hover:bg-indigo-500/20 transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
-                                                >
-                                                    {promoting === i ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitBranch className="w-3.5 h-3.5" />}
-                                                    Masukkan ke Change Management
-                                                </button>
-                                            </div>
-                                        )}
+                    ) : (() => {
+                        const ks = KENDALA_STATUS[k.status] ?? KENDALA_STATUS.OPEN;
+                        return (
+                            <div className={`${rowCard} h-full flex flex-col gap-1.5`}>
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="flex gap-2.5 items-start min-w-0">
+                                        <div className="w-6 h-6 rounded-md bg-slate-500/15 flex items-center justify-center text-slate-600 dark:text-slate-400 font-black text-[11px] shrink-0">{i + 1}</div>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2" title={k.masalah}>{k.masalah}</p>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    )
-                }
-            </div>
+                                    <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${ks.color}`}>{ks.label}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-3 gap-y-1 min-h-0 overflow-hidden">
+                                    {k.penyebab && <MiniField clamp label="Penyebab" value={k.penyebab} />}
+                                    {k.tindakan && <MiniField clamp label="Tindakan" value={k.tindakan} />}
+                                    {k.harapan && <MiniField clamp label="Harapan Dukungan" value={k.harapan} />}
+                                    {(k.target || k.pic) && <MiniField clamp label="Target · PJ" value={[k.target, k.pic].filter(Boolean).join(' · ')} />}
+                                </div>
+                                {isAdmin && (
+                                    <button
+                                        onClick={() => toChangeMgmt(k, i)}
+                                        disabled={promoting === i}
+                                        className="mt-auto self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold hover:bg-indigo-500/20 transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"
+                                    >
+                                        {promoting === i ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitBranch className="w-3.5 h-3.5" />}
+                                        Masukkan ke Change Management
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })()}
+                />
+            </SectionCard>
         </div>
+        </TabShell>
     );
 }
-
 // ── Gallery ─────────────────────────────────────────────────────────────────
 function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin: boolean; onChanged: () => void }) {
     const [lightbox, setLightbox] = useState<number | null>(null);
@@ -2530,30 +2526,38 @@ function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin
     };
     const del = (key: string) => confirm('Hapus Foto', 'Foto ini akan dihapus permanen dari galeri. Lanjutkan?', () => doDelete(key));
     return (
-        <div className="space-y-4">
+        <TabShell scroll={false}>
             {ConfirmDialog}
-            <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Galeri Foto</h3>
-                {isAdmin && <UploadButton projectId={project._id} kind="gallery" accept="image/*" label="Unggah Foto" onDone={onChanged} />}
-            </div>
-            {(project.gallery || []).length === 0 ? <EmptyState text="Belum ada foto." /> : (
-                /* Masonry: tiap foto tampil sesuai rasio aslinya (tidak dipotong). */
-                <div className="columns-2 sm:columns-3 lg:columns-4 gap-4 [column-fill:_balance]">
-                    {items.map((g, i) => (
-                        <div key={g.key} className="relative group mb-4 break-inside-avoid rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-slate-900">
-                            <button type="button" onClick={() => { setOriginKey(g.key); setLightbox(i); }} className="block w-full cursor-zoom-in focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
-                                <motion.img layoutId={`gal-${g.key}`} src={g.url!} alt={g.caption || ''} loading="lazy" className="w-full h-auto block transition-transform duration-300 group-hover:scale-[1.02]" />
+            <SectionCard className="lg:h-full">
+                <div className="flex items-center justify-between shrink-0">
+                    <div className="min-w-0">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Galeri Foto</h3>
+                        <UpdatedStamp stamp={stampOf(project, 'gallery')} />
+                    </div>
+                    {isAdmin && <UploadButton projectId={project._id} kind="gallery" accept="image/jpeg,image/png,image/webp,image/gif" label="Unggah Foto" onDone={onChanged} multiple />}
+                </div>
+                <Paged
+                    items={items}
+                    itemH={150}
+                    cols={5}
+                    fixed
+                    baseClass="grid-cols-2 sm:grid-cols-3"
+                    empty={<EmptyState compact text="Belum ada foto." />}
+                    render={(g, i) => (
+                        <div className="relative group h-full max-lg:aspect-[4/3] rounded-xl overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-slate-900">
+                            <button type="button" onClick={() => { setOriginKey(g.key); setLightbox(i); }} className="block w-full h-full cursor-zoom-in focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
+                                <motion.img layoutId={`gal-${g.key}`} src={g.url!} alt={g.caption || ''} loading="lazy" className="w-full h-full object-cover block transition-transform duration-300 group-hover:scale-[1.03]" />
                             </button>
                             {g.caption && <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/80 to-transparent text-[11px] text-white truncate pointer-events-none">{g.caption}</div>}
                             {isAdmin && (
-                                <button onClick={() => del(g.key)} aria-label="Hapus foto" className="absolute top-2 right-2 min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg bg-black/60 text-rose-400 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 hover:bg-rose-500/20 transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                                <button onClick={() => del(g.key)} aria-label="Hapus foto" className="absolute top-1.5 right-1.5 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg bg-black/60 text-rose-400 opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 hover:bg-rose-500/20 transition-all focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
                                     <Trash2 className="w-4 h-4" aria-hidden="true" />
                                 </button>
                             )}
                         </div>
-                    ))}
-                </div>
-            )}
+                    )}
+                />
+            </SectionCard>
 
             <AnimatePresence>
                 {lightbox !== null && items[lightbox] && (
@@ -2567,7 +2571,7 @@ function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin
                     />
                 )}
             </AnimatePresence>
-        </div>
+        </TabShell>
     );
 }
 
@@ -2721,40 +2725,167 @@ function useConfirm() {
     return { confirm, ConfirmDialog };
 }
 
-// ── Shared UI ─────────────────────────────────────────────────────────────────
-function SectionHeader({ title, isAdmin, editing, onEdit, onCancel, onSave, saving }: {
-    title: string; isAdmin: boolean; editing: boolean; onEdit: () => void; onCancel: () => void; onSave: () => void; saving: boolean;
+
+// ── Tata letak "tanpa scroll" (desktop) ───────────────────────────────────────
+// Di lg ke atas tiap tab setinggi layar; daftar yang panjang dibagi per halaman
+// (jumlah baris dihitung dari tinggi ruang yang tersedia) supaya tidak ada scroll.
+// Di bawah lg semua item tampil dan halaman mengalir/scroll seperti biasa.
+const LG_QUERY = '(min-width: 1024px)';
+function subscribeLg(cb: () => void) {
+    const m = window.matchMedia(LG_QUERY);
+    m.addEventListener('change', cb);
+    return () => m.removeEventListener('change', cb);
+}
+function useIsDesktop() {
+    return useSyncExternalStore(subscribeLg, () => window.matchMedia(LG_QUERY).matches, () => false);
+}
+
+/** Jumlah item yang muat di kotak terukur (tinggi ditentukan layout, bukan isi). */
+function useFit<E extends HTMLElement>(itemH: number, gap = 8, cols = 1) {
+    const ref = useRef<E>(null);
+    const desktop = useIsDesktop();
+    const [h, setH] = useState(0);
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const ro = new ResizeObserver(([e]) => setH(Math.round(e.contentRect.height)));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+    const rows = h > 0 ? Math.max(1, Math.floor((h + gap) / (itemH + gap))) : 3;
+    const perPage = desktop ? rows * cols : Number.MAX_SAFE_INTEGER;
+    return [ref, perPage] as const;
+}
+
+function usePaged<T>(items: T[], perPage: number) {
+    const [page, setPage] = useState(0);
+    const [prevLen, setPrevLen] = useState(items.length);
+    // Item baru ditambahkan: lompat ke halaman terakhir agar baris baru terlihat.
+    if (items.length !== prevLen) {
+        setPrevLen(items.length);
+        if (items.length > prevLen) setPage(Number.MAX_SAFE_INTEGER);
+    }
+    const pages = Math.max(1, Math.ceil(items.length / Math.max(1, perPage)));
+    const cur = Math.min(page, pages - 1);
+    const start = cur * perPage;
+    return { page: cur, pages, start, items: items.slice(start, start + perPage), setPage };
+}
+
+function Pager({ page, pages, onChange }: { page: number; pages: number; onChange: (p: number) => void }) {
+    if (pages <= 1) return null;
+    const btn = 'min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none';
+    return (
+        <div className="shrink-0 flex items-center justify-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-400" role="navigation" aria-label="Halaman daftar">
+            <button type="button" className={btn} disabled={page <= 0} onClick={() => onChange(page - 1)} aria-label="Halaman sebelumnya"><ChevronLeft className="w-4 h-4" aria-hidden="true" /></button>
+            <span className="font-mono">{page + 1} / {pages}</span>
+            <button type="button" className={btn} disabled={page >= pages - 1} onClick={() => onChange(page + 1)} aria-label="Halaman berikutnya"><ChevronRight className="w-4 h-4" aria-hidden="true" /></button>
+        </div>
+    );
+}
+
+/**
+ * Daftar berhalaman yang mengisi sisa tinggi induknya (induk harus flex-col dengan tinggi pasti di lg).
+ * itemH = perkiraan tinggi satu item (px) untuk menghitung jumlah per halaman.
+ */
+function Paged<T>({ items, itemH, gap = 8, cols = 1, fixed = false, baseClass = '', render, empty }: {
+    items: T[]; itemH: number; gap?: number; cols?: number; fixed?: boolean; baseClass?: string;
+    render: (item: T, index: number) => React.ReactNode; empty?: React.ReactNode;
 }) {
+    const [ref, perPage] = useFit<HTMLDivElement>(itemH, gap, cols);
+    const desktop = useIsDesktop();
+    const p = usePaged(items, perPage);
+    return (
+        <div className="flex-1 min-h-0 flex flex-col gap-2">
+            <div
+                ref={ref}
+                className={`flex-1 min-h-0 lg:overflow-hidden grid content-start ${baseClass}`}
+                style={{ gap, gridTemplateColumns: desktop && cols > 1 ? `repeat(${cols}, minmax(0, 1fr))` : undefined }}
+            >
+                {items.length === 0 ? empty : p.items.map((it, i) => (
+                    <div key={p.start + i} className={`min-w-0 min-h-0 ${fixed && desktop ? 'overflow-hidden' : ''}`} style={fixed && desktop ? { height: itemH } : undefined}>
+                        {render(it, p.start + i)}
+                    </div>
+                ))}
+            </div>
+            <Pager page={p.page} pages={p.pages} onChange={p.setPage} />
+        </div>
+    );
+}
+
+/** Kartu satu bagian untuk tata letak grid satu layar. */
+function SectionCard({ className = '', children }: { className?: string; children: React.ReactNode }) {
+    return (
+        <section className={`min-w-0 lg:min-h-0 flex flex-col gap-2 p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 ${className}`}>
+            {children}
+        </section>
+    );
+}
+
+// ── Shared UI ─────────────────────────────────────────────────────────────────
+/**
+ * Kerangka tab setinggi layar (lg ke atas): header tetap, isi mengisi sisa tinggi.
+ * Di bawah lg mengalir biasa. scroll=true: isi bisa di-scroll di dalam kerangka (tab berisi daftar/form).
+ */
+function TabShell({ header, children, scroll = true }: { header?: React.ReactNode; children: React.ReactNode; scroll?: boolean }) {
+    return (
+        <div className="flex flex-col gap-3 max-lg:pb-8 lg:h-[calc(100dvh-var(--ph-h,5.5rem)-1.5rem)]">
+            {header && <div className="shrink-0">{header}</div>}
+            <div className={`flex-1 min-h-0 ${scroll ? 'lg:overflow-y-auto lg:pr-1' : ''}`}>{children}</div>
+        </div>
+    );
+}
+
+/** "Diperbarui 30 Okt 2026, 14.20 · oleh X" atau "Belum ada catatan pembaruan". */
+function UpdatedStamp({ stamp, className = '' }: { stamp: SectionStamp | null; className?: string }) {
+    const t = stamp ? formatStampTime(stamp.at) : undefined;
+    return (
+        <p className={`text-[11px] font-normal normal-case tracking-normal text-slate-600 dark:text-slate-400 flex items-center gap-1 mt-0.5 min-w-0 ${className}`} title={t && stamp?.by ? `Diperbarui ${t} oleh ${stamp.by}` : undefined}>
+            <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
+            <span className="truncate">{t ? `Diperbarui ${t}${stamp?.by ? ` · ${stamp.by}` : ''}` : 'Belum ada catatan pembaruan'}</span>
+        </p>
+    );
+}
+const stampOf = (p: Project, k: ProjectSection): SectionStamp | null => p.sectionUpdates?.[k] ?? null;
+
+function SectionHeader({ title, isAdmin, editing, onEdit, onCancel, onSave, saving, compact = false, stamp }: {
+    title: string; isAdmin: boolean; editing: boolean; onEdit: () => void; onCancel: () => void; onSave: () => void; saving: boolean; compact?: boolean;
+    /** undefined = tidak ditampilkan; null = belum pernah diperbarui. */
+    stamp?: SectionStamp | null;
+}) {
+    const pad = compact ? 'px-2.5 py-1.5' : 'px-3.5 py-2.5';
     return (
         <div className={`flex items-center justify-between ${editing && isAdmin ? 'max-sm:sticky max-sm:top-[calc(var(--ph-h,0px)+0.25rem)] max-sm:z-20 max-sm:-mx-4 max-sm:px-4 max-sm:py-2 max-sm:bg-slate-100/90 dark:max-sm:bg-slate-950/90 max-sm:backdrop-blur max-sm:border-b max-sm:border-black/5 dark:max-sm:border-white/5' : ''}`}>
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">{title}</h3>
+            <div className="min-w-0">
+                <h3 className={`${compact ? 'text-xs' : 'text-sm'} font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300`}>{title}</h3>
+                {stamp !== undefined && <UpdatedStamp stamp={stamp} />}
+            </div>
             {isAdmin && (editing ? (
                 <div className="flex gap-2">
-                    <button onClick={onCancel} aria-label="Batalkan perubahan" className="px-3.5 py-2.5 max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><X className="w-3.5 h-3.5" /> Batal</button>
-                    <button onClick={onSave} disabled={saving} aria-label="Simpan perubahan" className="px-3.5 py-2.5 max-sm:min-h-11 max-sm:px-5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+                    <button onClick={onCancel} aria-label="Batalkan perubahan" className={`${pad} max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none`}><X className="w-3.5 h-3.5" /> Batal</button>
+                    <button onClick={onSave} disabled={saving} aria-label="Simpan perubahan" className={`${pad} max-sm:min-h-11 max-sm:px-5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none`}>
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan
                     </button>
                 </div>
             ) : (
-                <button onClick={onEdit} aria-label={`Edit ${title}`} className="px-3.5 py-2.5 max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                <button onClick={onEdit} aria-label={`Edit ${title}`} className={`${pad} max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none`}><Pencil className="w-3.5 h-3.5" /> Edit</button>
             ))}
         </div>
     );
 }
 
-function Field({ label, value }: { label: string; value?: string }) {
+function Field({ label, value, clamp }: { label: string; value?: string; clamp?: number }) {
     return (
-        <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+        <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 min-w-0">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1">{label}</div>
-            <div className="text-sm text-slate-900 dark:text-white break-words">{value || '-'}</div>
+            <div className={`text-sm text-slate-900 dark:text-white break-words ${clamp ? 'lg:overflow-hidden' : ''}`} style={clamp ? { display: '-webkit-box', WebkitLineClamp: clamp, WebkitBoxOrient: 'vertical' } : undefined} title={clamp ? value : undefined}>{value || '-'}</div>
         </div>
     );
 }
-function MiniField({ label, value }: { label: string; value: string }) {
+function MiniField({ label, value, clamp = false }: { label: string; value: string; clamp?: boolean }) {
     return (
-        <div>
+        <div className="min-w-0">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-0.5">{label}</div>
-            <div className="text-xs text-slate-600 dark:text-slate-300">{value}</div>
+            <div className={`text-xs text-slate-600 dark:text-slate-300 ${clamp ? 'line-clamp-2' : ''}`} title={clamp ? value : undefined}>{value}</div>
         </div>
     );
 }
@@ -2904,14 +3035,14 @@ function MoneyInput({ label, value, onChange, hint }: { label: string; value: st
         </div>
     );
 }
-function Textarea({ label, value, onChange, maxLength = 10000 }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number }) {
+function Textarea({ label, value, onChange, maxLength = 10000, required, rows = 3 }: { label: string; value: string; onChange: (v: string) => void; maxLength?: number; required?: boolean; rows?: number }) {
     const uid = useId();
     // Penghitung hanya tampil mendekati batas agar form tidak ramai.
     const nearLimit = value.length > maxLength * 0.8;
     return (
         <div>
-            <label htmlFor={uid} className={LABEL_CLS}>{label}</label>
-            <textarea id={uid} value={value} onChange={e => onChange(e.target.value)} rows={3} maxLength={maxLength} className={controlCls(false) + " resize-y"} />
+            <label htmlFor={uid} className={LABEL_CLS}>{label}{required && <span className="text-rose-500 ml-0.5" aria-hidden="true">*</span>}</label>
+            <textarea id={uid} required={required} value={value} onChange={e => onChange(e.target.value)} rows={rows} maxLength={maxLength} className={controlCls(false) + " resize-y"} />
             {nearLimit && <p className="mt-1 text-[11px] text-slate-500 text-right">{value.length.toLocaleString("id-ID")} / {maxLength.toLocaleString("id-ID")} karakter</p>}
         </div>
     );
@@ -2927,9 +3058,9 @@ function Select({ label, value, onChange, options }: { label: string; value: str
         </div>
     );
 }
-function EmptyState({ text, action }: { text: string; action?: { label: string; onClick: () => void } }) {
+function EmptyState({ text, action, compact = false }: { text: string; action?: { label: string; onClick: () => void }; compact?: boolean }) {
     return (
-        <div className="py-16 px-4 text-center text-slate-500 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm">
+        <div className={`${compact ? 'py-5' : 'py-16'} px-4 text-center text-slate-500 dark:text-slate-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl text-sm`}>
             <p>{text}</p>
             {action && (
                 <button
@@ -2944,33 +3075,177 @@ function EmptyState({ text, action }: { text: string; action?: { label: string; 
     );
 }
 
-function UploadButton({ projectId, kind, accept, label, onDone }: { projectId: string; kind: string; accept: string; label: string; onDone: () => void }) {
+// ── CCTV ─────────────────────────────────────────────────────────────────────
+function CctvTab({ project }: { project: Project }) {
+    const streamManager = useStreamManager();
+    const { realtimeStatuses } = useCameraStatusSSE();
+    const [playerStatus, setPlayerStatus] = useState<Record<string, 'online' | 'offline'>>({});
+    const cams = project.cameras ?? [];
+    const statusOf = (c: { _id: string; status: string }) => realtimeStatuses[c._id] ?? playerStatus[c._id] ?? c.status;
+    // Kamera offline turun ke bawah; key tetap _id agar stream online tidak remount saat urutan berubah.
+    const sorted = [...cams].sort((a, b) => Number(statusOf(b) === 'online') - Number(statusOf(a) === 'online'));
+    const online = cams.filter(c => statusOf(c) === 'online').length;
+
+    return (
+        <TabShell scroll={false}>
+        <SectionCard className="lg:h-full">
+            <div className="flex items-center justify-between gap-3 shrink-0">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">CCTV Proyek</h3>
+                {cams.length > 0 && (
+                    <span className="text-[11px] font-bold font-mono px-2.5 py-1 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-black/5 dark:border-white/10">
+                        <span className="text-emerald-700 dark:text-emerald-400">{online} ON</span>
+                        <span className="text-slate-500 mx-1">/</span>
+                        <span className="text-rose-700 dark:text-rose-400">{cams.length - online} OFF</span>
+                    </span>
+                )}
+            </div>
+            <Paged
+                items={sorted}
+                itemH={250}
+                cols={cams.length <= 1 ? 1 : 2}
+                fixed
+                baseClass="grid-cols-1 md:grid-cols-2"
+                empty={<EmptyState compact text="Belum ada CCTV terpasang di proyek ini." />}
+                render={(cam) => {
+                    const isOnline = statusOf(cam) === 'online';
+                    return (
+                        <div className={`relative h-full max-lg:aspect-video rounded-xl overflow-hidden border bg-black/5 dark:bg-black/60 ${isOnline ? 'border-emerald-500/30' : 'border-black/10 dark:border-white/10'}`}>
+                            <div className="absolute top-0 inset-x-0 z-10 p-2 bg-gradient-to-b from-black/80 to-transparent pointer-events-none flex items-center justify-between gap-2">
+                                <span className="flex items-center gap-2 min-w-0">
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} aria-hidden="true" />
+                                    <span className="text-xs font-bold text-white truncate">{cam.name}</span>
+                                </span>
+                                <span className={`shrink-0 text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${isOnline ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-rose-500/20 text-rose-200 border-rose-400/40'}`}>
+                                    {isOnline ? 'Live' : 'Offline'}
+                                </span>
+                            </div>
+                            <div className="w-full h-full flex items-center justify-center">
+                                <OptimizedVideoPlayer
+                                    cameraId={cam._id}
+                                    manager={streamManager}
+                                    onStatusChange={(st) => setPlayerStatus(prev => (prev[cam._id] === st ? prev : { ...prev, [cam._id]: st }))}
+                                />
+                            </div>
+                        </div>
+                    );
+                }}
+            />
+        </SectionCard>
+        </TabShell>
+    );
+}
+// ── Dokumen pendukung ─────────────────────────────────────────────────────────
+const DOC_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.rtf,.odt,.ods,.odp,.zip,.rar,.7z,.jpg,.jpeg,.png,.webp';
+
+function docTone(name: string) {
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    if (ext === 'pdf') return { label: 'PDF', cls: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30' };
+    if (['doc', 'docx', 'rtf', 'odt', 'txt'].includes(ext)) return { label: ext.toUpperCase(), cls: 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30' };
+    if (['xls', 'xlsx', 'csv', 'ods'].includes(ext)) return { label: ext.toUpperCase(), cls: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' };
+    if (['ppt', 'pptx', 'odp'].includes(ext)) return { label: ext.toUpperCase(), cls: 'bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30' };
+    return { label: (ext || 'FILE').toUpperCase().slice(0, 4), cls: 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/30' };
+}
+function formatBytes(n?: number) {
+    if (n == null) return '';
+    if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+function DocumentsTab({ project, isAdmin, onChanged }: { project: Project; isAdmin: boolean; onChanged: () => void }) {
+    const docs = project.documents ?? [];
+    const { confirm, ConfirmDialog } = useConfirm();
+    const doDelete = async (key: string) => {
+        try { await axios.delete(`/api/projects/${project._id}?kind=documents&key=${encodeURIComponent(key)}`); toast.success('Dokumen dihapus'); onChanged(); }
+        catch { toast.error('Gagal menghapus'); }
+    };
+
+    return (
+        <TabShell scroll={false}>
+        {ConfirmDialog}
+        <SectionCard className="lg:h-full">
+            <div className="flex items-center justify-between gap-3 shrink-0">
+                <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Dokumen Pendukung</h3>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">PDF, Word, Excel, PowerPoint, teks, arsip, dan gambar. Maksimal 25 MB per file, 100 dokumen per proyek.</p>
+                    <UpdatedStamp stamp={stampOf(project, 'documents')} />
+                </div>
+                {isAdmin && <UploadButton projectId={project._id} kind="documents" accept={DOC_ACCEPT} label="Unggah Dokumen" onDone={onChanged} multiple />}
+            </div>
+            <Paged
+                items={docs}
+                itemH={64}
+                cols={2}
+                baseClass="grid-cols-1"
+                empty={<EmptyState compact text="Belum ada dokumen." />}
+                render={(d) => {
+                    const tone = docTone(d.name);
+                    return (
+                        <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/70 dark:bg-slate-950/40 border border-black/5 dark:border-white/5 h-full">
+                            <span className={`shrink-0 w-10 h-10 rounded-lg border flex items-center justify-center text-[11px] font-black ${tone.cls}`}>{tone.label}</span>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate" title={d.name}>{d.name}</p>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
+                                    {[formatBytes(d.size), formatDate(d.uploadedAt)].filter(Boolean).join(' · ')}
+                                </p>
+                            </div>
+                            {d.url ? (
+                                <a href={d.url} download={d.name} aria-label={`Unduh ${d.name}`} className="shrink-0 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
+                                    <Download className="w-4 h-4" aria-hidden="true" />
+                                </a>
+                            ) : (
+                                <span className="shrink-0 text-[11px] text-slate-600 dark:text-slate-400 max-w-[6rem] text-right leading-tight">Unduhan khusus PIC dan admin</span>
+                            )}
+                            {isAdmin && d.key && (
+                                <button
+                                    onClick={() => confirm('Hapus Dokumen', `"${d.name}" akan dihapus permanen. Lanjutkan?`, () => doDelete(d.key!))}
+                                    aria-label={`Hapus ${d.name}`}
+                                    className="shrink-0 min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"
+                                >
+                                    <Trash2 className="w-4 h-4" aria-hidden="true" />
+                                </button>
+                            )}
+                        </div>
+                    );
+                }}
+            />
+        </SectionCard>
+        </TabShell>
+    );
+}
+
+function UploadButton({ projectId, kind, accept, label, onDone, multiple = false }: { projectId: string; kind: string; accept: string; label: string; onDone: () => void; multiple?: boolean }) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
 
     const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        const files = Array.from(e.target.files ?? []);
+        if (files.length === 0) return;
         setUploading(true);
-        try {
-            const fd = new FormData();
-            fd.append('file', file);
-            fd.append('kind', kind);
-            await axios.post(`/api/projects/${projectId}/upload`, fd);
-            toast.success('Berhasil diunggah');
-            onDone();
-        } catch (err: unknown) {
-            const apiError = axios.isAxiosError(err) ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
-            toast.error(apiError || 'Gagal mengunggah');
-        } finally {
-            setUploading(false);
-            if (inputRef.current) inputRef.current.value = '';
+        let ok = 0;
+        // Berurutan agar server tidak menerima belasan unggahan 25 MB sekaligus.
+        for (const file of files) {
+            try {
+                const fd = new FormData();
+                fd.append('file', file);
+                fd.append('kind', kind);
+                await axios.post(`/api/projects/${projectId}/upload`, fd);
+                ok++;
+            } catch (err: unknown) {
+                const apiError = axios.isAxiosError(err) ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
+                toast.error(`${file.name}: ${apiError || 'Gagal mengunggah'}`);
+            }
         }
+        if (ok > 0) {
+            toast.success(files.length > 1 ? `${ok} dari ${files.length} file berhasil diunggah` : 'Berhasil diunggah');
+            onDone();
+        }
+        setUploading(false);
+        if (inputRef.current) inputRef.current.value = '';
     };
 
     return (
         <>
-            <input ref={inputRef} aria-label={label} type="file" accept={accept} onChange={handleFile} className="hidden" />
+            <input ref={inputRef} aria-label={label} type="file" accept={accept} multiple={multiple} onChange={handleFile} className="hidden" />
             <button onClick={() => inputRef.current?.click()} disabled={uploading} className="flex items-center gap-2 px-3 py-2 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
                 {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} {label}
             </button>

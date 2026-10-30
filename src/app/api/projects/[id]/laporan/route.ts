@@ -5,6 +5,7 @@ import Location from '@/models/Location';
 import { requireProjectAccess, getAuditActor } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
 import { syncLegacy } from '@/lib/projectSync';
+import { stampSet } from '@/lib/projectSections';
 import {
     sanitizeLaporan, sanitizeRencana, sanitizeSaldoAwal, periodeLabel,
     isValidPeriode, MAX_LAPORAN, MAX_RENCANA,
@@ -114,12 +115,14 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         }
 
         const loc = await Location.findById(id).select('name').lean<{ name?: string }>();
+        const actor = await getAuditActor(req);
+        await Location.updateOne({ _id: id }, { $set: stampSet(['laporan'], actor) });
         await logAudit({
             action: 'UPDATE',
             entity: 'Project',
             entityId: id,
             entityName: loc?.name ?? id,
-            by: await getAuditActor(req),
+            by: actor,
             detail,
         });
         return NextResponse.json({ success: true });
@@ -159,12 +162,14 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
         }
 
         const loc = await Location.findById(id).select('name').lean<{ name?: string }>();
+        const actor = await getAuditActor(req);
+        await Location.updateOne({ _id: id }, { $set: stampSet(['laporan'], actor) });
         await logAudit({
             action: 'UPDATE',
             entity: 'Project',
             entityId: id,
             entityName: loc?.name ?? id,
-            by: await getAuditActor(req),
+            by: actor,
             detail,
         });
         return NextResponse.json({ success: true });

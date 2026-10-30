@@ -54,7 +54,7 @@ export interface LaporanBulanan {
 
 /**
  * Rencana hasil usaha kumulatif Jan..Des (12 nilai per seri, atau [] bila belum diisi).
- * Rencana PENDAPATAN tidak disimpan di sini: sama dengan RA RKAP (Kurva S berbasis PU).
+ * Rencana PENDAPATAN tidak disimpan di sini: sama dengan Rencana Internal / raRkap (Kurva S berbasis PU).
  */
 export interface HuRencanaSeries {
     hpp: number[];
@@ -130,7 +130,7 @@ export function isLaporanFresh(list?: LaporanBulanan[], now: Date = new Date()):
 
 /**
  * Rencana hasil usaha s.d periode (dari rencana tahunan); undefined bila belum diisi.
- * Rencana pendapatan diambil dari RA RKAP (satu sumber dengan Kurva S).
+ * Rencana pendapatan diambil dari Rencana Internal / raRkap (satu sumber dengan Kurva S).
  */
 export function huRencanaPeriode(rencana: RencanaKurvaS[] | undefined, periode: string): HasilUsahaPeriode | undefined {
     const plan = rencana?.find(x => x.tahun === Number(periode.slice(0, 4)));
@@ -388,7 +388,7 @@ export function sanitizeRencana(raw: unknown): SanitizeResult<RencanaKurvaS> {
     if (!Number.isInteger(tahun) || tahun < 2000 || tahun > 2099) return { ok: false, errors: ['Tahun tidak valid (2000-2099)'] };
 
     const puRkap = readNum(raw.puRkap, 'Target PU RKAP', errors);
-    const raRkap = readSeries(raw.raRkap, 'RA RKAP', errors);
+    const raRkap = readSeries(raw.raRkap, 'Rencana Internal', errors);
     const raEksternal = readSeries(raw.raEksternal, 'RA Eksternal', errors);
     const huRaw = isObj(raw.huRencana) ? raw.huRencana : {};
     const hu: HuRencanaSeries = {

@@ -3,8 +3,14 @@ import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
 import { requireAdmin, requireProjectAccess, getAuditActor, getSessionIdentity, isSuperAdmin, matchProjectPic } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
-import { derivedFromLaporan } from '@/lib/projectReport';
+import { derivedFromLaporan, isValidPeriode } from '@/lib/projectReport';
 import { loadDeriveSource, syncLegacy } from '@/lib/projectSync';
+import {
+    validPhone, sanitizeMilestones, sanitizeSumberDaya, sanitizeIsuStrategis, sanitizeKendala,
+    sanitizeProgressKeuangan, sanitizeProgressMinggu, sanitizeChangeManagement, sanitizeLingkup,
+    sanitizeMonitoringPengadaan,
+} from '@/lib/projectInputs';
+import { sectionsForFields, stampSet } from '@/lib/projectSections';
 import { getPresignedUrl, deleteObject, isStorageConfigured } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +23,7 @@ const EDITABLE_FIELDS = [
     // Field baru — identitas proyek
     'penggunaJasa', 'pengawas', 'penyediaJasa',
     // Field baru — progress
-    'progressRencana', 'progressDeviasi', 'progressKeuangan', 'tagihanBelumDiproses',
+    'progressRencana', 'progressDeviasi', 'progressPeriode', 'progressKeuangan', 'tagihanBelumDiproses',
     // Field baru — operasional
     'lingkupPekerjaan', 'sumberDaya', 'isuStrategis', 'kendala',
     // Field baru — hierarki organisasi
@@ -58,7 +64,7 @@ interface ProjectLean {
     _id: unknown;
     name?: string;
     picSubs?: string[];
-    contractFileKey?: string;
+    contractFileKey?: string; // legacy: tidak lagi dipakai; tetap dibuang dari respons bila masih ada di dokumen lama
     gallery?: Record<string, unknown>[];
     documents?: Record<string, unknown>[];
     [key: string]: unknown;
@@ -77,10 +83,10 @@ interface ProjectUpdateDraft {
     [key: string]: unknown;
 }
 
-async function sign(key?: string): Promise<string | null> {
+async function sign(key?: string, downloadName?: string): Promise<string | null> {
     if (!key || !isStorageConfigured()) return null;
     try {
-        return await getPresignedUrl(key);
+        return await getPresignedUrl(key, 3600, downloadName ? { downloadName } : undefined);
     } catch {
         return null;
     }
@@ -130,19 +136,17 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
         // Resolve presigned URL hanya untuk editor. Non-editor: URL null dan
         // raw key dibuang (hanya metadata non-sensitif yang dikirim).
-        let contractUrl: string | null = null;
         let gallery: Record<string, unknown>[];
         let documents: Record<string, unknown>[];
         if (canEdit) {
-            [contractUrl, gallery, documents] = await Promise.all([
-                sign(loc.contractFileKey),
+            [gallery, documents] = await Promise.all([
                 Promise.all((loc.gallery || []).map(async (g: Record<string, unknown>) => ({
                     ...g,
                     url: await sign(g.key as string | undefined),
                 }))),
                 Promise.all((loc.documents || []).map(async (d: Record<string, unknown>) => ({
                     ...d,
-                    url: await sign(d.key as string | undefined),
+                    url: await sign(d.key as string | undefined, typeof d.name === 'string' ? d.name : undefined),
                 }))),
             ]);
         } else {
@@ -160,7 +164,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         }
 
         // Jangan kirim picSubs mentah ke klien — buang dari payload data.
-        // contractFileKey juga dibuang agar key kontrak tidak bocor ke non-editor.
+        // contractFileKey (field lama, sudah tidak dipakai) tetap dibuang agar tidak bocor bila masih ada di dokumen lama.
         const { picSubs: _picSubs, contractFileKey: _contractFileKey, ...safeLoc } = loc;
         void _picSubs;
         void _contractFileKey;
@@ -169,7 +173,6 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
             success: true,
             data: {
                 ...safeLoc,
-                contractUrl,
                 gallery,
                 documents,
                 access: { canEdit, isSuperAdmin: superAdmin, isPic },
@@ -219,10 +222,50 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             }
         }
 
-        if ('progressPercent' in update) {
-            const p = Number(update.progressPercent);
-            if (!isBlank(update.progressPercent) && !Number.isFinite(p)) invalid.push('Progres fisik harus berupa angka');
-            update.progressPercent = Number.isFinite(p) ? Math.max(0, Math.min(100, Math.round(p))) : 0;
+        // Progres fisik: 0..100 dengan 2 desimal (sama dengan presisi slider di UI).
+        // Kosong = hapus nilai. Deviasi SELALU dihitung server (realisasi − rencana).
+        const round2 = (n: number) => Math.round(n * 100) / 100;
+        for (const [key, label] of [['progressPercent', 'Progres fisik (realisasi)'], ['progressRencana', 'Progres fisik (rencana)']] as const) {
+            if (key in update) {
+                if (isBlank(update[key])) { update[key] = undefined; continue; }
+                const p = Number(update[key]);
+                if (!Number.isFinite(p) || p < 0 || p > 100) {
+                    invalid.push(`${label} harus angka antara 0 dan 100`);
+                    update[key] = undefined;
+                } else {
+                    update[key] = round2(p);
+                }
+            }
+        }
+        delete update.progressDeviasi;
+        if ('pmPhone' in update) {
+            const ph = typeof update.pmPhone === 'string' ? update.pmPhone.trim() : '';
+            if (isBlank(update.pmPhone) || ph === '') update.pmPhone = undefined;
+            else if (!validPhone(ph)) invalid.push('Kontak PIC tidak valid (8-15 digit, boleh diawali +)');
+            else update.pmPhone = ph;
+        }
+        if ('tagihanBelumDiproses' in update) {
+            const n = Number(update.tagihanBelumDiproses);
+            if (!isBlank(update.tagihanBelumDiproses) && (!Number.isFinite(n) || n < 0)) invalid.push('Progress belum ditagihkan harus angka ≥ 0');
+            update.tagihanBelumDiproses = !isBlank(update.tagihanBelumDiproses) && Number.isFinite(n) && n >= 0 ? n : undefined;
+        }
+        // Sub-dokumen: tiap baris divalidasi, galat menyebut baris ke-N.
+        if ('milestones' in update) update.milestones = sanitizeMilestones(update.milestones, invalid);
+        if ('sumberDaya' in update) update.sumberDaya = sanitizeSumberDaya(update.sumberDaya, invalid);
+        if ('isuStrategis' in update) update.isuStrategis = sanitizeIsuStrategis(update.isuStrategis, invalid);
+        if ('kendala' in update) update.kendala = sanitizeKendala(update.kendala, invalid);
+        if ('progressKeuangan' in update) update.progressKeuangan = sanitizeProgressKeuangan(update.progressKeuangan, invalid);
+        if ('progressMinggu' in update) update.progressMinggu = sanitizeProgressMinggu(update.progressMinggu, invalid);
+        if ('changeManagement' in update) update.changeManagement = sanitizeChangeManagement(update.changeManagement, invalid);
+        if ('lingkupPekerjaan' in update) update.lingkupPekerjaan = sanitizeLingkup(update.lingkupPekerjaan, invalid);
+        if ('monitoringPengadaan' in update) update.monitoringPengadaan = sanitizeMonitoringPengadaan(update.monitoringPengadaan, invalid);
+        // Tanggal kosong = hapus tanggal.
+        for (const d of ['startDate', 'endDate'] as const) {
+            if (d in update && isBlank(update[d])) update[d] = undefined;
+        }
+        if ('progressPeriode' in update) {
+            if (isBlank(update.progressPeriode)) update.progressPeriode = undefined;
+            else if (!isValidPeriode(update.progressPeriode)) invalid.push('Bulan progres fisik tidak valid (format YYYY-MM)');
         }
         if ('contractValue' in update) {
             const v = Number(update.contractValue);
@@ -319,49 +362,54 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                 { status: 400 },
             );
         }
-        // CCC: Cash Conversion Cycle dalam HARI. Bulatkan, clamp 0..3650.
+        // CCC: Cash Conversion Cycle dalam HARI. Bulatkan, clamp 0..3650. Kosong = hapus.
         if ('ccc' in update) {
             const n = Number(update.ccc);
-            update.ccc = Number.isFinite(n) ? Math.max(0, Math.min(3650, Math.round(n))) : undefined;
+            update.ccc = !isBlank(update.ccc) && Number.isFinite(n) ? Math.max(0, Math.min(3650, Math.round(n))) : undefined;
         }
-        // LK (Laba Kotor) boleh negatif; jika PU & BK ada, hitung LK = PU - BK.
+        // LK (Laba Kotor) boleh negatif; jika PU & BK ada, hitung LK = PU - BK. Kosong = hapus.
         if ('lk' in update) {
             const n = Number(update.lk);
-            update.lk = Number.isFinite(n) ? n : undefined;
+            update.lk = !isBlank(update.lk) && Number.isFinite(n) ? n : undefined;
         }
         if (typeof update.pu === 'number' && typeof update.bk === 'number') {
             update.lk = update.pu - update.bk;
         }
-        // Hasil usaha: pendapatan/biaya >= 0; laba = pendapatan - biaya (dihitung).
-        if ('hasilUsaha' in update && update.hasilUsaha && typeof update.hasilUsaha === 'object') {
-            const p = Math.max(0, Number(update.hasilUsaha.pendapatan) || 0);
-            const b = Math.max(0, Number(update.hasilUsaha.biaya) || 0);
-            update.hasilUsaha = { pendapatan: p, biaya: b, laba: p - b };
-        }
-        // Monitoring pengadaan: sanitasi persentase 0..100.
-        if ('monitoringPengadaan' in update && Array.isArray(update.monitoringPengadaan)) {
-            update.monitoringPengadaan = update.monitoringPengadaan
-                .filter((m) => m && typeof m.nama === 'string' && m.nama.trim())
-                .map((m) => {
-                    const pct = Number(m.persentase);
-                    return {
-                        nama: String(m.nama).trim(),
-                        persentase: Number.isFinite(pct) ? Math.max(0, Math.min(100, Math.round(pct))) : 0,
-                    };
-                });
-        }
-        // Change management: validasi jenis enum (fallback LAINNYA).
-        if ('changeManagement' in update && Array.isArray(update.changeManagement)) {
-            const JENIS = ['PERUBAHAN_HARGA', 'PERUBAHAN_LINGKUP', 'KLAIM', 'LEGAL_ISSUE', 'LAINNYA'];
-            update.changeManagement = update.changeManagement.map((c) => {
-                if (c && typeof c === 'object' && c.jenis && !JENIS.includes(c.jenis)) {
-                    return { ...c, jenis: 'LAINNYA' };
-                }
-                return c;
-            });
+        // Hasil usaha: pendapatan/biaya >= 0; laba = pendapatan - biaya (dihitung). Kosong = hapus.
+        if ('hasilUsaha' in update) {
+            if (update.hasilUsaha && typeof update.hasilUsaha === 'object') {
+                const p = Math.max(0, Number(update.hasilUsaha.pendapatan) || 0);
+                const b = Math.max(0, Number(update.hasilUsaha.biaya) || 0);
+                update.hasilUsaha = { pendapatan: p, biaya: b, laba: p - b };
+            } else {
+                update.hasilUsaha = undefined;
+            }
         }
 
-        const loc = await Location.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true }).lean<ProjectLean>();
+        // Deviasi progres fisik = realisasi − rencana, dihitung server dari nilai tersimpan.
+        if ('progressPercent' in update || 'progressRencana' in update) {
+            const cur = await Location.findById(id).select('progressPercent progressRencana').lean<{ progressPercent?: number; progressRencana?: number }>();
+            const real = 'progressPercent' in update ? update.progressPercent : cur?.progressPercent;
+            const rencana = 'progressRencana' in update ? update.progressRencana : cur?.progressRencana;
+            update.progressDeviasi = round2((Number(real) || 0) - (Number(rencana) || 0));
+        }
+
+        // Nilai undefined = "kosongkan field": Mongoose membuang key undefined di $set,
+        // jadi dipindah ke $unset agar benar-benar terhapus.
+        const $set: Record<string, unknown> = {};
+        const $unset: Record<string, ''> = {};
+        for (const [k, v] of Object.entries(update)) {
+            if (v === undefined) $unset[k] = '';
+            else $set[k] = v;
+        }
+        // Catat waktu & pelaku pembaruan per dimensi data.
+        const actor = await getAuditActor(req);
+        Object.assign($set, stampSet(sectionsForFields(Object.keys(update)), actor));
+        const op: Record<string, unknown> = {};
+        if (Object.keys($set).length) op.$set = $set;
+        if (Object.keys($unset).length) op.$unset = $unset;
+
+        const loc = await Location.findByIdAndUpdate(id, op, { new: true, runValidators: true }).lean<ProjectLean>();
         if (!loc) {
             return NextResponse.json({ success: false, error: 'Proyek tidak ditemukan' }, { status: 404 });
         }
@@ -369,7 +417,6 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         // LK = PU − BK: PU berasal dari laporan, jadi hitung ulang bila BK diubah.
         if ('bk' in update) await syncLegacy(id);
 
-        const actor = await getAuditActor(req);
         await logAudit({
             action: 'UPDATE',
             entity: 'Project',
@@ -382,12 +429,24 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         return NextResponse.json({ success: true, data: loc });
     } catch (error) {
         console.error('[Project PATCH] Error:', error instanceof Error ? error.message : undefined);
-        return NextResponse.json({ success: false, error: 'Gagal memperbarui proyek' }, { status: 400 });
+        // Galat skema/cast = isian salah (400); selain itu galat server (500).
+        const name = (error as { name?: string })?.name;
+        if (name === 'ValidationError' || name === 'CastError') {
+            const paths = name === 'ValidationError'
+                ? Object.keys((error as { errors?: Record<string, unknown> }).errors ?? {})
+                : [String((error as { path?: string }).path ?? '')];
+            const where = paths.filter(Boolean).join(', ');
+            return NextResponse.json(
+                { success: false, error: where ? `Isian tidak valid pada: ${where}` : 'Isian tidak valid' },
+                { status: 400 },
+            );
+        }
+        return NextResponse.json({ success: false, error: 'Gagal memperbarui proyek' }, { status: 500 });
     }
 }
 
 /**
- * DELETE /api/projects/[id]?kind=gallery|documents|contract&key=<objectKey>
+ * DELETE /api/projects/[id]?kind=gallery|documents&key=<objectKey>
  * Removes a file reference from the project and deletes the object from MinIO.
  */
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -401,11 +460,9 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
 
     try {
         if (kind === 'gallery' && key) {
-            await Location.updateOne({ _id: id }, { $pull: { gallery: { key } } });
+            await Location.updateOne({ _id: id }, { $pull: { gallery: { key } }, $set: stampSet(['gallery'], await getAuditActor(req)) });
         } else if (kind === 'documents' && key) {
-            await Location.updateOne({ _id: id }, { $pull: { documents: { key } } });
-        } else if (kind === 'contract') {
-            await Location.updateOne({ _id: id }, { $unset: { contractFileKey: '' } });
+            await Location.updateOne({ _id: id }, { $pull: { documents: { key } }, $set: stampSet(['documents'], await getAuditActor(req)) });
         } else {
             return NextResponse.json({ success: false, error: 'Parameter tidak valid' }, { status: 400 });
         }
