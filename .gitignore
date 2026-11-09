@@ -64,3 +64,6 @@ scripts/data/*.local.json
 
 screenshots/
 .auth/
+
+# Snapshot data slide (berisi nama PIC, jangan di-commit)
+scripts/slides-data/

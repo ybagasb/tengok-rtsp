@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, use, useId, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
@@ -9,7 +10,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
     ArrowLeft, Loader2, MapPin, FileText, Image as ImageIcon, TrendingUp, Info, Upload, Trash2, Pencil, Check, X,
     User, Clock, CircleDollarSign, ExternalLink,
-    AlertTriangle, Plus, Minus,
+    AlertTriangle, ShieldCheck, Plus, Minus,
     ArrowUpRight, ArrowDownRight, Layers, Target, Wallet, Receipt,
     Menu, GitBranch, ChevronLeft, ChevronRight, BookOpen, CalendarDays, Video, FolderOpen, Download
 } from 'lucide-react';
@@ -19,9 +20,17 @@ import { useStreamManager } from '@/lib/StreamManager';
 import { useCameraStatusSSE } from '@/hooks/useCameraStatusSSE';
 import type { FootprintPoint } from '@/components/FootprintEditor';
 import { getDivisionCssVars } from '@/lib/divisionTheme';
-import { BULAN_NAMA, computeEvm, derivedFromLaporan, isLaporanFresh, isValidPeriode, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
+import { BULAN_NAMA, computeEvm, derivedFromLaporan, isLaporanFresh, isValidPeriode, kontrakHari, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
+import { QhsseTrendChart } from '@/components/project/QhsseChart';
+import QhsseCard from '@/components/project/QhsseCard';
+import {
+    QHSSE_DIMS, QHSSE_DIM_BY_ID, computedNilai, filledCount, fmtNum, fmtRupiah, fmtValue, nextPeriode, periodeFull, qpassOverall, seriesFor, summarize,
+    type QhsseData, type QhsseDimId, type QhsseKey, type QhsseGlossary, type QhsseNilai,
+} from '@/lib/qhsse';
 import LaporanBulananTab from '@/components/project/LaporanBulananTab';
 import ProjectDashboard from '@/components/project/ProjectDashboard';
+import { dashboardForCategory } from '@/lib/categoryDashboards';
+import HariKontrakRow from '@/components/project/HariKontrakRow';
 import { fRpShort } from '@/components/PanelCharts';
 import { formatStampTime, type ProjectSection, type SectionStamp, type SectionUpdates } from '@/lib/projectSections';
 
@@ -38,7 +47,7 @@ type Tab =
     | 'finansial'
     | 'operasi'
     | 'changemgmt'
-    | 'issues'
+    | 'qhsse'
     | 'laporan'
     | 'cctv' | 'dokumen'
     | 'info' | 'location' | 'contract' | 'progress' | 'gallery';
@@ -49,10 +58,8 @@ interface Milestone { title: string; done: boolean; date?: string; progress?: nu
 interface HasilUsaha { pendapatan: number; biaya: number; laba: number; }
 interface ProgressKeuangan { tahun: number; rencana: number; realisasi: number; }
 interface SumberDaya { namaAlat: string; jumlah: number; kategori?: string; satuan?: string; }
-interface IsuStrategis { isu: string; usulan: string; }
-interface Kendala { masalah: string; penyebab: string; tindakan: string; harapan?: string; target?: string; pic?: string; status: 'OPEN' | 'CLOSED' | 'ON_PROGRESS'; }
 type ChangeJenis = 'PERUBAHAN_HARGA' | 'PERUBAHAN_LINGKUP' | 'KLAIM' | 'LEGAL_ISSUE' | 'LAINNYA';
-interface ChangeManagement { judul: string; jenis?: ChangeJenis; deskripsi?: string; dampak?: string; mitigasi?: string; nilai?: number; tanggal?: string; target?: string; pic?: string; status: 'USULAN' | 'DISETUJUI' | 'DITOLAK'; dariKendala?: boolean; }
+interface ChangeManagement { judul: string; jenis?: ChangeJenis; deskripsi?: string; dampak?: string; mitigasi?: string; nilai?: number; tanggal?: string; target?: string; pic?: string; status: 'USULAN' | 'DISETUJUI' | 'DITOLAK'; }
 interface MonitoringPengadaan { nama: string; persentase: number; }
 interface ProgressMinggu {
     bulan: string; tahun: number;
@@ -125,8 +132,9 @@ interface Project {
     lingkupPekerjaan?: string[];
     sumberDaya?: SumberDaya[];
     monitoringPengadaan?: MonitoringPengadaan[];
-    isuStrategis?: IsuStrategis[];
-    kendala?: Kendala[];
+    qhsse?: QhsseData;
+    // Field pelengkap dashboard "model RRB" (hanya kategori ber-dashboard; diisi di tab Finansial).
+    program?: { mcCair?: number; mcCairLabel?: string; cutOffLabel?: string };
     changeManagement?: ChangeManagement[];
     laporanBulanan?: LaporanBulanan[];
     rencanaKurvaS?: RencanaKurvaS[];
@@ -150,11 +158,6 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
     planning: { label: 'Perencanaan', color: 'text-sky-400 bg-sky-500/10 border-sky-500/30' },
     ongoing: { label: 'Berjalan', color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
     completed: { label: 'Selesai', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
-};
-const KENDALA_STATUS: Record<string, { label: string; color: string }> = {
-    OPEN: { label: 'OPEN', color: 'text-rose-400 bg-rose-500/10 border-rose-500/30' },
-    ON_PROGRESS: { label: 'ON PROGRESS', color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
-    CLOSED: { label: 'CLOSED', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
 };
 
 interface TabItem { id: Tab; label: string; icon: typeof Info }
@@ -198,9 +201,9 @@ const TAB_GROUPS: TabGroup[] = [
         ],
     },
     {
-        group: 'Kendala',
+        group: 'QHSSE',
         items: [
-            { id: 'issues', label: 'Isu & Kendala', icon: AlertTriangle },
+            { id: 'qhsse', label: 'QHSSE', icon: ShieldCheck },
         ],
     },
     {
@@ -216,8 +219,6 @@ const TAB_GROUPS: TabGroup[] = [
     },
 ];
 
-const ALL_TABS: TabItem[] = TAB_GROUPS.flatMap(g => g.items);
-
 // Phone: simpan tinggi header sticky ke --ph-h (dipakai bar Simpan yang menempel di bawahnya).
 // Fungsi tingkat modul agar identitas ref stabil (tidak re-observe tiap render).
 function trackHeaderHeight(el: HTMLElement | null) {
@@ -231,7 +232,7 @@ function trackHeaderHeight(el: HTMLElement | null) {
 }
 
 // Phone (< sm): strip tab horizontal di dalam header sticky. Desktop/tablet tetap sidebar/drawer.
-function PhoneTabStrip({ tab, onSelect }: { tab: Tab; onSelect: (t: Tab) => void }) {
+function PhoneTabStrip({ tab, onSelect, tabs }: { tab: Tab; onSelect: (t: Tab) => void; tabs: TabItem[] }) {
     const listRef = useRef<HTMLDivElement>(null);
     const reduceMotion = useReducedMotion();
     // Tab aktif selalu terlihat, juga saat berpindah lewat tombol lain (mis. "Buka Laporan Bulanan").
@@ -242,7 +243,7 @@ function PhoneTabStrip({ tab, onSelect }: { tab: Tab; onSelect: (t: Tab) => void
     return (
         <nav aria-label="Bagian proyek" className="sm:hidden border-t border-black/5 dark:border-white/5">
             <div ref={listRef} className="flex gap-1.5 overflow-x-auto overscroll-x-contain snap-x px-4 py-2 touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {ALL_TABS.map(t => {
+                {tabs.map(t => {
                     const Icon = t.icon;
                     const active = tab === t.id;
                     return (
@@ -388,7 +389,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
     const status = STATUS_META[project.status || 'ongoing'] || STATUS_META.ongoing;
     const onlineCams = (project.cameras || []).filter(c => c.status === 'online').length;
-    const activeLabel = ALL_TABS.find(t => t.id === tab)?.label ?? '';
+
+    const tabGroups = TAB_GROUPS;
+    const allTabs = tabGroups.flatMap(g => g.items);
+    const activeLabel = allTabs.find(t => t.id === tab)?.label ?? '';
 
     // Kemampuan edit berbasis akses nyata (super-admin atau PIC) — dari server.
     const canEdit = project.access?.canEdit ?? false;
@@ -399,7 +403,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     // compact = rail ikon di desktop (label muncul saat hover/fokus); false = daftar penuh (drawer mobile).
     const renderNav = (compact: boolean) => (
         <nav className="space-y-3" aria-label="Bagian proyek">
-            {TAB_GROUPS.map(grp => (
+            {tabGroups.map(grp => (
                 <div key={grp.group}>
                     <div className={`px-3 mb-1 text-[11px] font-bold uppercase tracking-widest text-slate-600 ${compact ? 'h-4 overflow-hidden whitespace-nowrap opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 transition-opacity' : ''}`}>{grp.group}</div>
                     <div className="space-y-0.5">
@@ -487,7 +491,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         </div>
                     </div>
                     <a
-                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261030"
+                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261106"
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Buka panduan pengisian (PDF)"
@@ -506,7 +510,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         <MapPin className="w-4 h-4" /> Lihat di Peta
                     </button>
                 </div>
-                <PhoneTabStrip tab={tab} onSelect={selectTab} />
+                <PhoneTabStrip tab={tab} onSelect={selectTab} tabs={allTabs} />
             </header>
 
             <div className="relative z-[1] w-full px-3 sm:px-4 py-3 flex gap-3">
@@ -552,7 +556,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                         <MapPin className="w-4 h-4 shrink-0" aria-hidden="true" /> Lihat di Peta
                                     </button>
                                     <a
-                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261030"
+                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261106"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="w-full min-h-11 flex items-center gap-2.5 px-3 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 bg-black/[0.04] dark:bg-white/5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
@@ -578,7 +582,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             {tab === 'operasi'    && <OperasiTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
                             {tab === 'laporan'    && <LaporanBulananTab projectId={project._id} laporan={project.laporanBulanan ?? []} rencana={project.rencanaKurvaS ?? []} saldoAwal={{ cashInAwal: project.cashInAwal, cashOutAwal: project.cashOutAwal }} contractValue={project.contractValue} onGoContract={() => selectTab('contract')} lastUpdated={project.sectionUpdates?.laporan ?? null} isAdmin={canEdit} onSaved={fetchProject} errorMessage={saveErrorMessage} />}
                             {tab === 'changemgmt' && <ChangeManagementTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'issues'     && <IssuesTab project={project} isAdmin={canEdit} onSaved={fetchProject} onToChangeMgmt={() => setTab('changemgmt')} />}
+                            {tab === 'qhsse'      && <QhsseTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'info'       && <InfoTab project={project} isAdmin={canEdit} isSuperAdmin={isSuperAdmin} onSaved={fetchProject} />}
                             {tab === 'location'   && <LocationTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'contract'   && <ContractTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
@@ -747,6 +751,8 @@ function MoneyCard({ label, value, icon: Icon, tone }: { label: string; value?: 
 
 function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
     const [editing, setEditing] = useState(false);
+    // MC Cair (+ cut-off) dipakai dashboard "model RRB"; hanya untuk kategori ber-dashboard.
+    const hasProgram = !!dashboardForCategory(project.category);
     // Tagihan bruto & hasil usaha diisi otomatis dari Laporan Bulanan terbaru bila tersedia.
     const latestLap = latestLaporan(project.laporanBulanan);
     const derivedLap = derivedFromLaporan(project);
@@ -773,6 +779,9 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
         huBiaya: project.hasilUsaha?.biaya?.toString() ?? '',
         progressKeuangan: (project.progressKeuangan ?? []) as ProgressKeuangan[],
         tagihanBelumDiproses: project.tagihanBelumDiproses?.toString() ?? '',
+        mcCair: project.program?.mcCair?.toString() ?? '',
+        mcCairLabel: project.program?.mcCairLabel ?? '',
+        cutOffLabel: project.program?.cutOffLabel ?? '',
     });
     const [form, setForm] = useState(initForm);
     const [saving, setSaving] = useState(false);
@@ -805,6 +814,13 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                 }),
                 progressKeuangan: form.progressKeuangan,
                 tagihanBelumDiproses: form.tagihanBelumDiproses === '' ? null : Number(form.tagihanBelumDiproses),
+                ...(hasProgram ? {
+                    program: {
+                        mcCair: form.mcCair === '' ? undefined : Number(form.mcCair),
+                        mcCairLabel: form.mcCairLabel,
+                        cutOffLabel: form.cutOffLabel,
+                    },
+                } : {}),
             });
             toast.success('Finansial tersimpan');
             setEditing(false);
@@ -918,11 +934,21 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                 <div className="lg:col-span-4 min-w-0 lg:min-h-0 flex flex-col">
             {/* Progress keuangan per DIPA */}
             {!editing ? (
-                <div className="lg:flex-1 lg:min-h-0 flex flex-col">
+                <div className="lg:flex-1 lg:min-h-0 flex flex-col gap-3">
                     <ProgressKeuanganCard
                         progressKeuangan={project.progressKeuangan || []}
                         tagihanBelumDiproses={project.tagihanBelumDiproses}
                     />
+                    {hasProgram && (
+                        <div className="shrink-0 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-3">MC Cair (Dashboard {dashboardForCategory(project.category)?.label})</div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <MiniField label="MC Cair" value={formatIDR(project.program?.mcCair)} />
+                                <MiniField label="Keterangan" value={project.program?.mcCairLabel || '-'} />
+                            </div>
+                            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">DIPA tersedia di dashboard diambil dari total Pagu/Rencana di atas — tak perlu diisi lagi.</p>
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex flex-col gap-2 lg:flex-1 lg:min-h-0">
@@ -955,6 +981,14 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                     <div className="shrink-0">
                         <MoneyInput label="Progress Belum Ditagihkan" value={form.tagihanBelumDiproses} onChange={v => setForm(f => ({ ...f, tagihanBelumDiproses: v }))} />
                     </div>
+                    {hasProgram && (
+                        <div className="shrink-0 pt-2 border-t border-black/5 dark:border-white/5 space-y-1">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">MC Cair (Dashboard Program)</div>
+                            <MoneyInput label="MC Cair" value={form.mcCair} onChange={v => setForm(f => ({ ...f, mcCair: v }))} />
+                            <Input label="Keterangan MC Cair" value={form.mcCairLabel} onChange={v => setForm(f => ({ ...f, mcCairLabel: v }))} />
+                            <Input label="Keterangan Cut-off" value={form.cutOffLabel} onChange={v => setForm(f => ({ ...f, cutOffLabel: v }))} />
+                        </div>
+                    )}
                 </div>
             )}
                 </div>
@@ -1482,7 +1516,7 @@ function ChangeManagementTab({ project, isAdmin, onSaved }: { project: Project; 
         <SectionCard className="lg:h-full">
             <SectionHeader title="Change Management" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => { setList(project.changeManagement ?? []); setEditing(false); }} onSave={save} saving={saving} stamp={stampOf(project, 'changeMgmt')} compact />
             <div className="flex items-center justify-between gap-2 shrink-0">
-                <p className="text-[11px] text-slate-600 dark:text-slate-400">Daftar perubahan lingkup/kontrak. Kendala dapat dimasukkan ke sini dari tab Isu &amp; Kendala.</p>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">Daftar perubahan lingkup/kontrak.</p>
                 {editing && (
                     <button onClick={() => setList(s => [...s, { judul: '', status: 'USULAN' }])} className={`${addBtn} shrink-0`}>
                         <Plus className="w-3.5 h-3.5" /> Tambah Perubahan
@@ -1533,7 +1567,6 @@ function ChangeManagementTab({ project, isAdmin, onSaved }: { project: Project; 
                                     <div className="w-6 h-6 rounded-md bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-500 dark:text-indigo-400 shrink-0 font-black text-[11px]">{i + 1}</div>
                                     <div className="min-w-0">
                                         <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2" title={cm.judul}>{cm.judul || '-'}</p>
-                                        {cm.dariKendala && <span className="text-[11px] text-indigo-600 dark:text-indigo-300 inline-flex items-center gap-1"><GitBranch className="w-3 h-3" aria-hidden="true" /> Dari kendala</span>}
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap items-center justify-end gap-1 shrink-0 max-w-[45%]">
@@ -1608,7 +1641,7 @@ function fisikSampai(p: Project): string | undefined {
 }
 
 // ── 2-Column Progress Charts ──────────────────────────────────────────────────
-function ProgressFisikCard({ rencana, realisasi, deviasi, sampai }: { rencana: number; realisasi: number; deviasi: number; sampai?: string }) {
+function ProgressFisikCard({ rencana, realisasi, deviasi, sampai, startDate, endDate }: { rencana: number; realisasi: number; deviasi: number; sampai?: string; startDate?: string; endDate?: string }) {
     const isAhead = deviasi >= 0;
     const SIZE = 156;
     const STROKE = 10;
@@ -1722,6 +1755,11 @@ function ProgressFisikCard({ rencana, realisasi, deviasi, sampai }: { rencana: n
                         {isAhead ? '+' : ''}{deviasi.toFixed(2)}%
                     </span>
                 </div>
+            </div>
+
+            {/* Hari kontrak: dari tanggal mulai & selesai di tab Informasi */}
+            <div className="pt-2 border-t border-black/5 dark:border-white/5">
+                <HariKontrakRow startDate={startDate} endDate={endDate} hint />
             </div>
         </div>
     );
@@ -2173,13 +2211,11 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
     };
 
     // Waktu kontrak dihitung dari tanggal mulai dan selesai di tab Informasi.
-    const t0 = project.startDate ? new Date(project.startDate).getTime() : NaN;
-    const t1 = project.endDate ? new Date(project.endDate).getTime() : NaN;
-    const hasSpan = Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0;
-    const nowMs = new Date().getTime();
-    const totalHari = hasSpan ? Math.round((t1 - t0) / 86_400_000) : undefined;
-    const sisaHari = hasSpan ? Math.ceil((t1 - nowMs) / 86_400_000) : undefined;
-    const terpakai = hasSpan ? Math.min(100, Math.max(0, ((nowMs - t0) / (t1 - t0)) * 100)) : undefined;
+    const kh = kontrakHari(project.startDate, project.endDate);
+    const hasSpan = !!kh;
+    const totalHari = kh?.total;
+    const sisaHari = kh?.sisa;
+    const terpakai = kh?.persen;
 
     return (
         <TabShell header={
@@ -2198,6 +2234,8 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                         <MoneyInput label="Nilai Kontrak" value={form.contractValue} onChange={v => setForm({ ...form, contractValue: v })} hint="Nilai kontrak dalam Rupiah penuh. Dipakai sebagai pembagi persen Kurva S di Laporan Bulanan." />
                     </>
                 )}
+
+
                 {!editing && (
                     <div className="sm:col-span-2 lg:col-span-3 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
                         <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-3">Waktu Kontrak</div>
@@ -2268,6 +2306,8 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                     realisasi={project.progressPercent ?? 0}
                     deviasi={deviasi}
                     sampai={fisikSampai(project)}
+                    startDate={project.startDate}
+                    endDate={project.endDate}
                 />
             ) : (
                 <div className="space-y-4">
@@ -2335,183 +2375,290 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
     );
 }
 
-// ── Isu & Kendala ─────────────────────────────────────────────────────────────
-function IssuesTab({ project, isAdmin, onSaved, onToChangeMgmt }: { project: Project; isAdmin: boolean; onSaved: () => void; onToChangeMgmt?: () => void }) {
-    const [editingIsu, setEditingIsu] = useState(false);
-    const [editingKendala, setEditingKendala] = useState(false);
-    const [isuList, setIsuList] = useState<IsuStrategis[]>(project.isuStrategis ?? []);
-    const [kendalaList, setKendalaList] = useState<Kendala[]>(project.kendala ?? []);
+// ── QHSSE ─────────────────────────────────────────────────────────────────────
+type QhsseRow = Record<string, string>;
+interface QhsseCol { k: string; label: string; kind: 'int' | 'num' | 'money' | 'text'; max?: number; computed?: boolean }
+const QHSSE_COLS: Record<QhsseKey, QhsseCol[]> = {
+    nc: [
+        { k: 'totalNC', label: 'Total NC', kind: 'int' },
+        { k: 'open', label: 'Open', kind: 'int' },
+        { k: 'closed', label: 'Closed', kind: 'int' },
+        { k: 'totalCost', label: 'Cost of NC', kind: 'money' },
+    ],
+    qpass: [
+        { k: 'struktur', label: 'Struktur', kind: 'num', max: 100 },
+        { k: 'arsitektur', label: 'Arsitektur', kind: 'num', max: 100 },
+        { k: 'mep', label: 'MEP', kind: 'num', max: 100 },
+        { k: 'overall', label: 'Overall', kind: 'num', max: 100 },
+    ],
+    trir: [
+        { k: 'incidents', label: 'Insiden Tercatat', kind: 'int' },
+        { k: 'workHours', label: 'Total Jam Kerja', kind: 'num' },
+        { k: 'nilai', label: 'TRIR (otomatis)', kind: 'num', computed: true },
+        { k: 'catatan', label: 'Catatan', kind: 'text' },
+    ],
+    smk3l: [{ k: 'nilai', label: 'Skor (0–100)', kind: 'num', max: 100 }, { k: 'catatan', label: 'Catatan', kind: 'text' }],
+    r5: [{ k: 'jumlah', label: 'Jumlah Laporan', kind: 'int' }, { k: 'durasi', label: 'Rata-rata Durasi (menit)', kind: 'num' }, { k: 'catatan', label: 'Catatan', kind: 'text' }],
+    pak: [{ k: 'nilai', label: 'Jumlah kasus', kind: 'int' }, { k: 'catatan', label: 'Catatan', kind: 'text' }],
+    energi: [
+        { k: 'energyKwh', label: 'Energi Listrik (kWh)', kind: 'num' },
+        { k: 'areaM2', label: 'Luas Bangunan (m²)', kind: 'num' },
+        { k: 'nilai', label: 'Kepatuhan (%) (otomatis)', kind: 'num', computed: true },
+        { k: 'catatan', label: 'Catatan', kind: 'text' },
+    ],
+    keamanan: [{ k: 'nilai', label: 'Jumlah kasus', kind: 'int' }, { k: 'catatan', label: 'Catatan', kind: 'text' }],
+};
+
+const qhsseToDraft = (rows: object[]): QhsseRow[] =>
+    [...rows as Record<string, unknown>[]]
+        .sort((a, b) => String(b.periode).localeCompare(String(a.periode)))
+        .map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v == null ? '' : String(v)])));
+
+function qhsseFromDraft(key: QhsseKey, draft: QhsseRow[]): Record<string, unknown>[] {
+    return draft.map(r => {
+        const out: Record<string, unknown> = { periode: (r.periode ?? '').trim() };
+        for (const c of QHSSE_COLS[key]) {
+            if (c.computed) continue; // kolom hasil diisi otomatis dari elemen, bukan dari input
+            const v = (r[c.k] ?? '').trim();
+            if (v === '') continue;
+            out[c.k] = c.kind === 'text' ? v : Number(v.replace(',', '.'));
+        }
+        // Dimensi berumus: hitung & simpan 'nilai' dari elemen agar grafik/ringkasan konsisten.
+        if (key === 'trir' || key === 'energi') {
+            const n = computedNilai(key, out as unknown as QhsseNilai);
+            if (typeof n === 'number' && Number.isFinite(n)) out.nilai = n;
+            else delete out.nilai;
+        }
+        return out;
+    });
+}
+
+/** Nilai hasil (terformat) sebuah kolom computed dari baris draft/tampilan (string → angka). */
+function computedCell(dim: QhsseDimId, c: QhsseCol, r: QhsseRow): string {
+    if (!c.computed) return '-';
+    const num = (s?: string) => { const v = Number((s ?? '').replace(',', '.')); return (s ?? '').trim() !== '' && Number.isFinite(v) ? v : undefined; };
+    const e: QhsseNilai = {
+        periode: r.periode ?? '',
+        incidents: num(r.incidents), workHours: num(r.workHours),
+        energyKwh: num(r.energyKwh), areaM2: num(r.areaM2),
+        nilai: num(r.nilai),
+    };
+    const v = computedNilai(dim, e);
+    return v == null ? '-' : fmtValue(dim, v);
+}
+
+/** Field read-only bergaya seperti Input tapi menampilkan nilai yang dihitung otomatis. */
+function ComputedField({ label, value }: { label: string; value: string }) {
+    return (
+        <div>
+            <span className={LABEL_CLS}>{label}</span>
+            <div className="mt-1.5 w-full px-3 py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.04] border border-dashed border-black/10 dark:border-white/10 text-slate-700 dark:text-slate-200 text-sm font-mono">
+                {value}
+            </div>
+        </div>
+    );
+}
+
+function QhsseTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+    // 'all' = ringkasan semua dimensi (tampilan awal); selain itu = detail satu dimensi + input data.
+    const [view, setView] = useState<QhsseDimId | 'all'>('all');
+    const active: QhsseDimId = view === 'all' ? 'nc' : view;
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState<QhsseRow[]>([]);
     const [saving, setSaving] = useState(false);
-    const [promoting, setPromoting] = useState<number | null>(null);
 
-    const saveIsu = async () => {
-        setSaving(true);
-        try { await axios.patch(`/api/projects/${project._id}`, { isuStrategis: isuList }); toast.success('Isu strategis tersimpan'); setEditingIsu(false); onSaved(); }
-        catch (err) { toast.error(saveErrorMessage(err)); } finally { setSaving(false); }
-    };
-    const saveKendala = async () => {
-        setSaving(true);
-        try { await axios.patch(`/api/projects/${project._id}`, { kendala: kendalaList }); toast.success('Kendala tersimpan'); setEditingKendala(false); onSaved(); }
-        catch (err) { toast.error(saveErrorMessage(err)); } finally { setSaving(false); }
-    };
+    const dim = QHSSE_DIM_BY_ID[active];
+    const key = dim.key;
+    const cols = QHSSE_COLS[key];
+    const data = project.qhsse;
+    const stored = (data?.[key] ?? []) as object[];
+    const viewRows = qhsseToDraft(stored);
+    const series = seriesFor(active, data);
+    const sum = summarize(active, data);
+    const fmt = (v: number) => fmtValue(active, v);
 
-    // Salin satu kendala menjadi item Change Management (USULAN).
-    const toChangeMgmt = async (k: Kendala, idx: number) => {
-        setPromoting(idx);
+    const startEdit = (add: boolean) => {
+        const base = qhsseToDraft(stored);
+        if (add) base.unshift({ periode: nextPeriode(base[0]?.periode) });
+        setDraft(base);
+        setEditing(true);
+    };
+    const cancel = () => { setEditing(false); setDraft([]); };
+    const upd = (i: number, patch: QhsseRow) => setDraft(l => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+    const addRow = () => setDraft(l => [{ periode: nextPeriode(l[0]?.periode) }, ...l]);
+
+    const save = async () => {
+        setSaving(true);
         try {
-            const existing = project.changeManagement ?? [];
-            const item: ChangeManagement = {
-                judul: k.masalah,
-                jenis: 'LAINNYA',
-                deskripsi: [k.penyebab && `Penyebab: ${k.penyebab}`, k.tindakan && `Tindakan: ${k.tindakan}`].filter(Boolean).join('\n'),
-                dampak: k.harapan || undefined,
-                target: k.target || undefined,
-                pic: k.pic || undefined,
-                status: 'USULAN',
-                dariKendala: true,
-                tanggal: new Date().toISOString(),
-            };
-            await axios.patch(`/api/projects/${project._id}`, { changeManagement: [...existing, item] });
-            toast.success('Kendala dimasukkan ke Change Management');
+            const payload: Record<string, unknown> = {};
+            for (const k of Object.keys(QHSSE_COLS) as QhsseKey[]) payload[k] = data?.[k] ?? [];
+            payload[key] = qhsseFromDraft(key, draft);
+            await axios.patch(`/api/projects/${project._id}`, { qhsse: payload });
+            toast.success('Data QHSSE tersimpan');
+            setEditing(false);
             onSaved();
-            onToChangeMgmt?.();
-        } catch { toast.error('Gagal memasukkan ke Change Management'); }
-        finally { setPromoting(null); }
+        } catch (err) { toast.error(saveErrorMessage(err)); } finally { setSaving(false); }
     };
 
     const smallBtn = 'px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none';
     const saveBtn = 'px-2.5 py-1.5 rounded-lg div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none';
-    const rowCard = 'p-3 rounded-xl bg-white/70 dark:bg-slate-950/40 border border-black/5 dark:border-white/5';
-    const updKendala = (i: number, patch: Partial<Kendala>) => setKendalaList(l => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
-    const updIsu = (i: number, patch: Partial<IsuStrategis>) => setIsuList(l => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
     const delBtn = 'text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none rounded';
+    const rowCard = 'p-3 rounded-xl bg-white/70 dark:bg-slate-950/40 border border-black/5 dark:border-white/5';
+    const gridStyle = { gridTemplateColumns: `minmax(0,1.1fr) repeat(${cols.length}, minmax(0,1fr))` };
+    const trendCls = sum.trend === 'good' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+        : sum.trend === 'bad' ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/30'
+        : 'text-slate-600 dark:text-slate-300 bg-slate-500/10 border-slate-500/20';
+    const cellText = (c: QhsseCol, v?: string) => {
+        if (v == null || v === '') return '-';
+        if (c.kind === 'text') return v;
+        const n = Number(v);
+        if (c.kind === 'money') return fmtRupiah(n);
+        return fmtNum(n, c.kind === 'int' ? 0 : 2);
+    };
 
     return (
         <TabShell scroll={false}>
-        <div className="flex flex-col gap-3 lg:h-full lg:grid lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
-            {/* Isu Strategis */}
+        <div className="flex flex-col gap-3 lg:h-full">
+            {/* Pemilih dimensi */}
             <SectionCard>
-                <div className="flex items-center justify-between gap-2 shrink-0">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Isu Strategis</h3>
-                        <UpdatedStamp stamp={stampOf(project, 'isu')} />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">QHSSE · {filledCount(data)}/{QHSSE_DIMS.length} dimensi terisi</h3>
+                        <UpdatedStamp stamp={stampOf(project, 'qhsse')} />
                     </div>
-                    {isAdmin && (editingIsu ? (
-                        <div className="flex gap-2">
-                            <button onClick={() => { setIsuList(project.isuStrategis ?? []); setEditingIsu(false); }} className={smallBtn}><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveIsu} disabled={saving} className={saveBtn}>{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2">
-                            <button onClick={() => { setIsuList(s => [...s, { isu: '', usulan: '' }]); setEditingIsu(true); }} className={smallBtn}><Plus className="w-3.5 h-3.5" /> Tambah</button>
-                            <button onClick={() => setEditingIsu(true)} className={smallBtn}><Pencil className="w-3.5 h-3.5" /> Edit</button>
-                        </div>
-                    ))}
+                    <div role="tablist" aria-label="Dimensi QHSSE" className="flex flex-wrap gap-1.5">
+                        <button
+                            role="tab"
+                            aria-selected={view === 'all'}
+                            disabled={editing}
+                            onClick={() => setView('all')}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none ${
+                                view === 'all' ? 'div-accent-solid text-slate-950 border-transparent'
+                                    : 'bg-black/[0.04] dark:bg-white/5 border-black/5 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
+                        >
+                            Semua
+                        </button>
+                        {QHSSE_DIMS.map(d => {
+                            const on = d.id === view;
+                            return (
+                                <button
+                                    key={d.id}
+                                    role="tab"
+                                    aria-selected={on}
+                                    disabled={editing && !on}
+                                    onClick={() => setView(d.id)}
+                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none ${
+                                        on ? 'div-accent-solid text-slate-950 border-transparent'
+                                           : 'bg-black/[0.04] dark:bg-white/5 border-black/5 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
+                                >
+                                    {d.short}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
-                <Paged
-                    items={isuList}
-                    itemH={editingIsu ? 215 : 132}
-                    fixed={!editingIsu}
-                    empty={<EmptyState compact text="Belum ada isu strategis." />}
-                    render={(isu, i) => editingIsu ? (
-                        <div className={rowCard}>
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Isu #{i + 1}</span>
-                                <button onClick={() => setIsuList(s => s.filter((_, j) => j !== i))} aria-label="Hapus isu" className={delBtn}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>
-                            </div>
-                            <div className="space-y-1">
-                                <Textarea rows={2} label="Isu" required value={isu.isu} onChange={v => updIsu(i, { isu: v })} />
-                                <Textarea rows={2} label="Usulan dari Abipraya" required value={isu.usulan} onChange={v => updIsu(i, { usulan: v })} />
-                            </div>
-                        </div>
-                    ) : (
-                        <div className={`${rowCard} h-full flex gap-2.5`}>
-                            <div className="w-6 h-6 rounded-md bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400 font-black text-[11px] shrink-0">{i + 1}</div>
-                            <div className="min-w-0 flex-1 space-y-1">
-                                <p className="text-sm text-slate-900 dark:text-white leading-snug line-clamp-3" title={isu.isu}>{isu.isu}</p>
-                                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2" title={isu.usulan}><span className="font-bold text-amber-700 dark:text-yellow-400">Usulan: </span>{isu.usulan}</p>
-                            </div>
-                        </div>
-                    )}
-                />
             </SectionCard>
 
-            {/* Kendala */}
-            <SectionCard>
-                <div className="flex items-center justify-between gap-2 shrink-0">
-                    <div className="min-w-0">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Kendala Operasional &amp; Kontraktual</h3>
-                        <UpdatedStamp stamp={stampOf(project, 'kendala')} />
+            {view === 'all' ? (
+                <div className="flex flex-col gap-2 lg:flex-1 lg:min-h-0">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
+                        Panah dibandingkan bulan lalu (hijau membaik, merah memburuk). Klik kartu untuk melihat grafik detail{isAdmin ? ' dan mengisi data' : ''}.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:flex-1 lg:min-h-0 lg:grid-rows-3">
+                        {QHSSE_DIMS.map(d => <QhsseCard key={d.id} dim={d} data={data} onClick={() => setView(d.id)} className="lg:min-h-0" />)}
                     </div>
-                    {isAdmin && (editingKendala ? (
-                        <div className="flex gap-2">
-                            <button onClick={() => { setKendalaList(project.kendala ?? []); setEditingKendala(false); }} className={smallBtn}><X className="w-3.5 h-3.5" /> Batal</button>
-                            <button onClick={saveKendala} disabled={saving} className={saveBtn}>{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2">
-                            <button onClick={() => { setKendalaList(s => [...s, { masalah: '', penyebab: '', tindakan: '', status: 'OPEN' }]); setEditingKendala(true); }} className={smallBtn}><Plus className="w-3.5 h-3.5" /> Tambah</button>
-                            <button onClick={() => setEditingKendala(true)} className={smallBtn}><Pencil className="w-3.5 h-3.5" /> Edit</button>
-                        </div>
-                    ))}
                 </div>
-                <Paged
-                    items={kendalaList}
-                    itemH={editingKendala ? 330 : 224}
-                    fixed={!editingKendala}
-                    empty={<EmptyState compact text="Belum ada kendala tercatat." />}
-                    render={(k, i) => editingKendala ? (
-                        <div className={rowCard}>
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Kendala #{i + 1}</span>
-                                <button onClick={() => setKendalaList(s => s.filter((_, j) => j !== i))} aria-label="Hapus kendala" className={delBtn}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>
-                            </div>
-                            <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1">
-                                <Input label="Masalah" required value={k.masalah} onChange={v => updKendala(i, { masalah: v })} />
-                                <Input label="Penyebab" required value={k.penyebab} onChange={v => updKendala(i, { penyebab: v })} />
-                                <Input label="Tindakan" required value={k.tindakan} onChange={v => updKendala(i, { tindakan: v })} />
-                                <Input label="Harapan Dukungan" value={k.harapan ?? ''} onChange={v => updKendala(i, { harapan: v })} />
-                                <Input label="Target" value={k.target ?? ''} onChange={v => updKendala(i, { target: v })} />
-                                <Input label="Penanggung Jawab" value={k.pic ?? ''} onChange={v => updKendala(i, { pic: v })} />
-                                <Select label="Status" value={k.status} onChange={v => updKendala(i, { status: v as Kendala['status'] })} options={[['OPEN', 'OPEN'], ['ON_PROGRESS', 'ON PROGRESS'], ['CLOSED', 'CLOSED']]} />
-                            </div>
+            ) : (
+            <div className="flex flex-col gap-3 lg:flex-1 lg:min-h-0 lg:grid lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+                {/* Grafik tren */}
+                <SectionCard>
+                    <div className="shrink-0">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{dim.bidang}</p>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">{dim.label}{dim.glossary ? <InfoTip glossary={dim.glossary} /> : dim.hint && <InfoTip text={dim.hint} />}</h3>
+                    </div>
+                    <div className="flex items-end gap-3 shrink-0">
+                        <div>
+                            <div className="text-3xl font-black font-mono text-slate-900 dark:text-white leading-none">{fmtValue(active, sum.latest)}</div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{active === 'nc' ? 'NC open · ' : ''}{sum.periode ? periodeFull(sum.periode) : 'Belum ada data'}</div>
                         </div>
-                    ) : (() => {
-                        const ks = KENDALA_STATUS[k.status] ?? KENDALA_STATUS.OPEN;
-                        return (
-                            <div className={`${rowCard} h-full flex flex-col gap-1.5`}>
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="flex gap-2.5 items-start min-w-0">
-                                        <div className="w-6 h-6 rounded-md bg-slate-500/15 flex items-center justify-center text-slate-600 dark:text-slate-400 font-black text-[11px] shrink-0">{i + 1}</div>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2" title={k.masalah}>{k.masalah}</p>
-                                    </div>
-                                    <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${ks.color}`}>{ks.label}</span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-x-3 gap-y-1 min-h-0 overflow-hidden">
-                                    {k.penyebab && <MiniField clamp label="Penyebab" value={k.penyebab} />}
-                                    {k.tindakan && <MiniField clamp label="Tindakan" value={k.tindakan} />}
-                                    {k.harapan && <MiniField clamp label="Harapan Dukungan" value={k.harapan} />}
-                                    {(k.target || k.pic) && <MiniField clamp label="Target · PJ" value={[k.target, k.pic].filter(Boolean).join(' · ')} />}
-                                </div>
-                                {isAdmin && (
-                                    <button
-                                        onClick={() => toChangeMgmt(k, i)}
-                                        disabled={promoting === i}
-                                        className="mt-auto self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold hover:bg-indigo-500/20 transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"
-                                    >
-                                        {promoting === i ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitBranch className="w-3.5 h-3.5" />}
-                                        Masukkan ke Change Management
-                                    </button>
-                                )}
+                        {sum.delta != null && sum.trend && (
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-bold ${trendCls}`} title="Dibanding bulan sebelumnya">
+                                {sum.delta > 0 ? <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" /> : sum.delta < 0 ? <ArrowDownRight className="w-3.5 h-3.5" aria-hidden="true" /> : <Minus className="w-3.5 h-3.5" aria-hidden="true" />}
+                                {sum.delta > 0 ? '+' : ''}{active === 'cost' ? fmtRupiah(sum.delta) : fmtNum(sum.delta, 2)}
+                                <span className="sr-only">{sum.trend === 'good' ? ' membaik' : sum.trend === 'bad' ? ' memburuk' : ' tetap'}</span>
+                            </span>
+                        )}
+                    </div>
+                    <div className="min-h-0 flex-1 flex flex-col justify-center">
+                        <QhsseTrendChart label={dim.label} series={series} fmt={fmt} />
+                    </div>
+                    {dim.sumber && <p className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">Sumber: {dim.sumber}</p>}
+                </SectionCard>
+
+                {/* Data bulanan */}
+                <SectionCard>
+                    <div className="flex items-center justify-between gap-2 shrink-0">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Data Bulanan{active === 'cost' ? ' (bersama NC Status)' : ''}</h3>
+                        {isAdmin && (editing ? (
+                            <div className="flex gap-2">
+                                <button onClick={addRow} className={smallBtn}><Plus className="w-3.5 h-3.5" /> Bulan</button>
+                                <button onClick={cancel} className={smallBtn}><X className="w-3.5 h-3.5" /> Batal</button>
+                                <button onClick={save} disabled={saving} className={saveBtn}>{saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan</button>
                             </div>
-                        );
-                    })()}
-                />
-            </SectionCard>
+                        ) : (
+                            <div className="flex gap-2">
+                                <button onClick={() => startEdit(true)} className={smallBtn}><Plus className="w-3.5 h-3.5" /> Tambah</button>
+                                <button onClick={() => startEdit(false)} className={smallBtn}><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                            </div>
+                        ))}
+                    </div>
+                    {!editing && viewRows.length > 0 && (
+                        <div className="hidden lg:grid shrink-0 gap-2 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400" style={gridStyle}>
+                            <span>Periode</span>{cols.map(c => <span key={c.k}>{c.label}</span>)}
+                        </div>
+                    )}
+                    <Paged<QhsseRow>
+                        items={editing ? draft : viewRows}
+                        itemH={editing ? (key === 'nc' || key === 'qpass' || key === 'trir' || key === 'energi' ? 196 : 168) : 44}
+                        fixed={!editing}
+                        empty={<EmptyState compact text="Belum ada data bulanan." />}
+                        render={(r, i) => editing ? (
+                            <div className={rowCard}>
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{r.periode ? periodeFull(r.periode) : `Bulan #${i + 1}`}</span>
+                                    <button onClick={() => setDraft(l => l.filter((_, j) => j !== i))} aria-label="Hapus bulan" className={delBtn}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Hapus</button>
+                                </div>
+                                <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1">
+                                    <Input label="Periode" type="month" required value={r.periode ?? ''} onChange={v => upd(i, { periode: v })} />
+                                    {cols.map(c => c.computed
+                                        ? <ComputedField key={c.k} label={c.label} value={computedCell(active, c, r)} />
+                                        : c.kind === 'money'
+                                        ? <MoneyInput key={c.k} label={c.label} value={r[c.k] ?? ''} onChange={v => upd(i, { [c.k]: v })} />
+                                        : <Input key={c.k} label={c.label} type={c.kind === 'text' ? 'text' : 'number'} min={0} max={c.max} step={c.kind === 'int' ? 1 : 'any'} value={r[c.k] ?? ''} onChange={v => upd(i, { [c.k]: v })} />)}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className={`${rowCard} h-full grid items-center gap-2 text-sm`} style={gridStyle}>
+                                <span className="font-bold text-slate-900 dark:text-white truncate">{periodeFull(r.periode)}</span>
+                                {cols.map(c => {
+                                    const display = c.computed
+                                        ? computedCell(active, c, r)
+                                        : c.k === 'overall' && !r.overall
+                                        ? fmtNum(qpassOverall({ periode: r.periode, struktur: r.struktur ? Number(r.struktur) : undefined, arsitektur: r.arsitektur ? Number(r.arsitektur) : undefined, mep: r.mep ? Number(r.mep) : undefined }) ?? NaN, 2).replace('NaN', '-')
+                                        : cellText(c, r[c.k]);
+                                    return <span key={c.k} className="font-mono text-slate-700 dark:text-slate-200 truncate" title={display}>{display}</span>;
+                                })}
+                            </div>
+                        )}
+                    />
+                </SectionCard>
+            </div>
+            )}
         </div>
         </TabShell>
     );
 }
+
 // ── Gallery ─────────────────────────────────────────────────────────────────
 function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin: boolean; onChanged: () => void }) {
     const [lightbox, setLightbox] = useState<number | null>(null);
@@ -2835,14 +2982,22 @@ function TabShell({ header, children, scroll = true }: { header?: React.ReactNod
     );
 }
 
-/** "Diperbarui 30 Okt 2026, 14.20 · oleh X" atau "Belum ada catatan pembaruan". */
+/**
+ * Penanda "terakhir diperbarui" per dimensi data: ikon jam + teks ringkas +
+ * tombol (i) yang menampilkan detail lengkap (tanggal + oleh siapa) saat
+ * di-hover/klik. Teks "Belum ada catatan pembaruan" bila dimensi belum disimpan.
+ */
 function UpdatedStamp({ stamp, className = '' }: { stamp: SectionStamp | null; className?: string }) {
     const t = stamp ? formatStampTime(stamp.at) : undefined;
+    const detail = t
+        ? `Terakhir diperbarui ${t}${stamp?.by ? ` oleh ${stamp.by}` : ''}.`
+        : 'Dimensi ini belum pernah disimpan. Catatan pembaruan muncul setelah data disimpan sekali.';
     return (
-        <p className={`text-[11px] font-normal normal-case tracking-normal text-slate-600 dark:text-slate-400 flex items-center gap-1 mt-0.5 min-w-0 ${className}`} title={t && stamp?.by ? `Diperbarui ${t} oleh ${stamp.by}` : undefined}>
+        <span className={`text-[11px] font-normal normal-case tracking-normal text-slate-600 dark:text-slate-400 inline-flex items-center gap-1 mt-0.5 min-w-0 ${className}`}>
             <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
             <span className="truncate">{t ? `Diperbarui ${t}${stamp?.by ? ` · ${stamp.by}` : ''}` : 'Belum ada catatan pembaruan'}</span>
-        </p>
+            <InfoTip text={detail} />
+        </span>
     );
 }
 const stampOf = (p: Project, k: ProjectSection): SectionStamp | null => p.sectionUpdates?.[k] ?? null;
@@ -2950,10 +3105,30 @@ function Input({ label, value, onChange, type = 'text', hint, required, error, m
 }
 
 // ── (C) Tooltip penjelasan istilah — ikon "?" kecil di samping label ──────────
-function InfoTip({ text }: { text: string }) {
+function InfoTip({ text, glossary }: { text?: string; glossary?: QhsseGlossary }) {
     const [open, setOpen] = useState(false);
+    // Posisi fixed tooltip (dihitung dari rect tombol) — dirender via portal ke
+    // document.body supaya tidak terpotong overflow kartu/tab mana pun.
+    const [pos, setPos] = useState<{ left: number; top: number; place: 'up' | 'down' } | null>(null);
     const rootRef = useRef<HTMLSpanElement>(null);
     const tipId = useId();
+
+    const W = glossary ? 256 : 224;         // lebar tooltip (w-64 / w-56)
+    const GAP = 6;                          // jarak dari tombol
+
+    const show = () => {
+        const r = rootRef.current?.getBoundingClientRect();
+        if (!r) return;
+        const vw = window.innerWidth;
+        const half = Math.min(W, vw - 16) / 2;
+        const cx = r.left + r.width / 2;
+        const left = Math.max(8 + half, Math.min(cx, vw - 8 - half)); // clamp ke viewport
+        // Taruh di atas bila ada ruang; kalau mepet (dekat atas layar) taruh di bawah.
+        const place: 'up' | 'down' = r.top < 180 ? 'down' : 'up';
+        const top = place === 'up' ? r.top - GAP : r.bottom + GAP;
+        setPos({ left, top, place });
+        setOpen(true);
+    };
 
     // Tutup dengan Esc atau klik/sentuh di luar (penting di layar sentuh).
     useEffect(() => {
@@ -2975,8 +3150,8 @@ function InfoTip({ text }: { text: string }) {
             {/* Area sentuh 28px; ikon visual tetap kecil di dalamnya. */}
             <button
                 type="button"
-                onClick={() => setOpen(o => !o)}
-                onMouseEnter={() => setOpen(true)}
+                onClick={() => (open ? setOpen(false) : show())}
+                onMouseEnter={show}
                 onMouseLeave={() => setOpen(false)}
                 className="group w-7 h-7 flex items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                 aria-label="Penjelasan istilah"
@@ -2985,10 +3160,33 @@ function InfoTip({ text }: { text: string }) {
             >
                 <span className="w-4 h-4 rounded-full bg-black/[0.08] dark:bg-white/10 group-hover:bg-[rgba(var(--div-accent-rgb),0.3)] text-slate-700 dark:text-slate-300 flex items-center justify-center text-[11px] font-black leading-none transition-colors">?</span>
             </button>
-            {open && (
-                <span id={tipId} role="tooltip" className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 z-50 w-56 max-w-[70vw] p-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 border border-black/10 dark:border-white/15 shadow-2xl text-xs font-normal normal-case tracking-normal text-slate-700 dark:text-slate-200 leading-snug pointer-events-none">
-                    {text}
-                </span>
+            {open && pos && typeof document !== 'undefined' && createPortal(
+                <span
+                    id={tipId}
+                    role="tooltip"
+                    style={{
+                        position: 'fixed',
+                        left: pos.left,
+                        top: pos.top,
+                        width: W,
+                        maxWidth: 'calc(100vw - 16px)',
+                        transform: `translateX(-50%) ${pos.place === 'up' ? 'translateY(-100%)' : ''}`,
+                    }}
+                    className="z-[9999] p-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 border border-black/10 dark:border-white/15 shadow-2xl text-xs font-normal normal-case tracking-normal text-slate-700 dark:text-slate-200 leading-snug pointer-events-none"
+                >
+                    {glossary ? (
+                        <span className="block space-y-2">
+                            <span className="block">{glossary.definisi}</span>
+                            {glossary.rumus && (
+                                <span className="block pt-2 border-t border-black/10 dark:border-white/15">
+                                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">Rumus</span>
+                                    <span className="block font-mono text-[11px] text-slate-800 dark:text-slate-100">{glossary.rumus}</span>
+                                </span>
+                            )}
+                        </span>
+                    ) : text}
+                </span>,
+                document.body,
             )}
         </span>
     );

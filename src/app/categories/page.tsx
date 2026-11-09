@@ -32,6 +32,7 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
+  LayoutDashboard,
   Menu,
   Sun,
   Moon,
@@ -63,7 +64,8 @@ import { usePageTracking } from "@/hooks/usePageTracking";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useIsPhone } from "@/lib/phoneMode";
 import { useTheme } from "@/components/ThemeProvider";
-import { DIVISION_THEME, getDivisionCssVars, type DivisionKey } from "@/lib/divisionTheme";
+import { TILE_THEME, getDivisionCssVars, type DivisionKey, type CategoryTileKey } from "@/lib/divisionTheme";
+import { dashboardForCategory } from "@/lib/categoryDashboards";
 import type { IntroScene3DProps } from "@/components/intro/IntroScene3D";
 
 // Lazy-load IntroScene3D (Three.js tidak boleh SSR, loader tunggal via overlay HUD)
@@ -103,8 +105,12 @@ const IntroScene3D = dynamic<IntroScene3DProps>(
   }
 );
 
-const ORDER: DivisionKey[] = ["DIVISI 1", "DIVISI 2", "DIVISI 3"];
-const DIV_COLORS = ORDER.map((d) => DIVISION_THEME[d].accentHex);
+// Urutan tile di landing: 3 divisi nyata + 1 hub RRB (Rehab, Rekon & Bencana).
+const ORDER: CategoryTileKey[] = ["DIVISI 1", "DIVISI 2", "DIVISI 3", "REHAB"];
+const TILE_COUNT = ORDER.length;
+const DIV_COLORS = ORDER.map((d) => TILE_THEME[d].accentHex);
+// Tiga divisi yang muncul sebagai tombol di dalam panel RRB.
+const RRB_DIVISIONS: DivisionKey[] = ["DIVISI 1", "DIVISI 2", "DIVISI 3"];
 const INTRO_KEY = "tengok_intro_seen_v1";
 // Petunjuk geser divisi (mode fokus phone) hanya ditampilkan sekali per sesi.
 const SWIPE_HINT_KEY = "tengok_swipe_hint_v1";
@@ -129,6 +135,7 @@ interface DivisionCategory {
   identifier: string;
   description?: string;
   projectCount?: number;
+  filledCount?: number;      // proyek yang sudah mengisi data (punya catatan pembaruan)
   cameraTotal?: number;
   cameraOnline?: number;
 }
@@ -136,10 +143,13 @@ interface DivisionCategory {
 interface DivisionData {
   division: DivisionKey;
   projectCount: number;
+  filledCount?: number;
   cameraTotal?: number;
   cameraOnline?: number;
   categories: DivisionCategory[];
 }
+
+
 
 type StatusTier = "good" | "warn" | "bad" | "none";
 
@@ -188,6 +198,11 @@ const FALLBACK_LEVELS: Record<DivisionKey, DivisionCategory[]> = {
   ],
 };
 
+/** Fallback kategori untuk sebuah tile; hub RRB tidak punya kategori -> []. */
+function fallbackLevels(key: CategoryTileKey): DivisionCategory[] {
+  return FALLBACK_LEVELS[key as DivisionKey] ?? [];
+}
+
 export default function CategoriesPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -205,7 +220,7 @@ export default function CategoriesPage() {
   const isPhone = useIsPhone();
   const focusMode = isPhone && phase === "split";
   // Satu sumber kebenaran fokus: focusDiv. Di mode fokus tanpa pilihan eksplisit, default divisi pertama.
-  const phoneFocus = focusMode ? (focusDiv >= 0 && focusDiv <= 2 ? focusDiv : 0) : -1;
+  const phoneFocus = focusMode ? (focusDiv >= 0 && focusDiv <= TILE_COUNT - 1 ? focusDiv : 0) : -1;
   // Bottom sheet fase detail (phone): titik berhenti saat ini. Reset ke "mid" tiap masuk detail.
   const [sheetStop, setSheetStop] = useState<SheetStop>("mid");
   const [focusRowIndex, setFocusRowIndex] = useState(0);
@@ -272,7 +287,7 @@ export default function CategoriesPage() {
 
       const hasSeenIntro = sessionStorage.getItem(INTRO_KEY) === "true";
       const divParam = params.get("div");
-      const matchedIdx = divParam ? ORDER.indexOf(divParam as DivisionKey) : -1;
+      const matchedIdx = divParam ? ORDER.indexOf(divParam as CategoryTileKey) : -1;
 
       if (!hasSeenIntro) {
         // Belum pernah lihat intro -> jalankan alur lengkap dari gedung HQ
@@ -501,7 +516,7 @@ export default function CategoriesPage() {
   useEffect(() => {
     // Mode phone: sinkronisasi carousel memakai scrollTo (efek di bawah); focus() akan menggulir sendiri & memunculkan ring.
     if (isPhone) return;
-    if (phase === "split" && focusDiv >= 0 && focusDiv <= 2) {
+    if (phase === "split" && focusDiv >= 0 && focusDiv <= TILE_COUNT - 1) {
       divisionCardsRef.current[focusDiv]?.focus();
     }
   }, [focusDiv, phase, isPhone]);
@@ -534,7 +549,9 @@ export default function CategoriesPage() {
 
   // Data divisi & kategori aktif di fase detail (di-memoize di level komponen)
   const currentDivKey = selectedDiv >= 0 && selectedDiv < ORDER.length ? ORDER[selectedDiv] : null;
-  const currentTheme = currentDivKey ? DIVISION_THEME[currentDivKey] : null;
+  const currentTheme = currentDivKey ? TILE_THEME[currentDivKey] : null;
+  const isHub = currentTheme?.isHub === true;
+
   const currentDivData = useMemo(() => {
     if (!currentDivKey) return null;
     return divisionsRes?.data?.find((d) => d.division === currentDivKey) || null;
@@ -547,15 +564,19 @@ export default function CategoriesPage() {
     }
     // FALLBACK hanya bila request gagal (divisionsError). Jangan pakai saat masih loading.
     if (divisionsError) {
-      return FALLBACK_LEVELS[currentDivKey] || [];
+      return fallbackLevels(currentDivKey);
     }
     return [];
   }, [currentDivKey, currentDivData, divisionsError]);
 
   const sortedItems = useMemo(() => {
-    return [...levelItems].sort(
-      (a, b) => (b.projectCount || 0) - (a.projectCount || 0)
-    );
+    // Kategori ber-dashboard (mis. PL Irigasi & JIAT) di-pin ke atas, sisanya urut proyek terbanyak.
+    return [...levelItems].sort((a, b) => {
+      const da = dashboardForCategory(a.identifier) ? 1 : 0;
+      const db = dashboardForCategory(b.identifier) ? 1 : 0;
+      if (da !== db) return db - da;
+      return (b.projectCount || 0) - (a.projectCount || 0);
+    });
   }, [levelItems]);
 
   const maxProjectCount = useMemo(() => {
@@ -674,7 +695,11 @@ export default function CategoriesPage() {
       setPhase("detail");
       setSheetStop("mid");
       resetNavFocus();
-      setAnnouncement(`Divisi ${i + 1} dipilih. Masuk ke panel level.`);
+      setAnnouncement(
+        TILE_THEME[divKey].isHub
+          ? `${TILE_THEME[divKey].title} dipilih. Pilih divisi.`
+          : `Divisi ${i + 1} dipilih. Masuk ke panel level.`
+      );
       router.replace(`/categories?div=${encodeURIComponent(divKey)}`);
     },
     [phase, router, resetNavFocus]
@@ -690,6 +715,18 @@ export default function CategoriesPage() {
     setAnnouncement("Kembali ke pilihan divisi");
     router.replace("/categories");
   }, [router, resetNavFocus, isPhone, selectedDiv]);
+
+  // Tombol back panel detail: keluar panel ke pilihan divisi (hub RRB tidak lagi
+  // punya sub-panel — klik divisi langsung membuka peta RRB).
+  const handleDetailBack = useCallback(() => {
+    handleBackToSplit();
+  }, [handleBackToSplit]);
+
+  // Pilih divisi di panel hub RRB -> buka peta proyek divisi itu (peta biasa).
+  const handleRrbPick = useCallback((divKey: DivisionKey) => {
+    setAnnouncement(`${TILE_THEME[divKey].title} dipilih. Membuka peta proyek divisi.`);
+    router.push(`/map?division=${encodeURIComponent(divKey)}`);
+  }, [router]);
 
   const handleReplayIntro = useCallback(() => {
     explodeDoneRef.current = false;
@@ -710,7 +747,9 @@ export default function CategoriesPage() {
   }, [router, resetNavFocus]);
 
   const handleLevelClick = useCallback(
-    (divisionKey: DivisionKey, categoryIdentifier?: string) => {
+    (divisionKey: CategoryTileKey, categoryIdentifier?: string) => {
+      // Hub RRB bukan divisi DB: jangan pernah buka /map?division=REHAB.
+      if (TILE_THEME[divisionKey].isHub) return;
       if (categoryIdentifier) {
         router.push(
           `/map?division=${encodeURIComponent(divisionKey)}&category=${encodeURIComponent(
@@ -856,31 +895,24 @@ export default function CategoriesPage() {
           e.preventDefault();
           setPointerDiv(-1);
           const current = focusDiv >= 0 ? focusDiv : (pointerDiv >= 0 ? pointerDiv : -1);
-          const next = current < 0 ? 0 : (current + 1) % 3;
+          const next = current < 0 ? 0 : (current + 1) % TILE_COUNT;
           setAnnouncement(`Fokus: ${ORDER[next]}`);
           setFocusDiv(next);
         } else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
           e.preventDefault();
           setPointerDiv(-1);
           const current = focusDiv >= 0 ? focusDiv : (pointerDiv >= 0 ? pointerDiv : -1);
-          const next = current <= 0 ? 2 : current - 1;
+          const next = current <= 0 ? TILE_COUNT - 1 : current - 1;
           setAnnouncement(`Fokus: ${ORDER[next]}`);
           setFocusDiv(next);
-        } else if (e.key === "1") {
+        } else if (e.key >= "1" && e.key <= String(TILE_COUNT)) {
+          // Pintasan angka 1..N untuk tiap divisi.
           e.preventDefault();
           resetNavFocus();
-          onDivisionClick(0);
-        } else if (e.key === "2") {
-          e.preventDefault();
-          resetNavFocus();
-          onDivisionClick(1);
-        } else if (e.key === "3") {
-          e.preventDefault();
-          resetNavFocus();
-          onDivisionClick(2);
+          onDivisionClick(Number(e.key) - 1);
         } else if (e.key === "Enter" || e.key === " ") {
           const target = focusDiv >= 0 ? focusDiv : pointerDiv;
-          if (target >= 0 && target <= 2) {
+          if (target >= 0 && target <= TILE_COUNT - 1) {
             e.preventDefault();
             onDivisionClick(target);
           } else {
@@ -893,8 +925,13 @@ export default function CategoriesPage() {
       } else if (phase === "detail") {
         if (e.key === "Escape") {
           e.preventDefault();
-          handleBackToSplit();
-        } else if (e.key === "/") {
+          handleDetailBack();
+          return;
+        }
+        // Hub RRB: navigasi daftar kategori tidak berlaku (isinya tombol divisi).
+        // Biarkan tombol fokusable native yang menangani Enter/Space.
+        if (isHub) return;
+        if (e.key === "/") {
           e.preventDefault();
           searchInputRef.current?.focus();
         } else if (e.key === "ArrowDown") {
@@ -970,11 +1007,13 @@ export default function CategoriesPage() {
     showAllCategories,
     filteredItems,
     currentDivKey,
+    isHub,
     isDivisionsLoading,
     onBuildingClick,
     handleSkipIntro,
     onDivisionClick,
     handleBackToSplit,
+    handleDetailBack,
     handleLevelClick,
     resetNavFocus,
   ]);
@@ -1080,10 +1119,11 @@ export default function CategoriesPage() {
         className="mt-3 flex gap-2 overflow-x-auto overscroll-x-contain snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden before:w-[calc(6%-8px)] before:shrink-0 before:content-[''] after:w-[calc(6%-8px)] after:shrink-0 after:content-['']"
       >
         {ORDER.map((div, i) => {
-          const t = DIVISION_THEME[div];
+          const t = TILE_THEME[div];
+          const hub = t.isHub === true;
           const divData = dbDivisions.find((d) => d.division === div);
           const pCount = divData?.projectCount ?? 0;
-          const cCount = divData?.categories?.length ?? FALLBACK_LEVELS[div].length;
+          const cCount = divData?.categories?.length ?? fallbackLevels(div).length;
           const camTot = divData?.cameraTotal ?? 0;
           const camOn = divData?.cameraOnline ?? 0;
           const tier = statusTier(camTot, camOn);
@@ -1107,13 +1147,19 @@ export default function CategoriesPage() {
                 {t.title}
               </h2>
               <div className="mt-2 flex items-center justify-between gap-2 font-mono text-xs font-medium text-slate-600 dark:text-slate-300">
-                <span className="truncate">
-                  {pCount} proyek · {cCount} kategori
-                </span>
-                <span className="inline-flex shrink-0 items-center gap-1.5">
-                  <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: tierColor }} />
-                  {camTot === 0 ? "0 kamera" : `${camOn}/${camTot} online`}
-                </span>
+                {hub ? (
+                  <span className="truncate">Program lintas divisi</span>
+                ) : (
+                  <>
+                    <span className="truncate">
+                      {pCount} proyek · {cCount} kategori
+                    </span>
+                    <span className="inline-flex shrink-0 items-center gap-1.5">
+                      <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: tierColor }} />
+                      {camTot === 0 ? "0 kamera" : `${camOn}/${camTot} online`}
+                    </span>
+                  </>
+                )}
               </div>
               <button
                 ref={(el) => {
@@ -1121,11 +1167,11 @@ export default function CategoriesPage() {
                 }}
                 type="button"
                 onClick={() => onDivisionClick(i)}
-                aria-label={`Masuk ${t.title}`}
+                aria-label={hub ? `Buka ${t.title}` : `Masuk ${t.title}`}
                 className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-black uppercase tracking-wider text-slate-950 transition-[filter,transform] hover:brightness-110 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                 style={{ background: t.accentHex }}
               >
-                MASUK <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                {hub ? "BUKA" : "MASUK"} <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           );
@@ -1156,7 +1202,7 @@ export default function CategoriesPage() {
             <span
               aria-hidden="true"
               className={`block h-2 rounded-full transition-all duration-200 ${i === phoneFocus ? "w-6" : "w-2 bg-slate-400/70 dark:bg-slate-500/70"}`}
-              style={i === phoneFocus ? { backgroundColor: DIVISION_THEME[d].accentHex } : undefined}
+              style={i === phoneFocus ? { backgroundColor: TILE_THEME[d].accentHex } : undefined}
             />
           </button>
         ))}
@@ -1263,14 +1309,14 @@ export default function CategoriesPage() {
                   Muat ulang
                 </button>
 
-                {/* 3 Tombol Akses Peta Langsung bila WebGL tidak tersedia */}
+                {/* Tombol Akses Peta Langsung bila WebGL tidak tersedia */}
                 <div className="w-full pt-3 mt-1 border-t border-black/10 dark:border-white/10 flex flex-col gap-2">
                   <p className="text-xs uppercase font-bold tracking-widest text-slate-500 dark:text-slate-400">
                     Masuk Langsung ke Peta Divisi:
                   </p>
                   <div className="grid grid-cols-3 gap-2 w-full">
-                    {ORDER.map((div) => {
-                      const t = DIVISION_THEME[div];
+                    {RRB_DIVISIONS.map((div) => {
+                      const t = TILE_THEME[div];
                       return (
                         <a
                           key={div}
@@ -1358,7 +1404,7 @@ export default function CategoriesPage() {
 
           {/* Panduan pengguna (PDF) */}
           <a
-            href="/Panduan-Input-Detail-Proyek.pdf?v=20261030"
+            href="/Panduan-Input-Detail-Proyek.pdf?v=20261106"
             target="_blank"
             rel="noopener noreferrer"
             download
@@ -1566,7 +1612,7 @@ export default function CategoriesPage() {
                     </button>
                     <a
                       role="menuitem"
-                      href="/Panduan-Input-Detail-Proyek.pdf?v=20261030"
+                      href="/Panduan-Input-Detail-Proyek.pdf?v=20261106"
                       target="_blank"
                       rel="noopener noreferrer"
                       download
@@ -1672,19 +1718,20 @@ export default function CategoriesPage() {
                 phoneSplitPanel
               ) : (
               <>
-              {/* Kartu 3 divisi (grid max-w-[1100px], min-h-[96px], persis spesifikasi V2) */}
+              {/* Kartu tile (3 divisi + hub; grid 4 kolom di desktop, min-h-[96px]) */}
               {/* Mobile: kartu digeser horizontal (snap) supaya model 3D di atasnya tetap terlihat. */}
               <div
                 role="group"
                 aria-label="Pilih divisi"
-                className="flex sm:grid sm:grid-cols-3 gap-3 w-full max-w-[1100px] overflow-x-auto sm:overflow-visible snap-x snap-mandatory sm:snap-none px-3 sm:px-0 -mx-3 sm:mx-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="flex sm:grid sm:grid-cols-4 gap-3 w-full max-w-[1280px] overflow-x-auto sm:overflow-visible snap-x snap-mandatory sm:snap-none px-3 sm:px-0 -mx-3 sm:mx-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
                 {ORDER.map((div, i) => {
-                  const t = DIVISION_THEME[div];
+                  const t = TILE_THEME[div];
+                  const hub = t.isHub === true;
                   const isHov = activeHoveredDiv === i;
                   const divData = dbDivisions.find((d) => d.division === div);
                   const pCount = divData?.projectCount ?? 0;
-                  const cCount = divData?.categories?.length ?? FALLBACK_LEVELS[div].length;
+                  const cCount = divData?.categories?.length ?? fallbackLevels(div).length;
                   const camTot = divData?.cameraTotal ?? 0;
                   const camOn = divData?.cameraOnline ?? 0;
                   const tier = statusTier(camTot, camOn);
@@ -1695,7 +1742,7 @@ export default function CategoriesPage() {
                       key={div}
                       ref={(el) => { divisionCardsRef.current[i] = el; }}
                       tabIndex={0}
-                      aria-label={`${div} - ${t.title}. ${camTot === 0 ? "Belum ada kamera" : `${camOn} dari ${camTot} kamera online`}`}
+                      aria-label={hub ? `${t.title}. Program lintas divisi` : `${div} - ${t.title}. ${camTot === 0 ? "Belum ada kamera" : `${camOn} dari ${camTot} kamera online`}`}
                       onClick={() => onDivisionClick(i)}
                       onMouseEnter={() => {
                         if (
@@ -1744,7 +1791,7 @@ export default function CategoriesPage() {
                           className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity font-mono uppercase"
                           style={{ color: accentText(t.accentHex) }}
                         >
-                          MASUK <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                          {hub ? "BUKA" : "MASUK"} <ArrowRight className="w-3 h-3" aria-hidden="true" />
                         </div>
                       </div>
                       <h3 className="mt-1 text-sm md:text-base font-black uppercase tracking-tight text-slate-900 dark:text-white leading-tight">
@@ -1756,24 +1803,35 @@ export default function CategoriesPage() {
                     </div>
 
                     <div className="mt-3 pt-2 border-t border-black/10 dark:border-white/10 flex flex-col gap-1 text-[11px] text-slate-600 dark:text-slate-300 font-mono font-medium">
-                      <div className="flex items-center justify-between">
-                        <span>
-                          {pCount} proyek · {cCount} kategori
-                        </span>
-                        <span className="sm:hidden text-[11px] font-bold" style={{ color: accentText(t.accentHex) }}>
-                          MASUK ▶
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                        <span
-                          aria-hidden="true"
-                          className={`inline-block w-2 h-2 rounded-full shrink-0 ${tier === "good" && !isReduced ? "animate-pulse" : ""}`}
-                          style={{ backgroundColor: tierColor }}
-                        />
-                        <span>
-                          {camTot === 0 ? "Belum ada kamera" : `${camOn}/${camTot} kamera online`}
-                        </span>
-                      </div>
+                      {hub ? (
+                        <div className="flex items-center justify-between">
+                          <span>Program lintas divisi</span>
+                          <span className="sm:hidden text-[11px] font-bold" style={{ color: accentText(t.accentHex) }}>
+                            BUKA ▶
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span>
+                              {pCount} proyek · {cCount} kategori
+                            </span>
+                            <span className="sm:hidden text-[11px] font-bold" style={{ color: accentText(t.accentHex) }}>
+                              MASUK ▶
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                            <span
+                              aria-hidden="true"
+                              className={`inline-block w-2 h-2 rounded-full shrink-0 ${tier === "good" && !isReduced ? "animate-pulse" : ""}`}
+                              style={{ backgroundColor: tierColor }}
+                            />
+                            <span>
+                              {camTot === 0 ? "Belum ada kamera" : `${camOn}/${camTot} kamera online`}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </motion.button>
                 );
@@ -1797,7 +1855,8 @@ export default function CategoriesPage() {
                 aria-label={`Level dan kategori ${currentTheme.title}`}
                 style={
                   {
-                    ...getDivisionCssVars(currentDivKey),
+                    // Hub RRB: panel pakai aksen brand (daftar divisi); divisi biasa pakai aksen divisinya.
+                    ...getDivisionCssVars(isHub ? null : currentDivKey),
                     paddingBottom: isPhone ? "calc(8px + env(safe-area-inset-bottom, 0px))" : "calc(16px + env(safe-area-inset-bottom, 0px))",
                     ...(isPhone ? { height: sheetCss(sheetStop), transition: isReduced ? "none" : MOBILE_SHEET.transition } : {}),
                   } as React.CSSProperties
@@ -1827,7 +1886,7 @@ export default function CategoriesPage() {
                       <div className="mt-2 mb-2 flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={handleBackToSplit}
+                          onClick={handleDetailBack}
                           aria-label="Kembali ke pilihan divisi"
                           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-black/[0.04] text-slate-700 focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-200"
                         >
@@ -1835,12 +1894,23 @@ export default function CategoriesPage() {
                         </button>
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-mono text-xs font-bold uppercase tracking-[0.18em] div-accent-text">
-                            {currentTheme.short} · {totalProjects} proyek
+                            {isHub ? currentTheme.short : `${currentTheme.short} · ${totalProjects} proyek`}
                           </p>
                           <h2 className="line-clamp-2 text-sm font-black uppercase leading-tight tracking-tight text-slate-900 dark:text-white">
                             {currentTheme.title}
                           </h2>
                         </div>
+                        {isHub ? (
+                          <button
+                            type="button"
+                            onClick={() => router.push("/category-dashboard/rrb")}
+                            aria-label="Dashboard RRB"
+                            title="Dashboard semua proyek RRB (bencana) per divisi"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(var(--div-accent-rgb),0.3)] bg-[rgba(var(--div-accent-rgb),0.15)] div-accent-text focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none"
+                          >
+                            <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
+                          </button>
+                        ) : (
                         <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-1 font-mono text-xs text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-200">
                           <span
                             aria-hidden="true"
@@ -1856,6 +1926,7 @@ export default function CategoriesPage() {
                             ? "0 kamera"
                             : `${currentDivData?.cameraOnline ?? 0}/${currentDivData?.cameraTotal}`}
                         </div>
+                        )}
                       </div>
                     </>
                   ) : (
@@ -1863,14 +1934,26 @@ export default function CategoriesPage() {
                   {/* Handle indikator mobile sheet (non-phone <sm: panel bawah lama) */}
                   <div aria-hidden="true" className="w-10 h-1 bg-black/20 dark:bg-white/20 rounded-full mx-auto mb-3 sm:hidden" />
 
-                  {/* Tombol Back */}
-                  <button
-                    onClick={handleBackToSplit}
-                    className="flex items-center gap-2 px-3 py-1.5 min-h-11 mb-3 rounded-xl text-[11px] font-bold tracking-[0.18em] uppercase border border-black/[0.06] dark:border-white/[0.06] text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-black/[0.04] dark:bg-white/[0.05] hover:bg-black/[0.08] dark:hover:bg-white/10 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
-                    KEMBALI
-                  </button>
+                  {/* Baris aksi: Kembali (kiri) + Dashboard RRB (kanan, hanya hub) */}
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <button
+                      onClick={handleDetailBack}
+                      className="flex items-center gap-2 px-3 py-1.5 min-h-11 rounded-xl text-[11px] font-bold tracking-[0.18em] uppercase border border-black/[0.06] dark:border-white/[0.06] text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-black/[0.04] dark:bg-white/[0.05] hover:bg-black/[0.08] dark:hover:bg-white/10 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                      KEMBALI
+                    </button>
+                    {isHub && (
+                      <button
+                        onClick={() => router.push("/category-dashboard/rrb")}
+                        className="flex items-center gap-2 px-3 py-1.5 min-h-11 rounded-xl text-[11px] font-bold tracking-[0.18em] uppercase border border-[rgba(var(--div-accent-rgb),0.3)] bg-[rgba(var(--div-accent-rgb),0.15)] hover:bg-[rgba(var(--div-accent-rgb),0.25)] div-accent-text transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none"
+                        title="Dashboard semua proyek RRB (bencana) per divisi"
+                      >
+                        <LayoutDashboard className="w-3.5 h-3.5" aria-hidden="true" />
+                        DASHBOARD
+                      </button>
+                    )}
+                  </div>
 
                   {/* Header: Kode Divisi, Judul & Subtitle proyek */}
                   <div className="mb-3">
@@ -1880,7 +1963,8 @@ export default function CategoriesPage() {
                       >
                         {currentTheme.short}
                       </small>
-                      {/* Lencana status CCTV divisi */}
+                      {/* Lencana status CCTV divisi (hub tidak punya CCTV sendiri) */}
+                      {!isHub && (
                       <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-[11px] font-mono text-slate-700 dark:text-slate-200">
                         <span
                           aria-hidden="true"
@@ -1898,20 +1982,28 @@ export default function CategoriesPage() {
                             : `${currentDivData?.cameraOnline ?? 0}/${currentDivData?.cameraTotal} online`}
                         </span>
                       </div>
+                      )}
                     </div>
                     <h2 className="mt-0.5 text-lg sm:text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white">
                       {currentTheme.title}
                     </h2>
                     <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-medium">
-                      <span className="font-mono font-bold text-slate-900 dark:text-white">{totalProjects} proyek</span>
-                      <span aria-hidden="true" className="text-slate-400 dark:text-slate-500">·</span>
-                      <span>urut dari proyek terbanyak</span>
+                      {isHub ? (
+                        <span>Pilih divisi untuk membuka peta RRB-nya</span>
+                      ) : (
+                        <>
+                          <span className="font-mono font-bold text-slate-900 dark:text-white">{totalProjects} proyek</span>
+                          <span aria-hidden="true" className="text-slate-400 dark:text-slate-500">·</span>
+                          <span>urut dari proyek terbanyak</span>
+                        </>
+                      )}
                     </p>
                   </div>
                   </>
                   )}
 
-                  {/* Tombol Utama Paling Atas: SEMUA PROYEK DIVISI INI · N ▶ */}
+                  {/* Tombol Utama Paling Atas: SEMUA PROYEK DIVISI INI · N ▶ (tidak untuk hub) */}
+                  {!isHub && (
                   <button
                     ref={allProjectsButtonRef}
                     data-row-index="0"
@@ -1935,9 +2027,10 @@ export default function CategoriesPage() {
                     </span>
                     <span className="font-mono text-xs">MASUK ▶</span>
                   </button>
+                  )}
 
-                  {/* Kolom Pencarian (Tampil bila kategori > 8) */}
-                  {sortedItems.length > 8 && (
+                  {/* Kolom Pencarian (Tampil bila kategori > 8, tidak untuk hub) */}
+                  {!isHub && sortedItems.length > 8 && (
                     <div className="relative mb-3">
                       <Search aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
@@ -1965,23 +2058,50 @@ export default function CategoriesPage() {
                     </div>
                   )}
 
-                  {/* Bar Header Kategori */}
+                  {/* Bar Header Kategori / Pilih Divisi (hub) */}
                   <div className="flex items-center justify-between mb-2 pb-2 border-b border-black/10 dark:border-white/10">
                     <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                      {isSearching ? "HASIL PENCARIAN" : "PILIH LEVEL / KATEGORI"}
+                      {isHub ? "PILIH DIVISI" : isSearching ? "HASIL PENCARIAN" : "PILIH LEVEL / KATEGORI"}
                     </span>
                     <span className="text-[11px] font-bold tracking-wider text-slate-500 dark:text-slate-400 font-mono">
-                      {isDivisionsLoading ? "…" : `${filteredItems.length} Kategori`}
+                      {isHub ? `${RRB_DIVISIONS.length} Divisi` : isDivisionsLoading ? "…" : `${filteredItems.length} Kategori`}
                     </span>
                   </div>
                 </div>
 
-                {/* ── Daftar Kategori (Area Scroll Mandiri) ────────────────── */}
+                {/* ── Daftar (Area Scroll Mandiri) ─────────────────────────── */}
                 <div
                   ref={listRef}
                   className="flex-1 overflow-y-auto overscroll-contain px-1.5 py-1 space-y-2 min-h-0 select-text"
                 >
-                  {isDivisionsLoading ? (
+                  {isHub ? (
+                    /* Hub RRB: 3 tombol divisi. Klik -> buka peta RRB divisi itu. */
+                    RRB_DIVISIONS.map((divKey) => {
+                      const dt = TILE_THEME[divKey];
+                      return (
+                        <button
+                          key={divKey}
+                          type="button"
+                          aria-label={`Buka peta RRB ${dt.short}`}
+                          onClick={() => handleRrbPick(divKey)}
+                          // Tiap tombol pakai warna aksen divisinya sendiri.
+                          style={getDivisionCssVars(divKey) as React.CSSProperties}
+                          className="group relative overflow-hidden w-full flex items-center justify-between gap-2 px-4 py-3 min-h-14 rounded-xl bg-[rgba(var(--div-accent-rgb),0.12)] hover:bg-[rgba(var(--div-accent-rgb),0.2)] border border-[rgba(var(--div-accent-rgb),0.35)] div-accent-text font-black text-xs sm:text-sm tracking-wider uppercase transition-all active:scale-[0.99] cursor-pointer focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none"
+                        >
+                          <span className="flex items-center gap-2.5 text-left">
+                            <span
+                              aria-hidden="true"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--div-accent-rgb),0.2)] font-mono text-sm"
+                            >
+                              {dt.short.replace(/\D/g, "") || "•"}
+                            </span>
+                            <span>{dt.short}</span>
+                          </span>
+                          <ArrowRight className="w-4 h-4 shrink-0 group-hover:translate-x-0.5 transition-transform" aria-hidden="true" />
+                        </button>
+                      );
+                    })
+                  ) : isDivisionsLoading ? (
                     <div className="space-y-2 py-1">
                       {[...Array(5)].map((_, i) => (
                         <div
@@ -2008,15 +2128,16 @@ export default function CategoriesPage() {
                         Math.max(4, Math.round((pCount / maxProjectCount) * 100))
                       );
 
+                      const dash = dashboardForCategory(cat.identifier);
                       return (
+                        <div key={cat.identifier || idx} className="flex items-stretch gap-2">
                         <button
-                          key={cat.identifier || idx}
                           data-row-index={idx + 1}
                           tabIndex={0}
                           aria-label={`${cat.name}, ${pCount} proyek, ${cat.cameraOnline ?? 0} dari ${cat.cameraTotal ?? 0} CCTV online`}
                           onClick={() => handleLevelClick(currentDivKey, cat.identifier)}
                           onFocus={() => setFocusRowIndex(idx + 1)}
-                          className={`group relative overflow-hidden w-full flex items-center gap-3 px-3.5 py-2.5 sm:py-3 min-h-11 text-left rounded-xl bg-white/70 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-900/80 hover:border-[rgba(var(--div-accent-rgb),0.5)] border transition-all cursor-pointer scroll-my-1 focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none ${
+                          className={`group relative overflow-hidden flex-1 min-w-0 flex items-center gap-3 px-3.5 py-2.5 sm:py-3 min-h-11 text-left rounded-xl bg-white/70 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-900/80 hover:border-[rgba(var(--div-accent-rgb),0.5)] border transition-all cursor-pointer scroll-my-1 focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none ${
                             focusRowIndex === idx + 1
                               ? "border-[rgba(var(--div-accent-rgb),0.6)] ring-1 ring-[rgba(var(--div-accent-rgb),0.4)]"
                               : "border-black/[0.06] dark:border-white/[0.06]"
@@ -2040,8 +2161,23 @@ export default function CategoriesPage() {
                             <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                               {cat.name}
                             </p>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                               <span>{pCount} proyek</span>
+                              {/* Kelengkapan data: berapa proyek yang sudah mengisi data vs total */}
+                              {pCount > 0 && (() => {
+                                const filled = cat.filledCount ?? 0;
+                                const belum = Math.max(0, pCount - filled);
+                                const tone = belum === 0 ? "#22c55e" : filled === 0 ? "#ef4444" : "#f59e0b";
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-[11px] text-slate-700 dark:text-slate-300"
+                                    title={belum === 0 ? "Semua proyek sudah mengisi data" : `${filled} proyek sudah mengisi data, ${belum} belum dilengkapi`}
+                                  >
+                                    <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: tone }} />
+                                    <span>{filled}/{pCount} data</span>
+                                  </span>
+                                );
+                              })()}
                               {(cat.cameraTotal ?? 0) > 0 && (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-[11px] text-slate-700 dark:text-slate-300">
                                   <span
@@ -2077,6 +2213,19 @@ export default function CategoriesPage() {
                             style={{ width: `${barPercent}%` }}
                           />
                         </button>
+                        {/* Tombol Dashboard kategori (hanya kategori ber-dashboard, mis. Irigasi/JIAT) */}
+                        {dash && (
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/category-dashboard/${dash.id}`)}
+                            aria-label={`Dashboard ${dash.label}`}
+                            title={`Dashboard ${dash.label}`}
+                            className="flex w-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(var(--div-accent-rgb),0.3)] bg-[rgba(var(--div-accent-rgb),0.12)] div-accent-text transition-colors hover:bg-[rgba(var(--div-accent-rgb),0.25)] focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none"
+                          >
+                            <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
+                          </button>
+                        )}
+                        </div>
                       );
                     })
                   )}
@@ -2105,7 +2254,9 @@ export default function CategoriesPage() {
                 {!isPhone && (
                 <div className="shrink-0 pt-3 border-t border-black/10 dark:border-white/10 mt-3">
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                    Daftar level bersumber dari kategori proyek Tengok. Klik level atau tekan Enter untuk membuka peta &amp; CCTV proyek.
+                    {isHub
+                      ? "Rehab, Rekon & Bencana adalah program lintas divisi. Pilih divisi untuk membuka peta RRB divisi tersebut."
+                      : "Daftar level bersumber dari kategori proyek Tengok. Klik level atau tekan Enter untuk membuka peta & CCTV proyek."}
                   </p>
                 </div>
                 )}
@@ -2143,7 +2294,7 @@ export default function CategoriesPage() {
             <>
               <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">←</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">→</kbd> pilih</span>
               <span aria-hidden="true" className="text-slate-400 dark:text-slate-600">·</span>
-              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">1</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">2</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">3</kbd> pintasan</span>
+              <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">1</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">2</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">3</kbd> <kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">4</kbd> pintasan</span>
               <span aria-hidden="true" className="text-slate-400 dark:text-slate-600">·</span>
               <span><kbd className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white font-bold">Enter</kbd> masuk</span>
             </>

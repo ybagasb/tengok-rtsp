@@ -113,10 +113,9 @@ interface LocationData {
     lingkupPekerjaan?: string[];
     sumberDaya?: { namaAlat: string; jumlah: number; kategori?: string; satuan?: string }[];
     milestones?: { title: string; done: boolean; date?: string; progress?: number }[];
-    isuStrategis?: { isu: string; usulan: string }[];
-    kendala?: { masalah: string; status: string }[];
+    qhsse?: import('@/lib/qhsse').QhsseData;
     monitoringPengadaan?: { nama: string; persentase: number }[];
-    changeManagement?: { judul: string; jenis?: 'PERUBAHAN_HARGA' | 'PERUBAHAN_LINGKUP' | 'KLAIM' | 'LEGAL_ISSUE' | 'LAINNYA'; deskripsi?: string; dampak?: string; mitigasi?: string; nilai?: number; tanggal?: string; target?: string; pic?: string; status: 'USULAN' | 'DISETUJUI' | 'DITOLAK'; dariKendala?: boolean }[];
+    changeManagement?: { judul: string; jenis?: 'PERUBAHAN_HARGA' | 'PERUBAHAN_LINGKUP' | 'KLAIM' | 'LEGAL_ISSUE' | 'LAINNYA'; deskripsi?: string; dampak?: string; mitigasi?: string; nilai?: number; tanggal?: string; target?: string; pic?: string; status: 'USULAN' | 'DISETUJUI' | 'DITOLAK' }[];
     updatedAt?: string;
 }
 
@@ -694,8 +693,6 @@ export default function MapComponent({
         });
     }, [initialView]);
 
-
-
     // Compass drag: drag left/right to rotate (bearing), up/down to tilt (pitch).
     // A short click (no drag) resets north + level.
     const handleCompassPointerDown = useCallback((e: React.PointerEvent) => {
@@ -846,7 +843,7 @@ export default function MapComponent({
         <div ref={rootRef} style={rootStyle} className="flex h-dvh w-full bg-slate-100 dark:bg-slate-950 overflow-hidden relative">
             <style>{customStyles}</style>
 
-            {/* Loader bermerek selama data lokasi belum selesai dimuat. */}
+            {/* Loader bermerek selama data lokasi belum selesai dimuat (tidak di mode RRB). */}
             {loading && <BrandLoader label={sharedMode ? 'Memuat' : 'Memuat Peta'} />}
 
             {/* ── MAP ─────────────────────────────────────────────────────────── */}
@@ -1377,6 +1374,9 @@ export default function MapComponent({
                     </div>
                 )}
             </div>
+
+            {/* Sidebar RRB (mode RRB): panel data Rehab, Rekon & Bencana. Terpisah dari
+                Side Panel proyek; hanya satu yang aktif karena mode-nya eksklusif. */}
         </div>
     );
 }
@@ -1433,6 +1433,7 @@ function MapPin3D({ online, count, category, isSelected, progress, pingKey }: { 
         </div>
     );
 }
+
 
 // ── Hover tooltip content ──────────────────────────────────────────────────────
 function LocationTooltip({

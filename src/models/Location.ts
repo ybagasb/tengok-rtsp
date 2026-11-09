@@ -56,19 +56,58 @@ export interface ISumberDaya {
     satuan?: string;         // Satuan bebas, e.g. "Unit", "Orang", "m³", "Ton"
 }
 
-export interface IIsuStrategis {
-    isu: string;             // Deskripsi isu
-    usulan: string;          // Usulan dari Abipraya
+// ── QHSSE (tab QHSSE): deret bulanan per dimensi, periode "YYYY-MM" ────────────
+// NC & QPASS mengikuti struktur aplikasi QHSSE Kevin supaya nanti mudah di-import.
+export interface IQhsseNc {
+    periode: string;
+    totalNC?: number;        // Total temuan NC pada periode
+    open?: number;           // NC berstatus open
+    closed?: number;         // NC berstatus closed
+    totalCost?: number;      // Cost of NC (IDR)
+}
+export interface IQhsseQpass {
+    periode: string;
+    struktur?: number;
+    arsitektur?: number;
+    mep?: number;
+    overall?: number;
+}
+export interface IQhsseR5 {
+    periode: string;
+    jumlah?: number;         // Jumlah laporan giat bersih 5R
+    durasi?: number;         // Rata-rata durasi (menit)
+    catatan?: string;
+}
+export interface IQhsseNilai {
+    periode: string;
+    nilai?: number;          // hasil (TRIR & Energi dihitung otomatis dari elemen di bawah)
+    catatan?: string;
+    // Elemen rumus TRIR = (incidents × 200.000) ÷ workHours
+    incidents?: number;
+    workHours?: number;
+    // Elemen rumus Efisiensi Energi = (energyKwh ÷ areaM2) × 100%
+    energyKwh?: number;
+    areaM2?: number;
+}
+export interface IQhsse {
+    nc?: IQhsseNc[];
+    qpass?: IQhsseQpass[];
+    trir?: IQhsseNilai[];
+    smk3l?: IQhsseNilai[];
+    r5?: IQhsseR5[];
+    pak?: IQhsseNilai[];
+    energi?: IQhsseNilai[];
+    keamanan?: IQhsseNilai[];
 }
 
-export interface IKendala {
-    masalah: string;
-    penyebab: string;
-    tindakan: string;
-    harapan?: string;        // Harapan dukungan manajemen
-    target?: string;         // Target waktu penyelesaian, e.g. "M2 Okt 2026"
-    pic?: string;            // Person in charge
-    status: 'OPEN' | 'CLOSED' | 'ON_PROGRESS';
+// ── Dimensi "Program" (gaya RRB) untuk kategori ber-dashboard ─────────────────
+// HANYA memuat field yang BELUM ada di data proyek biasa. Sisa dimensi dashboard
+// (progress fisik, tagihan, BAU, L/R=laba bersih) diturunkan dari data yang
+// sudah ada (progress fisik, kontrak, laporan bulanan). Lihat src/lib/programDim.ts.
+export interface IProgramDim {
+    mcCair?: number;             // rupiah — nilai MC yang cair (DIPA diturunkan dari progressKeuangan)
+    mcCairLabel?: string;        // keterangan MC cair, mis. "sd bulan September"
+    cutOffLabel?: string;        // keterangan cut-off, mis. "akhir OKT 2026"
 }
 
 // Jenis entri Legal & Change Management.
@@ -90,7 +129,6 @@ export interface IChangeManagement {
     target?: string;         // Target implementasi/penyelesaian, e.g. "M2 Okt 2026"
     pic?: string;            // Penanggung jawab
     status: 'USULAN' | 'DISETUJUI' | 'DITOLAK';
-    dariKendala?: boolean;   // Penanda item ini berasal dari daftar kendala
 }
 
 // Monitoring pengadaan major item (tab Operasi).
@@ -185,11 +223,8 @@ export interface ILocationData {
     // ── Sumber daya alat berat ───────────────────────────────────────────────
     sumberDaya?: ISumberDaya[];
 
-    // ── Isu strategis ────────────────────────────────────────────────────────
-    isuStrategis?: IIsuStrategis[];
-
-    // ── Kendala ──────────────────────────────────────────────────────────────
-    kendala?: IKendala[];
+    // ── QHSSE (Quality, Health, Safety, Security, Environment) ───────────────
+    qhsse?: IQhsse;
 
     // ── Monitoring pengadaan (major item) ────────────────────────────────────
     monitoringPengadaan?: IMonitoringPengadaan[];
@@ -279,19 +314,55 @@ const SumberDayaSchema = new Schema<ISumberDaya>({
     satuan: { type: String },
 }, { _id: false });
 
-const IsuStrategisSchema = new Schema<IIsuStrategis>({
-    isu: { type: String, required: true },
-    usulan: { type: String, required: true },
+const QhsseNcSchema = new Schema({
+    periode: { type: String, required: true, match: /^20\d{2}-(0[1-9]|1[0-2])$/ },
+    totalNC: { type: Number, min: 0 },
+    open: { type: Number, min: 0 },
+    closed: { type: Number, min: 0 },
+    totalCost: { type: Number, min: 0 },
 }, { _id: false });
 
-const KendalaSchema = new Schema<IKendala>({
-    masalah: { type: String, required: true },
-    penyebab: { type: String, required: true },
-    tindakan: { type: String, required: true },
-    harapan: { type: String },
-    target: { type: String },
-    pic: { type: String },
-    status: { type: String, enum: ['OPEN', 'CLOSED', 'ON_PROGRESS'], default: 'OPEN' },
+const QhsseQpassSchema = new Schema({
+    periode: { type: String, required: true, match: /^20\d{2}-(0[1-9]|1[0-2])$/ },
+    struktur: { type: Number, min: 0, max: 100 },
+    arsitektur: { type: Number, min: 0, max: 100 },
+    mep: { type: Number, min: 0, max: 100 },
+    overall: { type: Number, min: 0, max: 100 },
+}, { _id: false });
+
+const QhsseR5Schema = new Schema({
+    periode: { type: String, required: true, match: /^20\d{2}-(0[1-9]|1[0-2])$/ },
+    jumlah: { type: Number, min: 0 },
+    durasi: { type: Number, min: 0 },
+    catatan: { type: String },
+}, { _id: false });
+
+const QhsseNilaiSchema = new Schema({
+    periode: { type: String, required: true, match: /^20\d{2}-(0[1-9]|1[0-2])$/ },
+    nilai: { type: Number },
+    catatan: { type: String },
+    incidents: { type: Number, min: 0 },
+    workHours: { type: Number, min: 0 },
+    energyKwh: { type: Number, min: 0 },
+    areaM2: { type: Number, min: 0 },
+}, { _id: false });
+
+const QhsseSchema = new Schema({
+    nc: { type: [QhsseNcSchema], default: [] },
+    qpass: { type: [QhsseQpassSchema], default: [] },
+    trir: { type: [QhsseNilaiSchema], default: [] },
+    smk3l: { type: [QhsseNilaiSchema], default: [] },
+    r5: { type: [QhsseR5Schema], default: [] },
+    pak: { type: [QhsseNilaiSchema], default: [] },
+    energi: { type: [QhsseNilaiSchema], default: [] },
+    keamanan: { type: [QhsseNilaiSchema], default: [] },
+}, { _id: false });
+
+// Dimensi "Program" (gaya RRB) — hanya field yang belum ada di data proyek biasa.
+const ProgramSchema = new Schema<IProgramDim>({
+    mcCair: { type: Number },
+    mcCairLabel: { type: String, trim: true },
+    cutOffLabel: { type: String, trim: true },
 }, { _id: false });
 
 const ChangeManagementSchema = new Schema<IChangeManagement>({
@@ -309,7 +380,6 @@ const ChangeManagementSchema = new Schema<IChangeManagement>({
     target: { type: String },
     pic: { type: String },
     status: { type: String, enum: ['USULAN', 'DISETUJUI', 'DITOLAK'], default: 'USULAN' },
-    dariKendala: { type: Boolean, default: false },
 }, { _id: false });
 
 const MonitoringPengadaanSchema = new Schema<IMonitoringPengadaan>({
@@ -321,6 +391,8 @@ const MonitoringPengadaanSchema = new Schema<IMonitoringPengadaan>({
 const HasilUsahaPeriodeSchema = new Schema({
     pendapatan: { type: Number },
     hpp: { type: Number },
+    bl: { type: Number },      // Beban Langsung (kolom BL di dashboard program)
+    bau: { type: Number },
     ebitda: { type: Number },
     labaBersih: { type: Number },
 }, { _id: false });
@@ -368,6 +440,8 @@ const RencanaKurvaSSchema = new Schema({
     huRencana: {
         type: new Schema({
             hpp: { type: [Number], default: [] },
+            bl: { type: [Number], default: [] },
+            bau: { type: [Number], default: [] },
             ebitda: { type: [Number], default: [] },
             labaBersih: { type: [Number], default: [] },
         }, { _id: false }),
@@ -451,11 +525,11 @@ const LocationSchema: Schema = new Schema({
     // Sumber daya
     sumberDaya: { type: [SumberDayaSchema], default: [] },
 
-    // Isu strategis
-    isuStrategis: { type: [IsuStrategisSchema], default: [] },
+    // QHSSE
+    qhsse: { type: QhsseSchema },
 
-    // Kendala
-    kendala: { type: [KendalaSchema], default: [] },
+    // Dimensi "Program" (gaya RRB) untuk kategori ber-dashboard (Irigasi/JIAT, dst.)
+    program: { type: ProgramSchema },
 
     // Monitoring pengadaan (major item)
     monitoringPengadaan: { type: [MonitoringPengadaanSchema], default: [] },

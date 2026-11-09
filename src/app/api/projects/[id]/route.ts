@@ -6,7 +6,7 @@ import { logAudit } from '@/lib/adminAuditLog';
 import { derivedFromLaporan, isValidPeriode } from '@/lib/projectReport';
 import { loadDeriveSource, syncLegacy } from '@/lib/projectSync';
 import {
-    validPhone, sanitizeMilestones, sanitizeSumberDaya, sanitizeIsuStrategis, sanitizeKendala,
+    validPhone, sanitizeMilestones, sanitizeSumberDaya, sanitizeQhsse, sanitizeProgram,
     sanitizeProgressKeuangan, sanitizeProgressMinggu, sanitizeChangeManagement, sanitizeLingkup,
     sanitizeMonitoringPengadaan,
 } from '@/lib/projectInputs';
@@ -25,7 +25,9 @@ const EDITABLE_FIELDS = [
     // Field baru — progress
     'progressRencana', 'progressDeviasi', 'progressPeriode', 'progressKeuangan', 'tagihanBelumDiproses',
     // Field baru — operasional
-    'lingkupPekerjaan', 'sumberDaya', 'isuStrategis', 'kendala',
+    'lingkupPekerjaan', 'sumberDaya', 'qhsse',
+    // Dimensi "Program" (gaya RRB) untuk kategori ber-dashboard (Irigasi/JIAT, dst.)
+    'program',
     // Field baru — hierarki organisasi
     'division', 'projectType',
     // Field baru — ikhtiar
@@ -52,7 +54,7 @@ const MAX_TEXT_LENGTH = 10000;
 
 // Label ramah untuk pesan validasi.
 const FIELD_LABELS: Record<string, string> = {
-    description: 'Deskripsi', kendala: 'Kendala', isuStrategis: 'Isu strategis',
+    description: 'Deskripsi', qhsse: 'QHSSE',
     lingkupPekerjaan: 'Lingkup pekerjaan', startDate: 'Tanggal mulai', endDate: 'Tanggal selesai',
     tagihanBruto: 'Tagihan bruto', cashIn: 'Cash in', cashOut: 'Cash out',
     saldoHutang: 'Saldo hutang', bad: 'BAD', piutang: 'Piutang',
@@ -252,8 +254,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         // Sub-dokumen: tiap baris divalidasi, galat menyebut baris ke-N.
         if ('milestones' in update) update.milestones = sanitizeMilestones(update.milestones, invalid);
         if ('sumberDaya' in update) update.sumberDaya = sanitizeSumberDaya(update.sumberDaya, invalid);
-        if ('isuStrategis' in update) update.isuStrategis = sanitizeIsuStrategis(update.isuStrategis, invalid);
-        if ('kendala' in update) update.kendala = sanitizeKendala(update.kendala, invalid);
+        if ('qhsse' in update) update.qhsse = sanitizeQhsse(update.qhsse, invalid);
+        if ('program' in update) update.program = sanitizeProgram(update.program, invalid);
         if ('progressKeuangan' in update) update.progressKeuangan = sanitizeProgressKeuangan(update.progressKeuangan, invalid);
         if ('progressMinggu' in update) update.progressMinggu = sanitizeProgressMinggu(update.progressMinggu, invalid);
         if ('changeManagement' in update) update.changeManagement = sanitizeChangeManagement(update.changeManagement, invalid);

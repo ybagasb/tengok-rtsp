@@ -194,16 +194,19 @@ export default function DivisionModel3D({
             return g;
         }
 
-        const BUILD = { gedung, bendungan, tol } as const;
+        // Komponen pratinjau ini hanya memodelkan 3 divisi asli; 'rehab' (DIVISI 4)
+        // memakai scene terpadu IntroScene3D, bukan di sini. Fallback ke 'gedung'.
+        const BUILD: Record<'gedung' | 'bendungan' | 'tol', () => THREE.Group> = { gedung, bendungan, tol };
         const VIEW = { gedung: { s: 34, cy: 15 }, bendungan: { s: 38, cy: 8 }, tol: { s: 44, cy: 8 } } as const;
+        const modelKey: 'gedung' | 'bendungan' | 'tol' = model in BUILD ? (model as 'gedung' | 'bendungan' | 'tol') : 'gedung';
 
         // Warna aksen untuk glow garis tepi
         const accentColor = new THREE.Color(accentHex).getHex();
 
-        const rawGroup = BUILD[model]();
-        const obj = fit(rawGroup, VIEW[model].s, accentColor);
+        const rawGroup = BUILD[modelKey]();
+        const obj = fit(rawGroup, VIEW[modelKey].s, accentColor);
         scene.add(obj);
-        const v = VIEW[model];
+        const v = VIEW[modelKey];
         ctl.target.set(0, v.cy, 0);
         cam.position.set(80, v.cy + 68, 80);
         cam.zoom = 1;

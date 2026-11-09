@@ -21,15 +21,15 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import type { DivisionModelKey } from "@/lib/divisionTheme";
+import type { TileModelKey } from "@/lib/divisionTheme";
 import { loadHqModel, loadHqEnv, type HqModel } from "./hqModel";
 import { createDivisionModels } from "./divisionModels";
 import { isPhoneViewport } from "@/lib/phoneMode";
 
-// X positions divisi
-const XS_WIDE = [-18, 0, 18] as const;
-// Layar potret: jarak antar divisi dirapatkan supaya ketiganya bisa di-zoom lebih dekat.
-const XS_NARROW = [-16.5, 0, 16.5] as const;
+// X positions divisi (4 tile: 3 divisi + 1 hub). Disusun simetris di sekitar 0.
+const XS_WIDE = [-27, -9, 9, 27] as const;
+// Layar potret: jarak antar tile dirapatkan supaya keempatnya bisa di-zoom lebih dekat.
+const XS_NARROW = [-24, -8, 8, 24] as const;
 /**
  * Tuning MODE FOKUS (phone: lebar < 640 dan aspect < 0.85, lihat src/lib/phoneMode.ts).
  * Hanya berlaku di fase split. Semua angka mobile ada di sini; ubah di sini saja.
@@ -70,8 +70,10 @@ export const MOBILE_DETAIL = {
   /** Fase hq/explode: pecahan tinggi layar yang dikosongkan untuk judul + tombol Mulai di bawah, agar gedung tidak tertimpa */
   hqLookFrac: 0.1,
 } as const;
-// Urutan model per divisi (sama dengan ORDER di page)
-const MODEL_KEYS: DivisionModelKey[] = ["gedung", "bendungan", "tol"];
+// Urutan model per divisi (sama dengan ORDER di page): 4 divisi.
+const MODEL_KEYS: TileModelKey[] = ["gedung", "bendungan", "tol", "rehab"];
+// Jumlah divisi di landing. Dipakai menggantikan konstanta 3 yang tersebar.
+const TILE_COUNT = MODEL_KEYS.length;
 
 const TIER_COLORS = {
   good: new THREE.Color(0x22c55e),
@@ -640,14 +642,15 @@ export default function IntroScene3D({
     debris.frustumCulled = false;
     scene.add(debris);
 
-    // ---- 3 divisi: model (scale=0) + platform ----------------
-    // Jari-jari jejak per model (platform r=8.8): ketiganya seragam, gedung sedikit lebih kecil karena jangkung.
-    const FOOTPRINT: Record<DivisionModelKey, number> = {
+    // ---- 4 tile: model (scale=0) + platform ----------------
+    // Jari-jari jejak per model (platform r=8): seragam, gedung sedikit lebih kecil karena jangkung.
+    const FOOTPRINT: Record<TileModelKey, number> = {
       gedung: 7,
       bendungan: 6.3,
       tol: 6.3,
+      rehab: 6.3,
     };
-    const divColors3 = [...divisionColors].slice(0, 3);
+    const divColors3 = [...divisionColors].slice(0, TILE_COUNT);
     const mods = MODEL_KEYS.map((key, i) => {
       const col = new THREE.Color(divColors3[i] ?? "#f59e0b").getHex();
       const w = fitFootprint(BUILD[key](), FOOTPRINT[key], 13);
@@ -685,12 +688,14 @@ export default function IntroScene3D({
     // Susun ulang posisi model + touch-action sesuai viewport (mount & resize), tanpa rebuild scene.
     const applyLayout = () => {
       phone = isPhoneViewport(window.innerWidth, window.innerHeight);
+      // Phone fase split memakai mode fokus: tile disebar merata di sekitar 0 dengan jarak
+      // tetap (hanya tile fokus & tetangganya yang terlihat), jadi aman untuk N tile.
       const src: readonly number[] = phone
-        ? [-MOBILE_SPLIT.spacing, 0, MOBILE_SPLIT.spacing]
+        ? MODEL_KEYS.map((_, i) => (i - (TILE_COUNT - 1) / 2) * MOBILE_SPLIT.spacing)
         : W() / H() < 1
         ? XS_NARROW
         : XS_WIDE;
-      for (let i = 0; i < 3; i++) XS[i] = src[i];
+      for (let i = 0; i < TILE_COUNT; i++) XS[i] = src[i];
       mods.forEach((m, i) => {
         m.w.position.x = XS[i];
         m.p.position.x = XS[i];
@@ -801,7 +806,7 @@ export default function IntroScene3D({
         adx > Math.abs(dy) &&
         (adx >= MOBILE_SPLIT.swipePx || (adx >= MOBILE_SPLIT.swipeMinPx && speed >= MOBILE_SPLIT.swipeVelocity));
       if (swipe) {
-        const next = Math.min(2, Math.max(0, cur + (dx < 0 ? 1 : -1)));
+        const next = Math.min(TILE_COUNT - 1, Math.max(0, cur + (dx < 0 ? 1 : -1)));
         if (next !== cur) cbRef.current.onFocusChange?.(next);
         return;
       }
@@ -1034,7 +1039,7 @@ export default function IntroScene3D({
                 : dir.multiplyScalar((12 + Math.random() * 10) * offK).add(V(0, (hN - 0.35) * 16 * offK, 0));
               // Kepingan alas/tanah tidak boleh tenggelam di bawah lantai: bergeser menyamping & sedikit naik.
               if (c.userData.low) off.y = gentle ? (0.4 + Math.random() * 0.8) / ws : (1 + Math.random() * 3) * offK;
-              const tl = g.worldToLocal(V(XS[idx % 3], 5, 0)); // tujuan = platform divisi
+              const tl = g.worldToLocal(V(XS[idx % TILE_COUNT], 5, 0)); // tujuan = platform tile
               return {
                 c,
                 idx,
@@ -1150,14 +1155,14 @@ export default function IntroScene3D({
           // MODE FOKUS (phone): kamera mengikuti model fokus, tetangga mengintip di tepi.
           const fovV = THREE.MathUtils.degToRad(MOBILE_SPLIT.fov);
           const dist = (MOBILE_SPLIT.R / (Math.tan(fovV / 2) * cam.aspect)) * MOBILE_SPLIT.distMul;
-          const fx = XS[foc >= 0 && foc <= 2 ? foc : 0];
+          const fx = XS[foc >= 0 && foc <= TILE_COUNT - 1 ? foc : 0];
           P = V(fx, dist * MOBILE_SPLIT.camY, dist * MOBILE_SPLIT.camZ);
           L = V(fx, MOBILE_SPLIT.targetY, 0);
         } else {
-          // 3 platform (x ±18, r 8.8) harus muat di lebar layar.
+          // Semua platform harus muat di lebar layar (tile terjauh di XS[TILE_COUNT-1]).
           // Jarak kamera dihitung dari lebar horizontal yang terlihat, bukan rasio kasar.
           const tanHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
-          const halfNeed = cam.aspect < 1 ? 26 : XS[2] + 8;
+          const halfNeed = (cam.aspect < 1 ? XS[TILE_COUNT - 1] + 2 : XS[TILE_COUNT - 1]) + 8;
           const fitSplit = Math.max(1, halfNeed / (tanHalf * cam.aspect) / Math.hypot(11, 40));
           P = V(0, 11 * fitSplit, 40 * fitSplit);
           L = V(0, 4, 0);

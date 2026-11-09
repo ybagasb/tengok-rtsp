@@ -464,11 +464,11 @@ export default function AdminLocations() {
                                 <div>
                                     <SectionHeader icon={User} title="Project Manager" />
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <FormField label="Nama PM" required>
-                                            <input required type="text" value={formData.pmName} onChange={e => setFormData({ ...formData, pmName: e.target.value })} className={inputCls()} placeholder="Contoh: Budi Santoso" />
+                                        <FormField label="Nama PM">
+                                            <input type="text" value={formData.pmName} onChange={e => setFormData({ ...formData, pmName: e.target.value })} className={inputCls()} placeholder="Contoh: Budi Santoso" />
                                         </FormField>
-                                        <FormField label="No. WhatsApp PM" required icon={<Phone aria-hidden="true" className="w-4 h-4" />}>
-                                            <input required type="text" value={formData.pmPhone} onChange={e => setFormData({ ...formData, pmPhone: e.target.value })} className={inputCls(true)} placeholder="628123456789" />
+                                        <FormField label="No. WhatsApp PM" icon={<Phone aria-hidden="true" className="w-4 h-4" />}>
+                                            <input type="text" value={formData.pmPhone} onChange={e => setFormData({ ...formData, pmPhone: e.target.value })} className={inputCls(true)} placeholder="628123456789" />
                                         </FormField>
                                     </div>
                                 </div>
@@ -720,7 +720,7 @@ export default function AdminLocations() {
                                         <div className="absolute top-4 right-4 px-3 py-1 bg-yellow-500/90 backdrop-blur rounded-lg text-[11px] font-bold text-slate-950 uppercase tracking-tight shadow-[0_4px_12px_rgba(234,179,8,0.3)]">
                                             {loc.category}
                                         </div>
-                                        <h3 className="absolute bottom-4 left-6 pr-4 font-bold text-xl text-slate-900 dark:text-white tracking-tight uppercase leading-none truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                                        <h3 title={loc.name} className="absolute bottom-4 left-6 right-4 font-bold text-xl text-slate-900 dark:text-white tracking-tight uppercase leading-tight line-clamp-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
                                             {loc.name}
                                         </h3>
                                     </div>

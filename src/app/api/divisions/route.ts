@@ -36,10 +36,28 @@ export async function GET(req: NextRequest) {
     await dbConnect();
 
     try {
-        // 1. Hitung jumlah proyek per (division, category)
+        // 1. Hitung jumlah proyek per (division, category) + berapa yang SUDAH mengisi data.
+        //    "Terisi" = punya minimal satu catatan pembaruan dimensi (sectionUpdates tidak kosong),
+        //    artinya PIC pernah menyimpan setidaknya satu dimensi data proyek.
         const grouped = await Location.aggregate([
             { $match: { division: { $in: DIVISIONS } } },
-            { $group: { _id: { division: '$division', category: '$category' }, count: { $sum: 1 } } },
+            {
+                $addFields: {
+                    _filled: {
+                        $gt: [
+                            { $size: { $objectToArray: { $ifNull: ['$sectionUpdates', {}] } } },
+                            0,
+                        ],
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: { division: '$division', category: '$category' },
+                    count: { $sum: 1 },
+                    filled: { $sum: { $cond: ['$_filled', 1, 0] } },
+                },
+            },
         ]);
 
         // 2. Ambil data kamera per location & status kamera saat ini (2 query ringan)
@@ -104,6 +122,7 @@ export async function GET(req: NextRequest) {
         const result = DIVISIONS.map(div => {
             const rows = grouped.filter(g => g._id.division === div);
             const projectCount = rows.reduce((acc, r) => acc + r.count, 0);
+            const filledCount = rows.reduce((acc, r) => acc + (r.filled ?? 0), 0);
             const divCam = countCameras(divCameraSets.get(div));
 
             const categories = rows
@@ -114,6 +133,7 @@ export async function GET(req: NextRequest) {
                     return {
                         ...cat,
                         projectCount: r.count,
+                        filledCount: r.filled ?? 0,
                         cameraTotal: catCam.total,
                         cameraOnline: catCam.online,
                     };
@@ -123,6 +143,7 @@ export async function GET(req: NextRequest) {
             return {
                 division: div,
                 projectCount,
+                filledCount,
                 cameraTotal: divCam.total,
                 cameraOnline: divCam.online,
                 categories,

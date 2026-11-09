@@ -688,6 +688,7 @@ export function CashflowChart({ points, tahun }: { points: CashflowPoint[]; tahu
 const HU_ROWS: { key: keyof HasilUsahaPeriode; label: string }[] = [
     { key: 'pendapatan', label: 'Pendapatan' },
     { key: 'hpp', label: 'HPP' },
+    { key: 'bau', label: 'BAU' },
     { key: 'ebitda', label: 'EBITDA' },
     { key: 'labaBersih', label: 'Laba Bersih' },
 ];

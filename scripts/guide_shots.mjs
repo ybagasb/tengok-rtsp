@@ -18,6 +18,8 @@
 //
 // Catatan tata letak (desktop lg+): tiap tab setinggi layar tanpa scroll; Laporan Bulanan membagi grup
 // field per tab kecil (EVM, Hasil Usaha, Cash Flow, Posisi, Tagihan, Pengadaan); setup awal berupa label satu baris.
+// QHSSE: pil pemilih dimensi + "Semua" (ringkasan 9 kartu) atau detail satu dimensi (grafik + data bulanan).
+// TRIR & Efisiensi Energi: input elemen rumus → kolom hasil dihitung otomatis (read-only).
 import { chromium } from 'playwright-core';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -252,6 +254,27 @@ async function main() {
         await page.getByRole('button', { name: 'Batalkan perubahan' }).click();
         await tabShot('Isu & Kendala', page.getByText('Kendala Operasional & Kontraktual'), '27-isu-kendala.png');
         await tabShot('Change Management', page.getByRole('heading', { name: 'Change Management' }), '28-change-management.png');
+
+        // 30 – QHSSE tampilan "Semua" (ringkasan 9 kartu dimensi)
+        await menu('QHSSE').click();
+        await ready(page, { waitFor: page.getByRole('heading', { name: /QHSSE · .* dimensi terisi/ }), extraMs: 2500 });
+        await park();
+        await stableShot(page, '30-qhsse-semua.png');
+        // 31 – QHSSE dimensi TRIR saat diedit: input elemen (Insiden, Jam Kerja) + kolom hasil otomatis
+        await page.getByRole('tab', { name: 'TRIR', exact: true }).click();
+        await ready(page, { waitFor: page.getByRole('heading', { name: /TRIR/ }), extraMs: 1500 });
+        // Buka form (Tambah bila belum ada data, atau Edit bila sudah) lalu tampilkan hasil hitung otomatis.
+        const trirEdit = page.getByRole('button', { name: /^(Tambah|Edit)$/ }).first();
+        await trirEdit.click();
+        await ready(page, { waitFor: page.getByLabel('Insiden Tercatat').first(), extraMs: 1200 });
+        // Isi contoh angka supaya kolom "TRIR (otomatis)" menampilkan hasil hitung (tidak disimpan).
+        await page.getByLabel('Insiden Tercatat').first().fill('2');
+        await page.getByLabel('Total Jam Kerja').first().fill('250000');
+        await sleep(1200);
+        await park();
+        await stableShot(page, '31-qhsse-trir-otomatis.png');
+        await page.getByRole('button', { name: 'Batal' }).click();
+
         await tabShot('Galeri', page.getByRole('heading', { name: 'Galeri Foto' }), '29-galeri.png');
         await ctx.close();
 
@@ -295,6 +318,35 @@ async function main() {
         await ready(mp, { waitFor: panel.getByRole('heading', { name: /Ringkasan Pengadaan/ }), extraMs: SETTLE_MS });
         await stableShot(card(panel.getByRole('heading', { name: /Ringkasan Pengadaan/ }), 'space-y-2'), '15-peta-pengadaan.png');
         await mctx.close();
+
+        // ═════════════ PANEL KATEGORI (/categories) + DASHBOARD ═════════════
+        const cctx = await browser.newContext({
+            storageState: SSO_STATE, locale: 'id-ID',
+            viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2,
+        });
+        await installGuards(cctx);
+        // Lewati animasi intro supaya langsung ke panel detail divisi.
+        await cctx.addInitScript(() => { try { sessionStorage.setItem('tengok_intro_seen_v1', 'true'); } catch { /* abaikan */ } });
+        const cp = await cctx.newPage();
+
+        // 33 – Panel kategori Divisi 2 (chip "n/N data" kelengkapan + tombol dashboard kategori)
+        await cp.goto(`${BASE_URL}/categories?div=${encodeURIComponent('DIVISI 2')}&reduced=1`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await ready(cp, { waitFor: cp.getByText(/PILIH LEVEL|KATEGORI/).first(), extraMs: SETTLE_MS + 2000 });
+        // Panel kategori (kartu kanan). Ambil elemen panelnya saja bila ketemu, else full page.
+        const catPanel = cp.locator('div').filter({ hasText: /PILIH LEVEL/ }).last();
+        await stableShot(cp, '33-kategori-kelengkapan.png');
+
+        // 34 – Dashboard model RRB (kategori bencana per divisi)
+        await cp.goto(`${BASE_URL}/category-dashboard/rrb`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await ready(cp, { waitFor: cp.getByRole('heading', { name: /Rehab, Rekon/ }), extraMs: SETTLE_MS + 1500 });
+        await stableShot(cp, '34-dashboard-rrb.png');
+
+        // 35 – Dashboard PL Irigasi & JIAT
+        await cp.goto(`${BASE_URL}/category-dashboard/irigasi-jiat`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await ready(cp, { waitFor: cp.getByRole('heading', { name: /Irigasi|JIAT/ }), extraMs: SETTLE_MS + 1500 });
+        await stableShot(cp, '35-dashboard-irigasi-jiat.png');
+        void catPanel;
+        await cctx.close();
     } finally {
         await browser.close();
     }

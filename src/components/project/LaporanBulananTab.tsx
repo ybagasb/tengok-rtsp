@@ -57,6 +57,8 @@ interface GroupSpec { id: string; title: string; desc?: string; fields: FieldSpe
 const huFields = (key: string, title: string): FieldSpec[] => [
     { path: `${key}.pendapatan`, label: `${title} – Pendapatan`, short: 'Pendapatan', kind: 'money' },
     { path: `${key}.hpp`, label: `${title} – HPP`, short: 'HPP', kind: 'money', hint: 'Harga Pokok Penjualan. Persen HPP dihitung otomatis.' },
+    { path: `${key}.bl`, label: `${title} – BL`, short: 'BL', kind: 'money', hint: 'Beban Langsung. Dipakai untuk kolom BL di dashboard RRB/program.' },
+    { path: `${key}.bau`, label: `${title} – BAU`, short: 'BAU', kind: 'money', hint: 'Beban Administrasi & Umum.' },
     { path: `${key}.ebitda`, label: `${title} – EBITDA`, short: 'EBITDA', kind: 'money', signed: true },
     { path: `${key}.labaBersih`, label: `${title} – Laba bersih`, short: 'Laba Bersih', kind: 'money', signed: true },
 ];
@@ -157,7 +159,7 @@ function formToData(form: FormState, unit: UnitKey): { data: Record<string, unkn
 
 // Data yang relatif tetap antar bulan: aman disalin dari laporan sebelumnya.
 const FIXED_PATHS = ['evm.bac', 'pengadaan.paketTotal', 'pengadaan.paguTotal'];
-const HU_KEYS = ['pendapatan', 'hpp', 'ebitda', 'labaBersih'] as const;
+const HU_KEYS = ['pendapatan', 'hpp', 'bl', 'bau', 'ebitda', 'labaBersih'] as const;
 
 /** Laporan sebelumnya: bulan tepat sebelumnya, atau yang terdekat sebelum periode. */
 function findPrev(sorted: LaporanBulanan[], periode: string): LaporanBulanan | undefined {
@@ -193,7 +195,7 @@ function isSdAuto(entry: LaporanBulanan | undefined, sorted: LaporanBulanan[]): 
     });
 }
 
-const HU_LABEL: Record<typeof HU_KEYS[number], string> = { pendapatan: 'Pendapatan', hpp: 'HPP', ebitda: 'EBITDA', labaBersih: 'Laba Bersih' };
+const HU_LABEL: Record<typeof HU_KEYS[number], string> = { pendapatan: 'Pendapatan', hpp: 'HPP', bl: 'BL', bau: 'BAU', ebitda: 'EBITDA', labaBersih: 'Laba Bersih' };
 
 function entryFilled(e: LaporanBulanan): number {
     return ALL_FIELDS.filter(f => getPath(e, f.path) != null).length;
@@ -872,12 +874,14 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
 }
 
 // ── Rencana tahunan (Kurva S + hasil usaha) ───────────────────────────────────
-type SeriesId = 'raRkap' | 'raEksternal' | 'huHpp' | 'huEbitda' | 'huLabaBersih';
+type SeriesId = 'raRkap' | 'raEksternal' | 'huHpp' | 'huBl' | 'huBau' | 'huEbitda' | 'huLabaBersih';
 interface SeriesSpec { id: SeriesId; label: string; block: 'kurva' | 'hu'; signed?: boolean }
 const SERIES: SeriesSpec[] = [
     { id: 'raRkap', label: 'Rencana Internal (= rencana pendapatan)', block: 'kurva' },
     { id: 'raEksternal', label: 'RA Eksternal', block: 'kurva' },
     { id: 'huHpp', label: 'HPP', block: 'hu' },
+    { id: 'huBl', label: 'BL', block: 'hu' },
+    { id: 'huBau', label: 'BAU', block: 'hu' },
     { id: 'huEbitda', label: 'EBITDA', block: 'hu', signed: true },
     { id: 'huLabaBersih', label: 'Laba Bersih', block: 'hu', signed: true },
 ];
@@ -885,7 +889,7 @@ type RencanaForm = { puRkap: string; series: Record<SeriesId, string[]> };
 const blank12 = () => Array<string>(12).fill('');
 const emptyRencana = (): RencanaForm => ({
     puRkap: '',
-    series: { raRkap: blank12(), raEksternal: blank12(), huHpp: blank12(), huEbitda: blank12(), huLabaBersih: blank12() },
+    series: { raRkap: blank12(), raEksternal: blank12(), huHpp: blank12(), huBl: blank12(), huBau: blank12(), huEbitda: blank12(), huLabaBersih: blank12() },
 });
 
 function seriesValues(r: RencanaKurvaS | undefined, id: SeriesId): number[] {
@@ -894,6 +898,8 @@ function seriesValues(r: RencanaKurvaS | undefined, id: SeriesId): number[] {
         case 'raRkap': return r.raRkap;
         case 'raEksternal': return r.raEksternal;
         case 'huHpp': return r.huRencana?.hpp ?? [];
+        case 'huBl': return r.huRencana?.bl ?? [];
+        case 'huBau': return r.huRencana?.bau ?? [];
         case 'huEbitda': return r.huRencana?.ebitda ?? [];
         case 'huLabaBersih': return r.huRencana?.labaBersih ?? [];
     }
@@ -960,7 +966,7 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
             puRkap: toIdr(form.puRkap),
             raRkap: ser('raRkap'),
             raEksternal: ser('raEksternal'),
-            huRencana: { hpp: ser('huHpp'), ebitda: ser('huEbitda'), labaBersih: ser('huLabaBersih') },
+            huRencana: { hpp: ser('huHpp'), bl: ser('huBl'), bau: ser('huBau'), ebitda: ser('huEbitda'), labaBersih: ser('huLabaBersih') },
         };
         const all: (number | null)[] = [data.puRkap, ...data.raRkap, ...data.raEksternal, ...Object.values(data.huRencana).flat()];
         if (all.some(v => typeof v === 'number' && Number.isNaN(v))) { toast.error('Ada angka yang tidak valid'); return; }

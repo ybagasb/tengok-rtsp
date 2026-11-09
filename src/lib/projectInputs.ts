@@ -90,45 +90,144 @@ export function sanitizeSumberDaya(raw: unknown, errors: string[]) {
     });
 }
 
-export function sanitizeIsuStrategis(raw: unknown, errors: string[]) {
-    const list = rows(raw, 'Isu strategis', errors);
-    if (!list) return undefined;
-    return list.map((r, i) => {
-        const L = `Isu strategis #${i + 1}`;
-        const isu = str(r.isu);
-        const usulan = str(r.usulan);
-        if (!isu) errors.push(`${L}: isu wajib diisi`);
-        if (!usulan) errors.push(`${L}: usulan wajib diisi`);
-        tooLong(isu, `${L}: isu`, errors);
-        tooLong(usulan, `${L}: usulan`, errors);
-        return { isu, usulan };
-    });
+const PERIODE_RE = /^20\d{2}-(0[1-9]|1[0-2])$/;
+
+function periodeOf(r: Record<string, unknown>, L: string, errors: string[], seen: Set<string>): string {
+    const p = str(r.periode);
+    if (!PERIODE_RE.test(p)) errors.push(`${L}: periode tidak valid (format YYYY-MM)`);
+    else if (seen.has(p)) errors.push(`${L}: periode ${p} duplikat`);
+    seen.add(p);
+    return p;
 }
 
-const KENDALA_STATUS = ['OPEN', 'ON_PROGRESS', 'CLOSED'];
+type QhsseNilaiKey = 'trir' | 'smk3l' | 'pak' | 'energi' | 'keamanan';
+const QHSSE_NILAI: { key: QhsseNilaiKey; label: string; max?: number; int?: boolean }[] = [
+    { key: 'trir', label: 'TRIR' },
+    { key: 'smk3l', label: 'Score SMK3L', max: 100 },
+    { key: 'pak', label: 'Jumlah PAK', int: true },
+    { key: 'energi', label: 'Kepatuhan Efisiensi Energi', max: 100 },
+    { key: 'keamanan', label: 'Kasus Penyimpangan Keamanan', int: true },
+];
 
-export function sanitizeKendala(raw: unknown, errors: string[]) {
-    const list = rows(raw, 'Kendala', errors);
-    if (!list) return undefined;
-    return list.map((r, i) => {
-        const L = `Kendala #${i + 1}`;
-        const out: Record<string, unknown> = {};
-        for (const [k, label] of [['masalah', 'masalah'], ['penyebab', 'penyebab'], ['tindakan', 'tindakan']] as const) {
-            const v = str(r[k]);
-            if (!v) errors.push(`${L}: ${label} wajib diisi`);
-            tooLong(v, `${L}: ${label}`, errors);
-            out[k] = v;
-        }
-        for (const k of ['harapan', 'target', 'pic'] as const) {
-            const v = str(r[k]);
-            tooLong(v, `${L}: ${k}`, errors);
-            if (v) out[k] = v;
-        }
-        const status = isBlank(r.status) ? 'OPEN' : String(r.status);
-        if (!KENDALA_STATUS.includes(status)) errors.push(`${L}: status tidak valid`);
-        out.status = status;
-        return out;
-    });
+/** QHSSE: objek berisi deret bulanan per dimensi. Tiap deret diurutkan menurut periode. */
+export function sanitizeQhsse(raw: unknown, errors: string[]) {
+    if (isBlank(raw)) return {};
+    if (!isObj(raw)) { errors.push('QHSSE format tidak valid'); return undefined; }
+    const out: Record<string, unknown> = {};
+
+    // NC (ringkasan bulanan)
+    const nc = rows(raw.nc, 'NC', errors);
+    if (nc) {
+        const seen = new Set<string>();
+        out.nc = nc.map((r, i) => {
+            const L = `NC #${i + 1}`;
+            const e: Record<string, unknown> = { periode: periodeOf(r, L, errors, seen) };
+            for (const [k, label] of [['totalNC', 'total NC'], ['open', 'open'], ['closed', 'closed']] as const) {
+                const v = num(r[k], `${L}: ${label}`, errors, { min: 0, int: true });
+                if (v != null) e[k] = v;
+            }
+            const cost = num(r.totalCost, `${L}: cost of NC`, errors, { min: 0 });
+            if (cost != null) e.totalCost = cost;
+            if (typeof e.totalNC === 'number' && typeof e.open === 'number' && typeof e.closed === 'number'
+                && e.open + e.closed > e.totalNC) errors.push(`${L}: open + closed melebihi total NC`);
+            return e;
+        }).sort((a, b) => String(a.periode).localeCompare(String(b.periode)));
+    }
+
+    // QPASS (per domain)
+    const qp = rows(raw.qpass, 'QPASS', errors);
+    if (qp) {
+        const seen = new Set<string>();
+        out.qpass = qp.map((r, i) => {
+            const L = `QPASS #${i + 1}`;
+            const e: Record<string, unknown> = { periode: periodeOf(r, L, errors, seen) };
+            for (const k of ['struktur', 'arsitektur', 'mep', 'overall'] as const) {
+                const v = num(r[k], `${L}: ${k}`, errors, { min: 0, max: 100 });
+                if (v != null) e[k] = v;
+            }
+            return e;
+        }).sort((a, b) => String(a.periode).localeCompare(String(b.periode)));
+    }
+
+    // Giat Bersih 5R: jumlah laporan (bulat) + rata-rata durasi (menit)
+    const r5 = rows(raw.r5, '5R', errors);
+    if (r5) {
+        const seen = new Set<string>();
+        out.r5 = r5.map((r, i) => {
+            const L = `5R #${i + 1}`;
+            const e: Record<string, unknown> = { periode: periodeOf(r, L, errors, seen) };
+            const jumlah = num(r.jumlah, `${L}: jumlah laporan`, errors, { min: 0, int: true });
+            if (jumlah != null) e.jumlah = jumlah;
+            const durasi = num(r.durasi, `${L}: rata-rata durasi`, errors, { min: 0 });
+            if (durasi != null) e.durasi = durasi;
+            const c = str(r.catatan);
+            tooLong(c, `${L}: catatan`, errors);
+            if (c) e.catatan = c;
+            return e;
+        }).sort((a, b) => String(a.periode).localeCompare(String(b.periode)));
+    }
+
+    // Dimensi satu-nilai-per-bulan
+    for (const d of QHSSE_NILAI) {
+        const list = rows(raw[d.key], d.label, errors);
+        if (!list) continue;
+        const seen = new Set<string>();
+        out[d.key] = list.map((r, i) => {
+            const L = `${d.label} #${i + 1}`;
+            const e: Record<string, unknown> = { periode: periodeOf(r, L, errors, seen) };
+
+            if (d.key === 'trir') {
+                // TRIR dihitung server-side dari elemen: (insiden × 200.000) ÷ jam kerja.
+                const incidents = num(r.incidents, `${L}: insiden tercatat`, errors, { min: 0, int: true });
+                const workHours = num(r.workHours, `${L}: total jam kerja`, errors, { min: 0 });
+                if (incidents != null) e.incidents = incidents;
+                if (workHours != null) e.workHours = workHours;
+                if (typeof incidents === 'number' && typeof workHours === 'number' && workHours > 0) {
+                    e.nilai = (incidents * 200_000) / workHours;
+                }
+            } else if (d.key === 'energi') {
+                // Efisiensi Energi dihitung server-side: (kWh ÷ luas m²) × 100%.
+                const energyKwh = num(r.energyKwh, `${L}: energi listrik (kWh)`, errors, { min: 0 });
+                const areaM2 = num(r.areaM2, `${L}: luas bangunan (m²)`, errors, { min: 0 });
+                if (energyKwh != null) e.energyKwh = energyKwh;
+                if (areaM2 != null) e.areaM2 = areaM2;
+                if (typeof energyKwh === 'number' && typeof areaM2 === 'number' && areaM2 > 0) {
+                    e.nilai = (energyKwh / areaM2) * 100;
+                }
+            } else {
+                const v = num(r.nilai, `${L}: nilai`, errors, { min: 0, max: d.max, int: d.int });
+                if (v != null) e.nilai = v;
+            }
+
+            const c = str(r.catatan);
+            tooLong(c, `${L}: catatan`, errors);
+            if (c) e.catatan = c;
+            return e;
+        }).sort((a, b) => String(a.periode).localeCompare(String(b.periode)));
+    }
+    return out;
+}
+
+/**
+ * Field pelengkap dashboard "model RRB" yang BELUM ada di data proyek biasa:
+ * MC cair (+ label) dan keterangan cut-off. DIPA tersedia & sisa dimensi
+ * dashboard diturunkan dari data existing (lihat src/lib/programDim.ts).
+ */
+export function sanitizeProgram(raw: unknown, errors: string[]) {
+    if (isBlank(raw)) return {};
+    if (!isObj(raw)) { errors.push('Data program format tidak valid'); return undefined; }
+    const out: Record<string, unknown> = {};
+
+    const mc = num(raw.mcCair, 'Program: MC cair', errors, { min: 0 });
+    if (mc != null) out.mcCair = mc;
+    const mcLabel = str(raw.mcCairLabel);
+    tooLong(mcLabel, 'Program: keterangan MC cair', errors);
+    if (mcLabel) out.mcCairLabel = mcLabel;
+    const cut = str(raw.cutOffLabel);
+    tooLong(cut, 'Program: keterangan cut-off', errors);
+    if (cut) out.cutOffLabel = cut;
+
+    return out;
 }
 
 export function sanitizeProgressKeuangan(raw: unknown, errors: string[]) {
@@ -201,7 +300,6 @@ export function sanitizeChangeManagement(raw: unknown, errors: string[]) {
         if (nilai !== undefined) out.nilai = nilai;
         const tanggal = dateOrUndef(r.tanggal, `${L}: tanggal`, errors);
         if (tanggal) out.tanggal = tanggal;
-        if (r.dariKendala === true) out.dariKendala = true;
         return out;
     });
 }

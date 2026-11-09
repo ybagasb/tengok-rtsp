@@ -15,7 +15,7 @@ type Track = <T extends { dispose: () => void }>(o: T) => T;
 type Vec = THREE.Vector3;
 
 export interface DivisionModels {
-  build: Record<"gedung" | "bendungan" | "tol", () => THREE.Group>;
+  build: Record<"gedung" | "bendungan" | "tol" | "rehab", () => THREE.Group>;
   /** Pasang environment map pada seluruh material divisi (refleksi kaca/air/aspal) */
   applyEnv: (tex: THREE.Texture) => void;
   /** Gerakkan air, kendaraan, dan derek */
@@ -884,8 +884,194 @@ export function createDivisionModels(track: Track, lowPower: boolean): DivisionM
     return g;
   }
 
+  // ==========================================================================
+  // HUB: Rehab, Rekon & Bencana — gunung berapi meletus (bencana alam).
+  // Dibangun dengan gaya sama seperti Divisi 2 (terrain vertex-color berlekuk) +
+  // Divisi 3 (alas piringan): kerucut gunung dengan kawah menyala, aliran lava
+  // beranimasi di lereng, gumpalan asap/abu yang membubung, hutan konifer & batu.
+  // ==========================================================================
+  function rehab(): THREE.Group {
+    const g = new THREE.Group();
+    const sideM = M(0x4a3d30, { roughness: 1 });
+
+    // Tinggi terrain gunung: kerucut tengah + punggungan kecil + lembah ke tepi.
+    const PEAK = 20;
+    const volH = (x: number, z: number) => {
+      const d = Math.hypot(x, z);
+      // kerucut utama (kawah datar di puncak), melandai ke arah tepi piringan
+      let h = PEAK * Math.max(0, 1 - d / 34);
+      if (d < 6) h = PEAK - (6 - d) * 0.35; // cekungan kawah di puncak
+      // lekukan jurang/alur lava + kekasaran permukaan
+      const amp = 0.4 + 1.1 * sstep(6, 30, d);
+      h += amp * (Math.sin(x * 0.33 + 1.1) * Math.cos(z * 0.29) + 0.6 * Math.sin(x * 0.15 + z * 0.2 + 1.7));
+      return Math.max(0, h);
+    };
+
+    // ── Alas piringan (rumput + sisi tanah), seperti Divisi 3 ──
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(42, 43.5, 2.4, lowPower ? 64 : 96), [sideM, grassM, sideM]);
+    disc.position.y = -1.2;
+    disc.receiveShadow = true;
+    g.add(disc);
+
+    // ── Terrain gunung (vertex color: tanah → batu → abu → bibir kawah membara) ──
+    {
+      const rings = lowPower ? 34 : 50, segs = lowPower ? 88 : 120;
+      const rx = 40, rz = 40;
+      const pos: number[] = [], col: number[] = [], idx: number[] = [];
+      const c = new THREE.Color();
+      const grass = new THREE.Color(0x5f8f50), grass2 = new THREE.Color(0x7a9a58);
+      const rk = new THREE.Color(0x6a6158), ash = new THREE.Color(0x3b3734), scorch = new THREE.Color(0x241f1d);
+      const ember = new THREE.Color(0xff5a1e), soil = new THREE.Color(0x3a3128);
+      const push = (x: number, y: number, z: number, cc: THREE.Color) => {
+        pos.push(x, y, z);
+        col.push(cc.r, cc.g, cc.b);
+      };
+      for (let i = 0; i <= rings + 1; i++) {
+        const skirt = i === rings + 1;
+        const rr = Math.min(i, rings) / rings;
+        for (let j = 0; j <= segs; j++) {
+          const th = (j / segs) * Math.PI * 2;
+          const x = Math.cos(th) * rr * rx, z = Math.sin(th) * rr * rz;
+          const h = volH(x, z);
+          if (skirt) {
+            push(x, -4, z, soil);
+            continue;
+          }
+          const d = Math.hypot(x, z);
+          // warna menurut jarak ke puncak + tinggi
+          c.copy(grass).lerp(grass2, 0.5 + 0.5 * Math.sin(x * 0.4 + z * 0.3));
+          c.lerp(rk, sstep(6, 16, h));
+          c.lerp(ash, sstep(10, PEAK - 2, h));
+          c.lerp(scorch, sstep(2, 6, 6 - d) * sstep(13, PEAK, h)); // bekas lereng terbakar
+          if (d < 6.5) c.lerp(ember, sstep(6.5, 3, d)); // bibir kawah membara
+          push(x, h, z, i === rings ? soil.clone().lerp(c, 0.5) : c);
+        }
+      }
+      const row = segs + 1;
+      for (let i = 0; i <= rings; i++)
+        for (let j = 0; j < segs; j++) {
+          const a = i * row + j, b = a + 1, cc = a + row, dd = cc + 1;
+          idx.push(a, b, cc, b, dd, cc);
+        }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, M(0xffffff, { vertexColors: true, roughness: 1 }));
+      mesh.receiveShadow = true;
+      mesh.castShadow = true;
+      g.add(mesh);
+    }
+
+    // ── Lava di kawah + aliran turun lereng (tekstur beranimasi, emissive) ──
+    const lavaT = canvasTex(256, 128, (gx, w, h) => {
+      const rr = rand(211);
+      gx.fillStyle = "#b31800";
+      gx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 160; i++) {
+        gx.fillStyle = rr() < 0.55 ? `rgba(255,170,40,${0.4 + rr() * 0.5})` : `rgba(120,10,0,${0.3 + rr() * 0.5})`;
+        gx.fillRect(rr() * w, rr() * h, 6 + rr() * 30, 3 + rr() * 6);
+      }
+    });
+    const lavaM = track(
+      new THREE.MeshStandardMaterial({
+        map: rep(lavaT, 2, 2),
+        emissiveMap: rep(lavaT, 2, 2),
+        emissive: 0xff6a1a,
+        emissiveIntensity: 1.8,
+        roughness: 0.55,
+        metalness: 0,
+      })
+    );
+    mats.push(lavaM);
+    animTex.push({ t: lavaM.map!, vx: 0.015, vy: -0.05 });
+    animTex.push({ t: lavaM.emissiveMap!, vx: 0.015, vy: -0.05 });
+
+    // kolam lava di kawah
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(4.2, 28).rotateX(-Math.PI / 2), lavaM);
+    pool.position.y = volH(0, 0) + 0.15;
+    g.add(pool);
+
+    // aliran lava menuruni lereng (pita melengkung mengikuti terrain)
+    ([[1, 0.2], [-0.6, 0.8], [0.3, -1]] as const).forEach(([dx, dz], k) => {
+      const dir = V(dx, 0, dz).normalize();
+      const pts: Vec[] = [];
+      for (let t = 0; t <= 1.0001; t += 0.1) {
+        const d = 4 + t * 30;
+        const x = dir.x * d + Math.sin(t * 6 + k) * 1.5;
+        const z = dir.z * d + Math.cos(t * 5 + k) * 1.5;
+        pts.push(V(x, volH(x, z) + 0.25, z));
+      }
+      ribbon(pts, 1.1 - k * 0.15, 0.2, lavaM, lavaM, g);
+    });
+
+    // ── Gumpalan asap & abu yang membubung dari kawah (mover, didaur ulang) ──
+    const smokeM = track(
+      new THREE.MeshStandardMaterial({ color: 0x6b6660, transparent: true, opacity: 0.55, roughness: 1, depthWrite: false })
+    );
+    mats.push(smokeM);
+    const ashM = track(new THREE.MeshStandardMaterial({ color: 0x3a3632, transparent: true, opacity: 0.6, roughness: 1, depthWrite: false }));
+    mats.push(ashM);
+    const craterY = volH(0, 0) + 0.3;
+    const puffGeo = new THREE.IcosahedronGeometry(1, lowPower ? 0 : 1);
+    const nPuff = lowPower ? 14 : 26;
+    const puffs: Array<{ m: THREE.Mesh; speed: number; drift: number; phase: number }> = [];
+    const pr = rand(307);
+    for (let i = 0; i < nPuff; i++) {
+      const m = new THREE.Mesh(puffGeo, i % 4 === 0 ? ashM : smokeM);
+      m.position.set(0, craterY, 0);
+      m.frustumCulled = false;
+      g.add(m);
+      puffs.push({ m, speed: 2.4 + pr() * 2.2, drift: (pr() - 0.5) * 1.4, phase: pr() * 100 });
+    }
+    const PLUME_H = 26;
+    movers.push((dt, t) => {
+      puffs.forEach((p, i) => {
+        // tinggi siklik 0..PLUME_H, naik terus lalu daur ulang
+        const life = ((t * p.speed + p.phase + i * 1.3) % PLUME_H) / PLUME_H; // 0..1
+        const y = craterY + life * PLUME_H;
+        const spread = 1 + life * 6;
+        p.m.position.set(Math.sin(p.phase + t * 0.5) * spread * 0.4 + p.drift * life * 6, y, Math.cos(p.phase + t * 0.6) * spread * 0.4);
+        const s = 1.2 + life * 4.5;
+        p.m.scale.setScalar(s);
+        const mat = p.m.material as THREE.MeshStandardMaterial;
+        mat.opacity = (p.m.material === ashM ? 0.6 : 0.5) * (1 - life) * Math.min(1, life * 6);
+      });
+    });
+
+    // ── Batu vulkanik & bongkahan lava dingin (instancing), mengikuti terrain ──
+    const r = rand(149);
+    const bo: Item[] = [], tk: Item[] = [], tr: Item[] = [];
+    for (let tries = 0; bo.length < (lowPower ? 16 : 34) && tries < 800; tries++) {
+      const th = r() * Math.PI * 2, rr = Math.sqrt(r()) * 0.92;
+      const x = Math.cos(th) * rr * 40, z = Math.sin(th) * rr * 40;
+      const h = volH(x, z);
+      if (Math.hypot(x, z) < 7) continue; // jangan di kawah
+      const s = 0.7 + r() * 1.6;
+      const hot = Math.hypot(x, z) < 16 && r() < 0.35;
+      bo.push({ p: [x, h + 0.2 * s, z], s: [s * 1.2, s * 0.85, s], ry: r() * 3, c: hot ? 0x5a1206 : r() < 0.5 ? 0x5f5a53 : 0x423d38 });
+    }
+    inst(new THREE.DodecahedronGeometry(1, 0), rock, bo, g);
+
+    // Hutan konifer di kaki gunung (hanya di cincin luar yang masih hijau)
+    for (let tries = 0; tr.length < (lowPower ? 18 : 40) && tries < 900; tries++) {
+      const th = r() * Math.PI * 2, rr = 0.6 + r() * 0.38;
+      const x = Math.cos(th) * rr * 40, z = Math.sin(th) * rr * 40;
+      const h = volH(x, z);
+      if (h > 9) continue; // hanya lereng bawah yang hijau
+      const s = 0.8 + r() * 0.9;
+      tk.push({ p: [x, h + 0.5 * s, z], s: [0.3 * s, 1.0 * s, 0.3 * s] });
+      tr.push({ p: [x, h + 2.2 * s, z], s: [2.2 * s, 3.8 * s, 2.2 * s], ry: r() * 3, c: treeColors[tr.length % 4] });
+    }
+    inst(cylG, trunkM, tk, g);
+    inst(new THREE.ConeGeometry(0.5, 1, 7), leafM, tr, g);
+
+    return g;
+  }
+
   return {
-    build: { gedung, bendungan, tol },
+    build: { gedung, bendungan, tol, rehab },
     applyEnv(tex) {
       mats.forEach((m) => {
         m.envMap = tex;

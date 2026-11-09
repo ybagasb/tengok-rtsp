@@ -19,6 +19,8 @@ export interface EvmData {
 export interface HasilUsahaPeriode {
     pendapatan?: number;
     hpp?: number;
+    bl?: number;            // Beban Langsung (kolom BL di dashboard program)
+    bau?: number;           // Beban Administrasi & Umum
     ebitda?: number;       // boleh negatif
     labaBersih?: number;   // boleh negatif
 }
@@ -58,6 +60,8 @@ export interface LaporanBulanan {
  */
 export interface HuRencanaSeries {
     hpp: number[];
+    bl?: number[];           // Beban Langsung (dokumen lama belum punya)
+    bau?: number[];          // Beban Administrasi & Umum (dokumen lama belum punya)
     ebitda: number[];
     labaBersih: number[];
 }
@@ -139,7 +143,7 @@ export function huRencanaPeriode(rencana: RencanaKurvaS[] | undefined, periode: 
     const idx = Number(periode.slice(5, 7)) - 1;
     const pick = (a?: number[]) => (a && a.length === 12 ? a[idx] : undefined);
     const out: HasilUsahaPeriode = {
-        pendapatan: pick(plan.raRkap), hpp: pick(r?.hpp), ebitda: pick(r?.ebitda), labaBersih: pick(r?.labaBersih),
+        pendapatan: pick(plan.raRkap), hpp: pick(r?.hpp), bl: pick(r?.bl), bau: pick(r?.bau), ebitda: pick(r?.ebitda), labaBersih: pick(r?.labaBersih),
     };
     return Object.values(out).some(v => v !== undefined) ? out : undefined;
 }
@@ -296,6 +300,8 @@ function readHu(raw: unknown, prefix: string, errors: string[]): HasilUsahaPerio
     return compact({
         pendapatan: readNum(raw.pendapatan, `${prefix} – Pendapatan`, errors),
         hpp: readNum(raw.hpp, `${prefix} – HPP`, errors),
+        bl: readNum(raw.bl, `${prefix} – BL`, errors),
+        bau: readNum(raw.bau, `${prefix} – BAU`, errors),
         ebitda: readNum(raw.ebitda, `${prefix} – EBITDA`, errors, { min: -MAX_VALUE }),
         labaBersih: readNum(raw.labaBersih, `${prefix} – Laba bersih`, errors, { min: -MAX_VALUE }),
     });
@@ -393,6 +399,8 @@ export function sanitizeRencana(raw: unknown): SanitizeResult<RencanaKurvaS> {
     const huRaw = isObj(raw.huRencana) ? raw.huRencana : {};
     const hu: HuRencanaSeries = {
         hpp: readSeries(huRaw.hpp, 'Rencana HPP', errors),
+        bl: readSeries(huRaw.bl, 'Rencana BL', errors),
+        bau: readSeries(huRaw.bau, 'Rencana BAU', errors),
         ebitda: readSeries(huRaw.ebitda, 'Rencana EBITDA', errors, { signed: true, monotonic: false }),
         labaBersih: readSeries(huRaw.labaBersih, 'Rencana laba bersih', errors, { signed: true, monotonic: false }),
     };
@@ -490,5 +498,31 @@ export function cashflowSeries(list: LaporanBulanan[] | undefined, tahun?: numbe
         points,
         masuk: points.reduce((a, p) => a + (p.masuk ?? 0), 0),
         keluar: points.reduce((a, p) => a + (p.keluar ?? 0), 0),
+    };
+}
+
+// ── Hari kontrak (dihitung dari tanggal mulai & selesai kontrak) ─────────────
+export interface KontrakHari {
+    total: number;      // Hari kontrak (kalender)
+    terpakai: number;   // Hari yang sudah berjalan sejak tanggal mulai (0 bila belum mulai)
+    sisa: number;       // Sisa hari sampai tanggal selesai; negatif = sudah lewat
+    persen: number;     // Waktu terpakai 0..100
+}
+
+/** Hari kontrak/terpakai/sisa; undefined bila tanggal belum lengkap atau selesai <= mulai. */
+export function kontrakHari(
+    startDate?: string | Date | null, endDate?: string | Date | null, now: Date = new Date(),
+): KontrakHari | undefined {
+    if (!startDate || !endDate) return undefined;
+    const t0 = new Date(startDate).getTime();
+    const t1 = new Date(endDate).getTime();
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) return undefined;
+    const DAY = 86_400_000;
+    const t = now.getTime();
+    return {
+        total: Math.round((t1 - t0) / DAY),
+        terpakai: Math.max(0, Math.floor((t - t0) / DAY)),
+        sisa: Math.ceil((t1 - t) / DAY),
+        persen: Math.min(100, Math.max(0, ((t - t0) / (t1 - t0)) * 100)),
     };
 }

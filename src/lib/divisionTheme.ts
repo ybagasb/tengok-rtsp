@@ -5,21 +5,37 @@
 
 export type DivisionKey = 'DIVISI 1' | 'DIVISI 2' | 'DIVISI 3';
 
+/**
+ * Tile hub "Rehab, Rekon & Bencana" di halaman /categories.
+ * BUKAN divisi DB (Location.division hanya DIVISI 1/2/3). RRB adalah program
+ * lintas divisi: tiap Divisi 1/2/3 punya data RRB-nya sendiri. Saat dipilih,
+ * panel detailnya menampilkan 3 tombol (Divisi 1/2/3) -> sub-panel RRB divisi itu.
+ */
+export type HubKey = 'REHAB';
+
+/** Semua tile di landing /categories: 3 divisi nyata + 1 hub RRB. */
+export type CategoryTileKey = DivisionKey | HubKey;
+
 // Kunci model 3D (porting dari generator prosedural).
 export type DivisionModelKey = 'gedung' | 'bendungan' | 'tol';
 
+/** Kunci model 3D untuk tile landing (termasuk model gunung 'rehab' untuk hub RRB). */
+export type TileModelKey = DivisionModelKey | 'rehab';
+
 export interface DivisionTheme {
-    key: DivisionKey;
-    short: string;            // "Divisi 1"
+    key: CategoryTileKey;
+    short: string;            // label kode kecil, mis. "Divisi 1" (hub: label program)
     title: string;            // judul lengkap
     tagline: string;          // satu kalimat fokus
     description: string;      // penjelasan lebih panjang
-    model: DivisionModelKey;  // objek 3D khas
+    model: TileModelKey;      // objek 3D khas
     // Kelas Tailwind aksen (gradient) + warna hex untuk 3D/aksen non-Tailwind.
     gradient: string;         // "from-... to-..."
     accentHex: string;        // warna aksen utama (hex)
     glow: string;             // rgba untuk glow
     chipClass: string;        // badge kecil
+    /** true untuk tile hub (RRB): panel detail = tombol divisi, bukan kategori. */
+    isHub?: boolean;
 }
 
 export const DIVISION_THEME: Record<DivisionKey, DivisionTheme> = {
@@ -64,9 +80,36 @@ export const DIVISION_THEME: Record<DivisionKey, DivisionTheme> = {
     },
 };
 
+/**
+ * Tema tile hub "Rehab, Rekon & Bencana" (RRB). Bukan divisi DB — program lintas
+ * divisi. Model 3D gunung berapi; aksen merah. `short` sengaja bukan "Divisi 4".
+ */
+export const HUB_THEME: Record<HubKey, DivisionTheme> = {
+    REHAB: {
+        key: 'REHAB',
+        short: 'Program',
+        title: 'Rehab, Rekon & Bencana',
+        tagline: 'Rehabilitasi, rekonstruksi & tanggap bencana',
+        description:
+            'Program lintas divisi untuk rehabilitasi dan rekonstruksi infrastruktur pascabencana serta tanggap darurat. Pilih divisi untuk melihat data RRB-nya.',
+        model: 'rehab',
+        gradient: 'from-yellow-500 to-amber-500',
+        accentHex: '#eab308',
+        glow: 'rgba(234,179,8,0.45)',
+        chipClass: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+        isHub: true,
+    },
+};
+
+/** Gabungan tema divisi nyata + hub RRB, dipakai halaman landing /categories. */
+export const TILE_THEME: Record<CategoryTileKey, DivisionTheme> = {
+    ...DIVISION_THEME,
+    ...HUB_THEME,
+};
+
 export function getDivisionTheme(div?: string | null): DivisionTheme | null {
     if (!div) return null;
-    return DIVISION_THEME[div as DivisionKey] ?? null;
+    return TILE_THEME[div as CategoryTileKey] ?? null;
 }
 
 /**

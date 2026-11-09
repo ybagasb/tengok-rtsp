@@ -7,7 +7,7 @@ Bahasa dibuat sederhana, langkah demi langkah, tanpa jargon.
 
 Struktur menu di panduan ini mengikuti halaman /project/[id]:
   Ringkasan (dashboard) · Cash & Keuangan · Operasi · CCTV · Laporan Bulanan ·
-  Change Management · Isu & Kendala · Lainnya (Informasi, Lokasi, Kontrak, Progres, Galeri, Dokumen)
+  Change Management · QHSSE · Lainnya (Informasi, Lokasi, Kontrak, Progres, Galeri, Dokumen)
 
 Gambar  : scripts/guide-img/*.png (buat ulang dengan: node scripts/guide_shots.mjs)
 Jalankan: python scripts/make_user_guide.py
@@ -44,7 +44,7 @@ PIC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1tY8XWli4iPRfTJCNBUiRJbN
 CCTV_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1bHNUUJI4IQyyUfTvsVMICvD8jLQicCcA/edit?usp=sharing&ouid=103891759421561837812&rtpof=true&sd=true'
 GREEN_DK = colors.HexColor('#047857')
 
-EDISI = 'Oktober 2026'
+EDISI = 'November 2026 (rev. 2)'
 
 OUT = 'public/Panduan-Input-Detail-Proyek.pdf'
 LOGO = 'public/LOGO_ABIPRAYA.png'
@@ -345,6 +345,37 @@ def build():
         'atau (2) Anda <b>belum terdaftar sebagai PIC</b> proyek itu — lihat bagian '
         '"Kenapa Saya Tidak Bisa Mengedit?" di atas.', 'Kalau Tombol Edit Tidak Ada'))
 
+    # ── Indikator kelengkapan data per kategori + dashboard kategori ──
+    E.append(Paragraph('Melihat Kategori Mana yang Datanya Belum Lengkap', H3))
+    E.append(Paragraph(
+        'Saat memilih kategori di dalam sebuah divisi, tiap baris kategori menampilkan dua lencana kecil: '
+        '<b>"n/N data"</b> (berapa proyek yang <b>sudah mengisi data</b> dari total proyek kategori itu) dan '
+        'lencana <b>CCTV</b> (kamera online). Titik warna pada lencana data: <b>hijau</b> = semua proyek sudah '
+        'mengisi data, <b>kuning</b> = sebagian, <b>merah</b> = belum ada yang mengisi. Arahkan kursor ke lencana '
+        'untuk melihat rinciannya (mis. "7 proyek sudah mengisi data, 5 belum dilengkapi"). Gunakan ini untuk '
+        'mengetahui proyek mana yang datanya masih perlu dilengkapi.', BODY))
+    E.extend(shot('33-kategori-kelengkapan.png',
+                  'Panel kategori sebuah divisi. Tiap kategori menampilkan lencana "n/N data" (kelengkapan pengisian) '
+                  'dan lencana CCTV. Sebagian kategori punya tombol <b>Dashboard</b> di sampingnya.', 150))
+    E.append(Paragraph('Dashboard Model RRB (Rekap Dimensi Data)', H3))
+    E.append(Paragraph(
+        'Sebagian kategori punya <b>tombol Dashboard</b> di samping tombol Masuk — mis. <b>PL Irigasi &amp; JIAT</b> '
+        '(Divisi 2), dan program <b>RRB (Rehab, Rekon &amp; Bencana)</b> lewat tombol Dashboard di menu RRB. '
+        'Dashboard ini merekap dimensi data gaya RRB (Progress Fisik, Progress Keuangan, Profitabilitas BL/BAU/L-R) '
+        'dari semua proyek terkait. <b>Semua angka diambil dari data proyek yang sudah Anda isi</b> '
+        '(progress fisik, kontrak/DIPA, laporan bulanan) — tidak ada pengisian khusus dashboard, kecuali beberapa '
+        'field pelengkap (MC Cair, cut-off, dan BL di Laporan Bulanan).', BODY))
+    E.extend(shot('34-dashboard-rrb.png',
+                  'Dashboard RRB: proyek kategori Bencana direkap per divisi dengan Progress Fisik (rencana/realisasi/deviasi), '
+                  'Progress Keuangan (DIPA, MC Cair, Tagihan), dan Profitabilitas (BL/BAU/L-R).', 165))
+    E.extend(shot('35-dashboard-irigasi-jiat.png',
+                  'Dashboard PL Irigasi & JIAT: saat ini berisi proyek JIAT (Divisi 2) dengan Progress Fisik, Progress Keuangan, dan Profitabilitas.', 165))
+    E.append(callout(
+        'Dari mana angka dashboard? <b>Progress Fisik %</b> dari menu Progres; <b>nilai Rp fisik</b> = nilai kontrak × persen; '
+        '<b>DIPA</b> dari total Pagu/Rencana di Cash &amp; Keuangan; <b>Tagihan</b> dari Laporan Bulanan; '
+        '<b>BL/BAU/L-R</b> dari Hasil Usaha di Laporan Bulanan. <b>MC Cair</b> &amp; <b>cut-off</b> diisi di menu Cash &amp; Keuangan. '
+        'Jadi Anda cukup mengisi data proyek seperti biasa — dashboard menyusunnya otomatis.', 'Dashboard Memakai Data yang Sudah Ada'))
+
     # ══ 3. PETA MENU HALAMAN PROYEK ══════════════════════════════════════════
     E.append(Paragraph('Mengenal Menu di Halaman Proyek', H2))
     E.append(Paragraph(
@@ -363,7 +394,8 @@ def build():
         ('Laporan Bulanan', '<b>Pusat pengisian angka rutin tiap bulan</b>: Earned Value, Kurva S, hasil usaha, '
                             'arus kas, posisi keuangan (hutang, BAD, piutang, CCC), tagihan, dan pengadaan. Juga tempat Rencana Tahunan dan Saldo Awal Kas.'),
         ('Change Management', 'Catatan perubahan harga/lingkup, klaim, dan masalah hukum.'),
-        ('Isu &amp; Kendala', 'Isu strategis dan kendala di lapangan beserta penanganannya.'),
+        ('QHSSE', '<b>Data bulanan QHSSE</b> (Quality, Health, Safety, Security, Environment): 9 dimensi mutu &amp; K3L. '
+                  'Sebagian dimensi (TRIR, Efisiensi Energi) dihitung otomatis dari elemen rumus.'),
         ('Lainnya', 'Informasi, Lokasi, Kontrak, Progres, Galeri, dan <b>Dokumen</b> (unggah dokumen pendukung).'),
     ], col1='Menu'))
     E.append(Spacer(1, 3 * mm))
@@ -404,7 +436,7 @@ def build():
     E.append(PageBreak())
     E.append(Paragraph('Dimensi Data yang Diisi PIC', H2))
     E.append(Paragraph(
-        'Data proyek dibagi menjadi <b>17 dimensi</b>. Setiap dimensi punya tempat isi sendiri, tombol <b>Simpan</b> sendiri, '
+        'Data proyek dibagi menjadi <b>16 dimensi</b>. Setiap dimensi punya tempat isi sendiri, tombol <b>Simpan</b> sendiri, '
         'dan keterangan <b>"Diperbarui ... · nama"</b> di bawah judulnya yang menunjukkan <b>kapan dan oleh siapa</b> dimensi itu '
         'terakhir disimpan. Tabel berikut adalah daftar lengkapnya:', BODY))
     E.append(dim_table([
@@ -426,12 +458,12 @@ def build():
         ('Milestone', 'Operasi', 'Nama tahapan, tanggal, persen kemajuan.', 'Nama tahapan wajib.'),
         ('Sumber Daya', 'Operasi', 'Nama, kategori, jumlah, satuan.', 'Nama wajib.'),
         ('Monitoring Pengadaan', 'Operasi', 'Nama item major dan persen (0–100).', 'Nama item wajib.'),
-        ('Isu Strategis', 'Isu &amp; Kendala', 'Isu dan Usulan dari Abipraya.', 'Keduanya wajib (bertanda *).'),
-        ('Kendala', 'Isu &amp; Kendala',
-         'Masalah, Penyebab, Tindakan, Harapan Dukungan, Target, Penanggung Jawab, Status.', 'Masalah, Penyebab, Tindakan wajib (bertanda *).'),
         ('Change Management', 'Change Management',
          'Judul, Jenis, Status, Nilai, Tanggal, Target, Penanggung Jawab, Deskripsi, Dampak, Mitigasi.',
          'Judul wajib. Nilai boleh negatif.'),
+        ('QHSSE', 'QHSSE',
+         'Data bulanan 9 dimensi mutu, K3, kesehatan, lingkungan, dan keamanan (NC, Cost of NC, QPASS, TRIR, SMK3L, 5R, PAK, Efisiensi Energi, Keamanan).',
+         'Diisi per bulan. TRIR &amp; Efisiensi Energi dihitung otomatis dari elemen rumus. Lihat bagian khusus QHSSE.'),
         ('Lokasi', 'Lainnya → Lokasi', 'Footprint bangunan dan tinggi blok 3D.', '3 sampai 200 titik, tinggi 1–300 m.'),
         ('Galeri', 'Lainnya → Galeri', 'Foto proyek (JPG, PNG, WebP, GIF).', 'Maks. 25 MB per foto, 200 foto per proyek.'),
         ('Dokumen', 'Lainnya → Dokumen', 'PDF, Word, Excel, PowerPoint, teks, arsip, gambar.', 'Maks. 25 MB per berkas, 100 dokumen per proyek.'),
@@ -442,7 +474,9 @@ def build():
     E.append(Spacer(1, 3 * mm))
     E.append(Paragraph('Membaca Keterangan "Diperbarui"', H3))
     E.append(Paragraph(
-        'Di bawah judul tiap bagian ada baris kecil bergambar jam, misalnya <b>"Diperbarui 30 Okt 2026, 14.20 · nama"</b>. '
+        'Di bawah judul tiap bagian ada baris kecil bergambar jam, misalnya <b>"Diperbarui 30 Okt 2026, 14.20 · nama"</b>, '
+        'diikuti tombol <b>(i)</b>. Arahkan kursor atau klik tombol <b>(i)</b> untuk melihat keterangan lengkap: '
+        '<b>kapan terakhir diperbarui dan oleh siapa</b>. '
         'Gunakan untuk memeriksa apakah suatu data masih baru atau sudah lama tidak dirawat. '
         'Tulisan <b>"Belum ada catatan pembaruan"</b> berarti bagian itu belum pernah disimpan sejak fitur ini aktif; '
         'datanya mungkin sudah ada sebelumnya, tetapi belum ada catatan kapan diubah.', BODY))
@@ -465,8 +499,6 @@ def build():
         'sehingga baris baru langsung terlihat.', BODY))
     E.extend(shot('26-operasi-isi-sumber-daya.png',
                   'Mengisi Sumber Daya: hanya beberapa baris yang tampil per halaman. Pakai panah di bawah daftar untuk melihat baris lainnya.', 150))
-    E.extend(shot('27-isu-kendala.png',
-                  'Menu Isu &amp; Kendala: dua kartu berdampingan, masing-masing dengan keterangan "Diperbarui" sendiri.', 150))
     E.append(Paragraph('Kelengkapan Data: 11 Butir', H3))
     E.append(Paragraph(
         'Indikator di menu Ringkasan menilai <b>11 butir</b>. Setiap butir yang terisi menambah persen kelengkapan. '
@@ -487,7 +519,7 @@ def build():
     E.append(Spacer(1, 2 * mm))
     E.append(callout(
         '<b>1)</b> Kolom bertanda <font color="#e11d48">*</font> wajib diisi. '
-        '<b>2)</b> Bila Simpan ditolak, pesannya menyebut <b>bagian dan nomor barisnya</b>, misalnya "Kendala #2: penyebab wajib diisi". Perbaiki baris itu lalu simpan lagi. '
+        '<b>2)</b> Bila Simpan ditolak, pesannya menyebut <b>bagian dan nomor barisnya</b>, misalnya "Sumber Daya #2: nama wajib diisi". Perbaiki baris itu lalu simpan lagi. '
         '<b>3)</b> <b>Mengosongkan</b> sebuah angka lalu menyimpan akan <b>menghapus</b> nilai lama (tidak lagi tertahan). '
         '<b>4)</b> Persen progres memakai 2 angka di belakang koma dan harus 0–100. '
         '<b>5)</b> Nomor HP boleh diawali + dan berisi spasi atau tanda hubung, asal 8–15 digit.',
@@ -778,6 +810,9 @@ def build():
                                      'Tekan "Tambah Tahun" untuk menambah baris, "Hapus tahun ini" untuk menghapus.'),
         ('Progress Belum Ditagihkan', 'Nilai pekerjaan yang sudah berjalan tetapi belum ditagihkan. '
                                       'Ada di dalam bagian Progress Keuangan.'),
+        ('MC Cair (+ keterangan, cut-off)', 'Hanya untuk kategori ber-dashboard (mis. Bencana/Irigasi/JIAT). '
+                                            'Nilai MC yang cair, keterangannya (mis. "sd bulan September"), dan keterangan cut-off. '
+                                            'Dipakai di <b>Dashboard model RRB</b>. DIPA tersedia di dashboard dihitung dari total Pagu/Rencana — tidak diisi dua kali.'),
     ], col1='Kolom'))
     E.append(Spacer(1, 2 * mm))
     E.append(callout('Setelah Laporan Bulanan diisi, kolom <b>Tagihan Bruto</b>, <b>Cash In</b>, <b>Cash Out</b>, '
@@ -859,18 +894,62 @@ def build():
                   'Menu Change Management. Kartu perubahan ditampilkan dua kolom dan berhalaman bila banyak; teks panjang dipotong '
                   'dan terbaca penuh saat kursor diarahkan ke teksnya atau saat Edit dibuka.', 150))
 
-    # ── Isu & Kendala ──
-    E.append(Paragraph('Menu Isu &amp; Kendala', H3))
-    E.append(Paragraph('Menu ini punya dua bagian dengan tombol Edit masing-masing:', BODY))
-    E.append(bullets([
-        '<b>Isu Strategis</b> — tulis <b>Isu</b> dan <b>Usulan dari Abipraya</b> untuk menanganinya.',
-        '<b>Kendala Operasional &amp; Kontraktual</b> — isi <b>Masalah</b>, <b>Penyebab</b>, '
-        '<b>Tindakan</b>, <b>Harapan Dukungan</b>, <b>Target</b>, <b>Penanggung Jawab</b>, dan '
-        '<b>Status</b> (OPEN / ON PROGRESS / CLOSED).',
-        'Kendala yang perlu pengajuan perubahan bisa dipindahkan ke Change Management '
-        'dengan satu klik tombol <b>"Masukkan ke Change Management"</b> di kartu kendala tersebut. '
-        'Catatan baru muncul dengan status USULAN.',
+    # ── QHSSE ──
+    E.append(Paragraph('Menu QHSSE (Quality, Health, Safety, Security, Environment)', H3))
+    E.append(Paragraph(
+        'Menu <b>QHSSE</b> mencatat kinerja mutu, keselamatan, kesehatan, lingkungan, dan keamanan proyek '
+        'dalam bentuk <b>data bulanan</b>. Ada <b>9 dimensi</b>. Di bagian atas tampil <b>pil pemilih</b> '
+        '("Semua", lalu nama tiap dimensi) dan keterangan <b>"QHSSE · n/9 dimensi terisi"</b>. '
+        'Klik "Semua" untuk melihat ringkasan semua dimensi sebagai kartu; klik salah satu dimensi untuk '
+        'melihat <b>grafik tren</b> dan <b>tabel data bulanan</b>-nya.', BODY))
+    E.append(Paragraph('Cara mengisi (per dimensi):', H3))
+    E.append(numbered([
+        'Klik salah satu dimensi pada pil di atas (mis. <b>TRIR</b>).',
+        'Di kartu <b>Data Bulanan</b> (kanan), klik <b>"Tambah"</b> untuk menambah bulan baru, atau <b>"Edit"</b> '
+        'untuk mengubah data yang ada.',
+        'Pilih <b>Periode</b> (bulan) lalu isi kolom yang diminta. Satu bulan = satu baris.',
+        'Klik <b>Simpan</b>.',
     ]))
+    E.append(tipbox(
+        'Di samping judul tiap dimensi ada ikon <b>"?"</b>. Klik untuk melihat <b>penjelasan singkat</b> '
+        'dimensi itu dan <b>rumusnya</b> (bila ada). Pakai ini kalau ragu apa yang harus diisi.',
+        'Ada Penjelasan di Ikon "?"'))
+    E.extend(shot('30-qhsse-semua.png',
+                  'Menu QHSSE, tampilan "Semua": pil pemilih dimensi di atas, keterangan jumlah dimensi terisi, '
+                  'dan ringkasan 9 kartu dimensi (nilai terbaru, tren vs bulan lalu, dan grafik mini).', 160))
+    E.append(Spacer(1, 2 * mm))
+    E.append(Paragraph('Dua Dimensi Dihitung Otomatis dari Elemen Rumus', H3))
+    E.append(Paragraph(
+        'Untuk <b>TRIR</b> dan <b>Efisiensi Energi</b>, Anda <b>tidak mengetik nilai jadinya</b>. Cukup isi '
+        '<b>elemen rumusnya</b>, lalu sistem menghitung hasilnya otomatis (kolom hasil tampil sebagai kotak '
+        'bergaris putus-putus dan tidak bisa diketik — ter-update langsung saat Anda mengisi elemennya).', BODY))
+    E.append(field_table([
+        ('TRIR', 'Isi <b>Insiden Tercatat</b> dan <b>Total Jam Kerja</b>. '
+                 'Sistem hitung: (Insiden × 200.000) ÷ Total Jam Kerja. Makin kecil makin baik.'),
+        ('Efisiensi Energi', 'Isi <b>Energi Listrik (kWh)</b> dan <b>Luas Bangunan (m²)</b>. '
+                             'Sistem hitung: (Energi Listrik ÷ Luas Bangunan) × 100%.'),
+    ], col1='Dimensi'))
+    E.extend(shot('31-qhsse-trir-otomatis.png',
+                  'Mengisi TRIR: PIC hanya mengisi Insiden Tercatat dan Total Jam Kerja. Kolom "TRIR (otomatis)" '
+                  'berbingkai putus-putus dan terisi sendiri dari rumus — tidak diketik.', 150))
+    E.append(Spacer(1, 2 * mm))
+    E.append(Paragraph('Daftar 9 Dimensi QHSSE', H3))
+    E.append(field_table([
+        ('1. NC Status', 'Status temuan ketidaksesuaian (Non-Conformance) per bulan: total, open, closed.'),
+        ('2. Cost of NC', 'Total biaya penanganan/perbaikan seluruh NC pada bulan itu.'),
+        ('3. QPASS', 'Skor mutu hasil konstruksi per domain (struktur, arsitektur, MEP). Overall dihitung rata-rata bila kosong.'),
+        ('4. TRIR', 'Laju kecelakaan kerja tercatat. <b>Dihitung otomatis</b> dari insiden tercatat dan total jam kerja.'),
+        ('5. SMK3L', 'Skor penerapan Sistem Manajemen K3L (PP 50/2012), skala 0–100.'),
+        ('6. 5R', 'Giat Bersih 5R (Ringkas, Rapi, Resik, Rawat, Rajin): jumlah laporan dan rata-rata durasi (menit).'),
+        ('7. PAK', 'Jumlah kasus Penyakit Akibat Kerja.'),
+        ('8. Efisiensi Energi', 'Kepatuhan efisiensi energi (%). <b>Dihitung otomatis</b> dari energi listrik (kWh) dan luas bangunan (m²).'),
+        ('9. Keamanan', 'Jumlah kasus penyimpangan keamanan (mis. kehilangan aset, pencurian).'),
+    ], col1='Dimensi'))
+    E.append(Spacer(1, 2 * mm))
+    E.append(callout(
+        'Dimensi QPASS, SMK3L, dan PAK juga menampilkan rumus di ikon "?", tetapi itu <b>rumus korporat</b> '
+        '(perhitungan gabungan antar-proyek di tingkat divisi/perusahaan). Di tingkat satu proyek, Anda cukup '
+        'mengisi <b>skor/jumlah</b> dimensinya seperti biasa.', 'Soal Rumus Korporat'))
 
     # ── Lainnya ──
     E.append(Paragraph('Menu Lainnya', H3))
@@ -1110,7 +1189,7 @@ def build():
                                      'proyek lewat spreadsheet pendaftaran PIC atau ke admin).'),
         ('Sudah PIC tapi tombol tetap tidak aktif', 'Muat ulang halaman. Pastikan Anda '
                                      'login SSO dengan akun yang sama dengan yang didaftarkan.'),
-        ('Pesan "Data belum valid: Kendala #2: penyebab wajib diisi"', 'Pesan menyebut bagian dan nomor barisnya. Buka bagian itu, '
+        ('Pesan "Data belum valid: Sumber Daya #2: nama wajib diisi"', 'Pesan menyebut bagian dan nomor barisnya. Buka bagian itu, '
                                      'lengkapi baris yang disebut (kolom bertanda *), lalu simpan lagi.'),
         ('Angka lama masih muncul padahal sudah dikosongkan', 'Pastikan Anda menekan Simpan setelah mengosongkan kolom. '
                                      'Kolom yang kosong saat disimpan akan menghapus nilai lamanya.'),

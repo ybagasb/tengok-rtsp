@@ -5,7 +5,8 @@
  */
 export type ProjectSection =
     | 'info' | 'contract' | 'progress' | 'ikhtiar' | 'finansial' | 'kinerja' | 'mingguan'
-    | 'milestone' | 'sumberDaya' | 'monitoring' | 'isu' | 'kendala' | 'changeMgmt'
+    | 'milestone' | 'sumberDaya' | 'monitoring' | 'qhsse' | 'changeMgmt'
+    | 'program'
     | 'location' | 'gallery' | 'documents' | 'laporan';
 
 export interface SectionStamp { at: string; by?: string }
@@ -27,7 +28,7 @@ const FIELD_SECTION: Record<string, ProjectSection> = {
     pu: 'kinerja', bk: 'kinerja', lk: 'kinerja',
     progressMinggu: 'mingguan',
     milestones: 'milestone', sumberDaya: 'sumberDaya', monitoringPengadaan: 'monitoring',
-    isuStrategis: 'isu', kendala: 'kendala', changeManagement: 'changeMgmt',
+    qhsse: 'qhsse', changeManagement: 'changeMgmt', program: 'program',
     footprint: 'location', footprintHeight: 'location',
 };
 

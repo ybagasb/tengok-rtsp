@@ -5,19 +5,22 @@ import {
     X, Phone, User, TrendingUp,
     CircleDollarSign, Building2, Wrench, AlertTriangle,
     MapPin, Calendar, ExternalLink, Video, CheckCircle2,
-    Clock, Truck, Sparkles, ArrowUpRight, ArrowDownRight,
+    Clock, Truck, ArrowUpRight, ArrowDownRight,
     FileText, Activity, HardHat, MessageCircle,
-    CheckCircle, AlertCircle, GitBranch, Wallet
+    CheckCircle, GitBranch, Wallet, ShieldCheck
 } from 'lucide-react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import CountUp from './CountUp';
 import OptimizedVideoPlayer from './OptimizedVideoPlayer';
+import QhssePanel from '@/components/project/QhssePanel';
+import HariKontrakRow from '@/components/project/HariKontrakRow';
+import type { QhsseData } from '@/lib/qhsse';
 import { useStreamManager } from '@/lib/StreamManager';
 import { ICameraData } from '@/models/Camera';
-import { ArcGauge, CashflowChart, HBar, HBarGroup, HasilUsahaTable, SCurveChart, StackedBar, fRpShort, type GaugeZone } from './PanelCharts';
-import { cashflowSeries, computeEvm, huRencanaPeriode, kurvaSSeries, isValidPeriode, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
+import { ArcGauge, HBar, HBarGroup, HasilUsahaTable, StackedBar, fRpShort, type GaugeZone } from './PanelCharts';
+import { computeEvm, huRencanaPeriode, isValidPeriode, kontrakHari, latestLaporan, periodeLabel, type LaporanBulanan, type RencanaKurvaS } from '@/lib/projectReport';
 import { getDivisionTheme, getDivisionCssVars } from '@/lib/divisionTheme';
 import { useIsPhone } from '@/lib/phoneMode';
 
@@ -37,21 +40,6 @@ export interface ISumberDaya {
     satuan?: string;
 }
 
-export interface IIsuStrategis {
-    isu: string;
-    usulan: string;
-}
-
-export interface IKendala {
-    masalah: string;
-    penyebab?: string;
-    tindakan?: string;
-    harapan?: string;
-    target?: string;
-    pic?: string;
-    status: string;
-}
-
 export type ChangeJenis = 'PERUBAHAN_HARGA' | 'PERUBAHAN_LINGKUP' | 'KLAIM' | 'LEGAL_ISSUE' | 'LAINNYA';
 
 export interface IChangeManagement {
@@ -65,7 +53,6 @@ export interface IChangeManagement {
     target?: string;
     pic?: string;
     status: 'USULAN' | 'DISETUJUI' | 'DITOLAK';
-    dariKendala?: boolean;
 }
 
 // Progress mingguan (W1–W4): Rencana (RA) & Realisasi (RI) dalam persen.
@@ -141,8 +128,7 @@ export interface IPopulatedLocation {
     lingkupPekerjaan?: string[];
     sumberDaya?: ISumberDaya[];
     milestones?: { title: string; done: boolean; date?: string; progress?: number }[];
-    isuStrategis?: IIsuStrategis[];
-    kendala?: IKendala[];
+    qhsse?: QhsseData;
     monitoringPengadaan?: IMonitoringPengadaan[];
     progressMinggu?: IProgressMinggu[];
     changeManagement?: IChangeManagement[];
@@ -160,7 +146,7 @@ interface CameraPanelProps {
     lastCheckedTimes?: Record<string, string>;
 }
 
-type TabType = 'overview' | 'financial' | 'operational' | 'changemgmt' | 'issues';
+type TabType = 'overview' | 'financial' | 'operational' | 'changemgmt' | 'qhsse';
 
 // ── Status Metas ──────────────────────────────────────────────────────────────
 const STATUS_META: Record<string, { label: string; color: string; badge: string; glow: string; border: string }> = {
@@ -483,11 +469,9 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
     const rencana   = location.progressRencana  ?? 0;
     const deviasi   = location.progressDeviasi  ?? (realisasi - rencana);
     const hasProgress = location.progressPercent != null || location.progressRencana != null;
-    const kurvaS = kurvaSSeries(location);   // null-safe: undefined bila belum ada laporan/rencana
     // Data laporan bulanan terbaru → kartu di tab Ringkasan, Finansial, dan Operasi.
     const lapLatest = latestLaporan(location.laporanBulanan);
     const evm = computeEvm(lapLatest?.evm);
-    const cashflow = cashflowSeries(location.laporanBulanan);
     const huPlan = lapLatest ? huRencanaPeriode(location.rencanaKurvaS, lapLatest.periode) : undefined;
     const hasHu = !!(lapLatest && (lapLatest.huBulanIni || lapLatest.huSdBulanIni));
     const pengadaan = lapLatest?.pengadaan;
@@ -605,10 +589,10 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                         label="Change"
                     />
                     <TabButton
-                        active={activeTab === 'issues'}
-                        onClick={() => setActiveTab('issues')}
-                        icon={AlertTriangle}
-                        label="Kendala"
+                        active={activeTab === 'qhsse'}
+                        onClick={() => setActiveTab('qhsse')}
+                        icon={ShieldCheck}
+                        label="QHSSE"
                     />
                 </div>
             </div>
@@ -646,21 +630,12 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                         realisasi={realisasi}
                                         deviasi={deviasi}
                                     />
+                                    <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5">
+                                        <HariKontrakRow startDate={location.startDate} endDate={location.endDate} compact />
+                                    </div>
                                 </div></Reveal>
                             )}
 
-                            {/* ── KURVA S: Rencana Internal / RA Eksternal / RI (dari laporan bulanan) ── */}
-                            {kurvaS && (
-                                <Reveal i={1}><div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/70 dark:from-slate-900/70 to-slate-100/70 dark:to-slate-950/70 border border-black/[0.06] dark:border-white/[0.06] backdrop-blur-md">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <TrendingUp className="w-4 h-4 div-accent-text" aria-hidden="true" />
-                                            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Kurva S {kurvaS.tahun}</h3>
-                                        </div>
-                                    </div>
-                                    <SCurveChart data={kurvaS} />
-                                </div></Reveal>
-                            )}
                             {/* ── RINGKASAN: CPI / SPI (gauge busur) ── */}
                             {(location.cpi != null || location.spi != null || evm.cv !== undefined) && (
                                 <Reveal i={1}><div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/70 dark:from-slate-900/70 to-slate-100/70 dark:to-slate-950/70 border border-black/[0.06] dark:border-white/[0.06] backdrop-blur-md">
@@ -845,8 +820,6 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                             {(location.cashIn != null || location.cashOut != null || location.saldoKas != null || location.saldoHutang != null || location.bad != null || location.piutang != null || location.ccc != null || location.tagihanBruto != null || location.name?.toLowerCase().includes('kendari')) && (() => {
                                 const isKendari = Boolean(location.name?.toLowerCase().includes('kendari'));
                                 const tagihanBruto = location.tagihanBruto ?? (isKendari ? 49_000_000_000 : undefined);
-                                const surplus = (location.cashIn ?? 0) - (location.cashOut ?? 0);
-                                const showCashBars = location.cashIn != null || location.cashOut != null;
                                 const showHutang = location.saldoHutang != null || location.bad != null;
                                 return (
                                     <div className="space-y-3">
@@ -855,38 +828,6 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             Ringkasan Keuangan
                                         </h3>
 
-                                        {/* Cash In vs Cash Out — bar horizontal + surplus/defisit */}
-                                        {showCashBars && (
-                                            <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-2.5">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Arus Kas</span>
-                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${surplus >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
-                                                        {surplus >= 0 ? 'Surplus' : 'Defisit'} {fIDRShort(Math.abs(surplus))}
-                                                    </span>
-                                                </div>
-                                                <HBarGroup items={[
-                                                    { label: 'Cash In', value: location.cashIn, tone: 'emerald' },
-                                                    { label: 'Cash Out', value: location.cashOut, tone: 'rose' },
-                                                ]} />
-                                            </div>
-                                        )}
-
-                                        {/* Arus kas bulanan (dari laporan bulanan) */}
-                                        {cashflow && (
-                                            <div className="p-3 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/[0.06] dark:border-white/[0.06] space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Arus Kas Bulanan {cashflow.tahun}</span>
-                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${cashflow.masuk - cashflow.keluar >= 0 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30'}`}>
-                                                        Kumulatif {cashflow.masuk - cashflow.keluar >= 0 ? '+' : '−'}{fRpShort(Math.abs(cashflow.masuk - cashflow.keluar))}
-                                                    </span>
-                                                </div>
-                                                <CashflowChart points={cashflow.points} tahun={cashflow.tahun} />
-                                                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                                                    <div>In s.d {periodeText}: <span className="font-black text-emerald-700 dark:text-emerald-400">{fRpShort(cashflow.masuk)}</span></div>
-                                                    <div className="text-right">Out: <span className="font-black text-rose-700 dark:text-rose-400">{fRpShort(cashflow.keluar)}</span></div>
-                                                </div>
-                                            </div>
-                                        )}
                                         {/* Tagihan Bruto & Piutang — nilai ringkas */}
                                         <div className="grid grid-cols-2 gap-2.5">
                                             <FinMini label="Tagihan Bruto" value={tagihanBruto} tone="text-sky-400 bg-sky-500/5 border-sky-500/20" />
@@ -983,9 +924,11 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                             <Calendar className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
                                             <span>Masa Pelaksanaan Kontrak</span>
                                         </div>
-                                        <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
-                                            275 Hari Kalender
-                                        </span>
+                                        {kontrakHari(location.startDate, location.endDate) && (
+                                            <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+                                                {kontrakHari(location.startDate, location.endDate)!.total.toLocaleString('id-ID')} Hari Kalender
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 text-xs">
                                         <div className="p-2 rounded-xl bg-black/[0.03] dark:bg-black/30 border border-white/[0.04]">
@@ -1273,31 +1216,6 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                 </div>
                             )}
 
-                            {/* Isu Strategis & Rekomendasi */}
-                            {location.isuStrategis && location.isuStrategis.length > 0 && (
-                                <div className="space-y-2 pt-1">
-                                    <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                        <Sparkles className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-                                        Isu Strategis & Solusi Abipraya
-                                    </h3>
-
-                                    <div className="space-y-2.5">
-                                        {location.isuStrategis.map((is, i) => (
-                                            <div key={i} className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 space-y-1.5">
-                                                <div className="flex items-start gap-2">
-                                                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
-                                                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-snug">{is.isu}</p>
-                                                </div>
-                                                <div className="p-2 rounded-lg bg-black/[0.04] dark:bg-black/40 border border-black/[0.05] dark:border-white/[0.05] ml-5">
-                                                    <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">Rekomendasi / Solusi:</span>
-                                                    <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">{is.usulan}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Ringkasan pengadaan: jumlah paket & pagu (laporan bulanan) */}
                             {pengadaan && ((pengadaan.paketTotal ?? 0) > 0 || (pengadaan.paguTotal ?? 0) > 0) && (
                                 <div className="space-y-2 pt-1">
@@ -1387,8 +1305,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                                                     </div>
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-bold text-slate-900 dark:text-white break-words">{cm.judul || '-'}</p>
-                                                        {cm.dariKendala && <span className="text-[11px] text-slate-500">Dari kendala</span>}
-                                                    </div>
+                                                                                                            </div>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1 shrink-0">
                                                     <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${st}`}>{cm.status}</span>
@@ -1427,92 +1344,17 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                         </motion.div>
                     )}
 
-                    {/* ── TAB 4: ISSUES & KENDALA ─────────────────────────────── */}
-                    {activeTab === 'issues' && (
+                    {/* ── TAB 5: QHSSE ────────────────────────────────────────── */}
+                    {activeTab === 'qhsse' && (
                         <motion.div
-                            key="tab-issues"
+                            key="tab-qhsse"
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -8 }}
                             transition={{ duration: 0.18 }}
-                            className="p-4 space-y-3"
+                            className="p-4"
                         >
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                                    <AlertTriangle className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" aria-hidden="true" />
-                                    Kendala Proyek
-                                </h3>
-                                {location.kendala && location.kendala.length > 0 && (
-                                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-black/10 dark:border-white/10">
-                                        {location.kendala.length} Item
-                                    </span>
-                                )}
-                            </div>
-
-                            {location.kendala && location.kendala.length > 0 ? (
-                                <div className="space-y-3">
-                                    {location.kendala.map((k, idx) => {
-                                        const statusLabel: Record<string, { label: string; cls: string }> = {
-                                            OPEN: { label: 'Open', cls: 'bg-white/[0.06] text-slate-600 dark:text-slate-300 border-black/10 dark:border-white/10' },
-                                            ON_PROGRESS: { label: 'On Progress', cls: 'bg-sky-500/10 text-sky-300 border-sky-500/25' },
-                                            CLOSED: { label: 'Closed', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25' },
-                                        };
-                                        const st = statusLabel[k.status] ?? statusLabel.OPEN;
-                                        return (
-                                        <div
-                                            key={idx}
-                                            className="p-3.5 rounded-2xl bg-gradient-to-br from-white/80 dark:from-slate-900/80 to-slate-100/80 dark:to-slate-950/80 border border-black/[0.08] dark:border-white/[0.08] shadow-lg space-y-2.5"
-                                        >
-                                            <div className="flex items-start justify-between gap-2">
-                                                <div className="flex items-start gap-2">
-                                                    <span className="w-5 h-5 rounded-lg bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-black/10 dark:border-white/10 text-[11px] font-black flex items-center justify-center shrink-0 mt-0.5">
-                                                        {idx + 1}
-                                                    </span>
-                                                    <h4 className="text-xs font-black text-slate-900 dark:text-white leading-snug">{k.masalah}</h4>
-                                                </div>
-                                                <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${st.cls}`}>
-                                                    {st.label}
-                                                </span>
-                                            </div>
-
-                                            {/* Details breakdown */}
-                                            <div className="space-y-1.5 text-[11px] pl-7">
-                                                {k.penyebab && (
-                                                    <div>
-                                                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Penyebab</span>
-                                                        <span className="text-slate-600 dark:text-slate-300">{k.penyebab}</span>
-                                                    </div>
-                                                )}
-                                                {k.tindakan && (
-                                                    <div className="p-2 rounded-xl bg-black/[0.04] dark:bg-black/40 border border-white/[0.04]">
-                                                        <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">Tindakan / Action Plan</span>
-                                                        <span className="text-slate-700 dark:text-slate-200">{k.tindakan}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Metadata footer (Target & PIC) */}
-                                            <div className="flex items-center justify-between pt-2 border-t border-black/[0.05] dark:border-white/[0.05] text-[11px] pl-7">
-                                                <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                                                    <Clock className="w-3 h-3 text-amber-400" aria-hidden="true" />
-                                                    <span>Target: <strong className="text-slate-700 dark:text-slate-200">{k.target || 'M1 Okt 2026'}</strong></span>
-                                                </div>
-                                                <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                                                    <User className="w-3 h-3 text-sky-400" aria-hidden="true" />
-                                                    <span>PIC: <strong className="text-slate-700 dark:text-slate-200">{k.pic || 'PM, SEM'}</strong></span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="p-8 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.05] dark:border-white/[0.05] text-center">
-                                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-60" aria-hidden="true" />
-                                    <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Tidak ada kendala aktif tercatat</p>
-                                    <p className="text-[11px] text-slate-500 mt-0.5">Operasional proyek berjalan lancar</p>
-                                </div>
-                            )}
+                            <QhssePanel data={location.qhsse} />
                         </motion.div>
                     )}
                 </AnimatePresence>

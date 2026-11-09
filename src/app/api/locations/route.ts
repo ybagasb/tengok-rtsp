@@ -30,7 +30,7 @@ const LOCATION_EDITABLE_FIELDS = [
     // Operasi (ringkas)
     'pu', 'bk', 'lk',
     // Daftar operasional & legal
-    'lingkupPekerjaan', 'sumberDaya', 'isuStrategis', 'kendala', 'monitoringPengadaan', 'changeManagement',
+    'lingkupPekerjaan', 'sumberDaya', 'monitoringPengadaan', 'changeManagement',
     'milestones', 'status',
 ] as const;
 
