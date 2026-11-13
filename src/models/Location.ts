@@ -183,7 +183,7 @@ export interface ILocationData {
     tagihanBruto?: number;       // Tagihan bruto (IDR)
     cashIn?: number;             // Total penerimaan (IDR)
     cashOut?: number;            // Total pengeluaran (IDR)
-    saldoKas?: number;           // Cash balance (IDR); default = cashIn - cashOut
+    saldoKas?: number;           // Cash balance (IDR); diisi MANUAL oleh PIC (tidak dihitung otomatis)
     saldoHutang?: number;        // Saldo hutang (IDR)
     bad?: number;                // BAD — komponen hutang (IDR), di samping saldo hutang
     piutang?: number;            // Saldo piutang (IDR)

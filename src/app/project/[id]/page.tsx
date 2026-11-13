@@ -491,7 +491,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         </div>
                     </div>
                     <a
-                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261106"
+                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Buka panduan pengisian (PDF)"
@@ -556,7 +556,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                         <MapPin className="w-4 h-4 shrink-0" aria-hidden="true" /> Lihat di Peta
                                     </button>
                                     <a
-                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261106"
+                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="w-full min-h-11 flex items-center gap-2.5 px-3 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 bg-black/[0.04] dark:bg-white/5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
@@ -788,9 +788,8 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
 
     const resetForm = () => setForm(initForm());
 
-    // Saldo kas otomatis bila belum diisi manual.
-    const autoSaldoKas = (Number(form.cashIn) || 0) - (Number(form.cashOut) || 0);
-    const displaySaldoKas = project.saldoKas ?? ((project.cashIn ?? 0) - (project.cashOut ?? 0));
+    // Saldo kas selalu diisi manual (tidak dihitung dari cash in/out).
+    const displaySaldoKas = project.saldoKas;
     const displayTagihanBruto = project.tagihanBruto;
 
     const save = async () => {
@@ -802,7 +801,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                 ...(tagihanLocked ? {} : { tagihanBruto: form.tagihanBruto === '' ? null : Number(form.tagihanBruto) }),
                 ...(cashInLocked ? {} : { cashIn: form.cashIn === '' ? null : Number(form.cashIn) }),
                 ...(cashOutLocked ? {} : { cashOut: form.cashOut === '' ? null : Number(form.cashOut) }),
-                ...((cashInLocked && cashOutLocked) ? {} : { saldoKas: form.saldoKas === '' ? autoSaldoKas : Number(form.saldoKas) }),
+                saldoKas: form.saldoKas === '' ? null : Number(form.saldoKas),
                 ...(hutangLocked ? {} : { saldoHutang: form.saldoHutang === '' ? null : Number(form.saldoHutang) }),
                 ...(badLocked ? {} : { bad: form.bad === '' ? null : Number(form.bad) }),
                 ...(piutangLocked ? {} : { piutang: form.piutang === '' ? null : Number(form.piutang) }),
@@ -839,7 +838,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                 <DerivedNote
                     what={[tagihanLocked && 'Tagihan bruto', huLocked && 'hasil usaha', (cashInLocked || cashOutLocked) && 'cash in/out', posisiLocked && 'saldo hutang, BAD, piutang, CCC'].filter(Boolean).join(', ')}
                     periode={latestLap?.periode}
-                    tail="Tidak diisi di tab ini. Hutang, BAD, piutang, dan CCC tetap tampil di bawah; sisanya di Ringkasan."
+                    tail="Tidak diisi di tab ini. Saldo Kas tetap diisi manual di sini (tombol Edit). Hutang, BAD, piutang, dan CCC tetap tampil di bawah; sisanya di Ringkasan."
                     onGo={isAdmin ? () => onGoTab('laporan') : undefined}
                 />
             )}
@@ -871,13 +870,8 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                     {!tagihanLocked && <MoneyInput label="Tagihan Bruto" value={form.tagihanBruto} onChange={v => setForm({ ...form, tagihanBruto: v })} hint="Total tagihan bruto proyek (Rp)." />}
                     {!cashInLocked && <MoneyInput label="Cash In" value={form.cashIn} onChange={v => setForm({ ...form, cashIn: v })} hint="Total uang yang sudah masuk/diterima proyek." />}
                     {!cashOutLocked && <MoneyInput label="Cash Out" value={form.cashOut} onChange={v => setForm({ ...form, cashOut: v })} hint="Total uang yang sudah keluar/dibelanjakan." />}
-                    {/* Saldo kas = cash in − cash out; bila keduanya dari Laporan Bulanan, dihitung otomatis dan tidak diisi. */}
-                    {!(cashInLocked && cashOutLocked) && (
-                        <div>
-                            <MoneyInput label="Saldo Kas (kosongkan = otomatis)" value={form.saldoKas} onChange={v => setForm({ ...form, saldoKas: v })} hint="Sisa kas. Dikosongkan = dihitung otomatis dari Cash In − Cash Out." />
-                            <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">Otomatis: {formatIDR(autoSaldoKas)}</p>
-                        </div>
-                    )}
+                    {/* Saldo kas selalu diisi manual, juga saat cash in/out berasal dari Laporan Bulanan. */}
+                    <MoneyInput label="Saldo Kas (Cash Balance)" value={form.saldoKas} onChange={v => setForm({ ...form, saldoKas: v })} hint="Sisa kas proyek saat ini (Rp). Diisi manual; boleh negatif." />
                     {!hutangLocked && <MoneyInput label="Saldo Hutang" value={form.saldoHutang} onChange={v => setForm({ ...form, saldoHutang: v })} hint="Total hutang proyek saat ini." />}
                     {!badLocked && <MoneyInput label="BAD" value={form.bad} onChange={v => setForm({ ...form, bad: v })} hint="Beban yang Akan Dibayar — bagian dari hutang (lihat laporan cashflow)." />}
                     {!piutangLocked && <MoneyInput label="Piutang" value={form.piutang} onChange={v => setForm({ ...form, piutang: v })} hint="Uang yang masih ditunggu/belum dibayar ke proyek." />}

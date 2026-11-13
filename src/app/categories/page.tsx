@@ -1404,7 +1404,7 @@ export default function CategoriesPage() {
 
           {/* Panduan pengguna (PDF) */}
           <a
-            href="/Panduan-Input-Detail-Proyek.pdf?v=20261106"
+            href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
             target="_blank"
             rel="noopener noreferrer"
             download
@@ -1612,7 +1612,7 @@ export default function CategoriesPage() {
                     </button>
                     <a
                       role="menuitem"
-                      href="/Panduan-Input-Detail-Proyek.pdf?v=20261106"
+                      href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
                       target="_blank"
                       rel="noopener noreferrer"
                       download

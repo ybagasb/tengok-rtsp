@@ -451,7 +451,7 @@ def build():
          'Terkunci otomatis bila Laporan Bulanan sudah punya BCWP dan ACWP/BCWS.'),
         ('Finansial', 'Cash &amp; Keuangan',
          'Tagihan bruto, Cash In/Out, Saldo Kas, Saldo Hutang, BAD, Piutang, CCC, Hasil Usaha, Progress Keuangan (DIPA), Belum Ditagihkan.',
-         'Kolom yang ada di Laporan Bulanan terkunci dan diisi dari sana.'),
+         'Kolom yang ada di Laporan Bulanan terkunci dan diisi dari sana. Saldo Kas selalu diisi manual di sini.'),
         ('Kinerja Operasi', 'Operasi', 'PU dan BK. LK = PU − BK dihitung otomatis.', 'PU terkunci bila Laporan Bulanan sudah ada.'),
         ('Progress Mingguan', 'Operasi', 'Bulan, minggu (W1–W4), RA %, RI %.',
          'Cukup posisi terakhir. Bulan lain tidak tertimpa.'),
@@ -600,7 +600,7 @@ def build():
                   'Geser tabel ke kanan untuk melihat bulan berikutnya.', 150))
     E.append(Paragraph('<b>3) Saldo Awal Kas (opsional)</b> — tab <b>Saldo Awal Kas</b>. Isi hanya jika proyek sudah '
                        'berjalan <b>sebelum</b> laporan bulanan pertama: total Cash In dan Cash Out sampai sebelum laporan '
-                       'pertama. Total Cash In/Out di menu Cash &amp; Keuangan dihitung otomatis = saldo awal + '
+                       'pertama. Total Cash In/Out dihitung otomatis = saldo awal + '
                        'semua laporan bulanan. Bila laporan bulanan dimulai dari awal proyek, lewati bagian ini.', BODY))
     E.extend(shot('07-saldo-awal.png',
                   'Tab Saldo Awal Kas: dua angka saldo awal, dan total Cash In/Out yang dihitung otomatis '
@@ -717,8 +717,8 @@ def build():
         ('Hasil Usaha dan PU', 'Dari "Hasil Usaha s.d bulan ini": Pendapatan = PU, Biaya = HPP, Laba = Pendapatan − HPP. '
                                'Tampil di Cash &amp; Keuangan dan Operasi. <b>BK tidak sama dengan HPP</b>, jadi BK tetap diisi '
                                'sendiri di menu Operasi, dan LK dihitung = PU − BK.'),
-        ('Cash In / Cash Out (total)', 'Saldo awal + jumlah semua laporan bulanan. Saldo Kas ikut menyesuaikan, '
-                                       'kecuali Anda pernah mengisinya manual.'),
+        ('Cash In / Cash Out (total)', 'Saldo awal + jumlah semua laporan bulanan. <b>Saldo Kas tidak ikut dihitung</b>: '
+                                       'Saldo Kas diisi manual di menu Cash &amp; Keuangan.'),
         ('Kurva S', 'Realisasi (RI) = Pendapatan s.d bulan ini; rencana (Rencana Internal) = rencana pendapatan di Rencana Tahunan. '
                     'Progres fisik (menu Progres) <b>bukan</b> turunan Kurva S dan tetap diisi sendiri.'),
     ], col1='Data'))
@@ -797,8 +797,9 @@ def build():
         ('Tagihan Bruto', 'Total tagihan bruto proyek.'),
         ('Cash In', 'Total uang yang sudah masuk/diterima proyek.'),
         ('Cash Out', 'Total uang yang sudah keluar/dibelanjakan.'),
-        ('Saldo Kas', 'Sisa kas. Boleh dikosongkan — dihitung otomatis dari '
-                      'Cash In dikurangi Cash Out.'),
+        ('Saldo Kas (Cash Balance)', 'Sisa kas proyek saat ini. <b>Selalu diisi manual</b> di menu ini (tombol Edit), '
+                                     'juga setelah Laporan Bulanan diisi. Tidak dihitung otomatis dari Cash In − Cash Out. '
+                                     'Boleh negatif. Dikosongkan = tidak ditampilkan.'),
         ('Saldo Hutang', 'Total hutang proyek. <b>Diisi di Laporan Bulanan</b> (blok Posisi Keuangan).'),
         ('BAD', 'Beban yang Akan Dibayar, bagian dari hutang. Diisi di Laporan Bulanan.'),
         ('Piutang', 'Uang yang masih ditunggu/belum dibayar ke proyek. Diisi di Laporan Bulanan.'),
@@ -818,7 +819,7 @@ def build():
     E.append(callout('Setelah Laporan Bulanan diisi, kolom <b>Tagihan Bruto</b>, <b>Cash In</b>, <b>Cash Out</b>, '
                      '<b>Hasil Usaha</b>, <b>Saldo Hutang, BAD, Piutang, dan CCC</b> di menu ini terkunci dan mengikuti laporan terbaru (lihat bagian '
                      '"Laporan Bulanan"). Hutang, BAD, piutang, dan CCC tetap tampil sebagai kartu. '
-                     'Yang masih diisi di sini: Progress Keuangan (DIPA) dan Progress Belum Ditagihkan.', 'Sebagian Kolom Diisi Otomatis'))
+                     'Yang masih diisi di sini: <b>Saldo Kas</b>, Progress Keuangan (DIPA), dan Progress Belum Ditagihkan.', 'Sebagian Kolom Diisi Otomatis'))
     E.append(Spacer(1, 2 * mm))
     E.append(tipbox('Angka BAD, hutang, piutang, dan CCC biasanya ada di laporan cashflow bulanan '
                     'proyek. Salin ke blok Posisi Keuangan di Laporan Bulanan. CPI dan SPI tidak perlu '

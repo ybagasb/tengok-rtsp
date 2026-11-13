@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { Loader2, Pencil, Check, X, Plus, Trash2, Copy, ChevronDown, Clock } from 'lucide-react';
 import { formatStampTime, type SectionStamp } from '@/lib/projectSections';
 import {
-    BULAN_SINGKAT, computeEvm, derivedFromLaporan, hppPersen, huRencanaPeriode, periodeLabel, periodeOf, periodeRange, prevPeriode, sortLaporan,
+    BULAN_NAMA, BULAN_SINGKAT, computeEvm, derivedFromLaporan, hppPersen, huRencanaPeriode, periodeLabel, periodeOf, periodeRange, prevPeriode, sortLaporan,
     type LaporanBulanan, type RencanaKurvaS,
 } from '@/lib/projectReport';
 
@@ -515,23 +515,38 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
     const entry = sorted.find(l => l.periode === periode);
     const prev = useMemo(() => findPrev(sorted, periode), [sorted, periode]);
 
-    // Daftar periode: dari laporan pertama s.d bulan berjalan (atau laporan terbaru), lengkap dengan status.
+    // Batas awal daftar periode: laporan pertama ATAU 5 bulan sebelum bulan berjalan (mana yang lebih awal),
+    // supaya bulan lalu selalu bisa dipilih meski proyek belum punya laporan (atau baru mulai dari bulan ini).
+    const windowStart = useMemo(() => {
+        let p = currentMonth;
+        for (let i = 0; i < 5; i++) p = prevPeriode(p) ?? p;
+        const first = sorted[0]?.periode;
+        return first && first < p ? first : p;
+    }, [sorted, currentMonth]);
+
+    // Daftar periode: dari windowStart s.d bulan berjalan (atau laporan terbaru), lengkap dengan status.
     const options = useMemo(() => {
-        const first = sorted[0]?.periode ?? currentMonth;
+        const first = windowStart;
         const last = sorted[sorted.length - 1]?.periode ?? currentMonth;
         const list = periodeRange(first, last > currentMonth ? last : currentMonth);
         if (!list.includes(periode)) list.push(periode);
         return [...new Set(list)].sort().reverse();
-    }, [sorted, periode, currentMonth]);
+    }, [sorted, periode, currentMonth, windowStart]);
+    const yearOptions = useMemo(() => {
+        const cy = Number(currentMonth.slice(0, 4));
+        const ys = new Set<string>();
+        for (let y = cy - 6; y <= cy + 1; y++) ys.add(String(y));
+        ys.add(periode.slice(0, 4));
+        return [...ys].sort();
+    }, [currentMonth, periode]);
     const optionLabel = (p: string) => {
         const e = sorted.find(l => l.periode === p);
         const status = e ? `terisi ${entryFilled(e)}/${ALL_FIELDS.length}` : p < currentMonth ? 'belum diisi' : 'kosong';
         return `${periodeLabel(p)} · ${status}`;
     };
     const missing = useMemo(() => {
-        if (sorted.length === 0) return [];
-        return periodeRange(sorted[0].periode, currentMonth).filter(p => !sorted.some(l => l.periode === p)).reverse().slice(0, 6);
-    }, [sorted, currentMonth]);
+        return periodeRange(windowStart, currentMonth).filter(p => !sorted.some(l => l.periode === p)).reverse().slice(0, 6);
+    }, [sorted, currentMonth, windowStart]);
 
     /** Salin hanya data yang relatif tetap (BAC, total paket, total pagu) ke field yang masih kosong. */
     const fillFixed = (base: FormState, silent: boolean): FormState => {
@@ -667,15 +682,30 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
                     {isAdmin && !editing && (
                         <div>
                             <label htmlFor={`${monthUid}-new`} className={LABEL_CLS}>Periode lain</label>
-                            <input
-                                id={`${monthUid}-new`}
-                                type="month"
-                                value={periode}
-                                min="2000-01"
-                                max="2099-12"
-                                onChange={e => { if (/^20\d{2}-\d{2}$/.test(e.target.value)) setPeriode(e.target.value); }}
-                                className={`${CTRL_CLS} font-sans`}
-                            />
+                            {/* Dua dropdown (bukan <input type="month">) agar jalan di semua browser, termasuk Firefox desktop. */}
+                            <div className="flex gap-2">
+                                <select
+                                    id={`${monthUid}-new`}
+                                    aria-label="Bulan"
+                                    value={periode.slice(5, 7)}
+                                    onChange={e => setPeriode(`${periode.slice(0, 4)}-${e.target.value}`)}
+                                    className={`${CTRL_CLS} font-sans`}
+                                >
+                                    {BULAN_NAMA.map((n, i) => (
+                                        <option key={n} value={String(i + 1).padStart(2, '0')} className="bg-white dark:bg-slate-900">{n}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    aria-label="Tahun"
+                                    value={periode.slice(0, 4)}
+                                    onChange={e => setPeriode(`${e.target.value}-${periode.slice(5, 7)}`)}
+                                    className={`${CTRL_CLS} font-sans`}
+                                >
+                                    {yearOptions.map(y => (
+                                        <option key={y} value={y} className="bg-white dark:bg-slate-900">{y}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     )}
                 </div>
