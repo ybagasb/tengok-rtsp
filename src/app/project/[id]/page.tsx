@@ -270,8 +270,14 @@ function formatIDR(v?: number) {
     if (v == null) return '-';
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v);
 }
-function formatIDRShort(v?: number) {
+/** Angka dari input form; '' atau '-' saja = kosong (null). */
+function numOrNull(v: string): number | null {
+    const t = (v ?? '').trim();
+    return t === '' || t === '-' ? null : Number(t);
+}
+function formatIDRShort(v?: number): string {
     if (v == null) return '-';
+    if (v < 0) return `-${formatIDRShort(-v)}`;
     if (v >= 1_000_000_000_000) return `Rp ${(v / 1_000_000_000_000).toFixed(2)} T`;
     if (v >= 1_000_000_000) return `Rp ${(v / 1_000_000_000).toFixed(2)} M`;
     if (v >= 1_000_000) return `Rp ${(v / 1_000_000).toFixed(1)} Jt`;
@@ -663,8 +669,8 @@ function IkhtiarTab({ project, status, onlineCams, isAdmin, onSaved, onGoTab }: 
         setSaving(true);
         try {
             await axios.patch(`/api/projects/${project._id}`, {
-                ...(cpiLocked ? {} : { cpi: form.cpi === '' ? null : Number(form.cpi) }),
-                ...(spiLocked ? {} : { spi: form.spi === '' ? null : Number(form.spi) }),
+                ...(cpiLocked ? {} : { cpi: numOrNull(form.cpi) }),
+                ...(spiLocked ? {} : { spi: numOrNull(form.spi) }),
             });
             toast.success('Ringkasan tersimpan');
             setEditing(false);
@@ -795,27 +801,27 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
     const save = async () => {
         setSaving(true);
         try {
-            const huP = form.huPendapatan === '' ? null : Number(form.huPendapatan);
-            const huB = form.huBiaya === '' ? null : Number(form.huBiaya);
+            const huP = numOrNull(form.huPendapatan);
+            const huB = numOrNull(form.huBiaya);
             await axios.patch(`/api/projects/${project._id}`, {
-                ...(tagihanLocked ? {} : { tagihanBruto: form.tagihanBruto === '' ? null : Number(form.tagihanBruto) }),
-                ...(cashInLocked ? {} : { cashIn: form.cashIn === '' ? null : Number(form.cashIn) }),
-                ...(cashOutLocked ? {} : { cashOut: form.cashOut === '' ? null : Number(form.cashOut) }),
-                saldoKas: form.saldoKas === '' ? null : Number(form.saldoKas),
-                ...(hutangLocked ? {} : { saldoHutang: form.saldoHutang === '' ? null : Number(form.saldoHutang) }),
-                ...(badLocked ? {} : { bad: form.bad === '' ? null : Number(form.bad) }),
-                ...(piutangLocked ? {} : { piutang: form.piutang === '' ? null : Number(form.piutang) }),
-                ...(cccLocked ? {} : { ccc: form.ccc === '' ? null : Number(form.ccc) }),
+                ...(tagihanLocked ? {} : { tagihanBruto: numOrNull(form.tagihanBruto) }),
+                ...(cashInLocked ? {} : { cashIn: numOrNull(form.cashIn) }),
+                ...(cashOutLocked ? {} : { cashOut: numOrNull(form.cashOut) }),
+                saldoKas: numOrNull(form.saldoKas),
+                ...(hutangLocked ? {} : { saldoHutang: numOrNull(form.saldoHutang) }),
+                ...(badLocked ? {} : { bad: numOrNull(form.bad) }),
+                ...(piutangLocked ? {} : { piutang: numOrNull(form.piutang) }),
+                ...(cccLocked ? {} : { ccc: numOrNull(form.ccc) }),
                 ...(huLocked ? {} : {
                     hasilUsaha: (huP != null || huB != null)
                         ? { pendapatan: huP ?? 0, biaya: huB ?? 0, laba: (huP ?? 0) - (huB ?? 0) }
                         : null,
                 }),
                 progressKeuangan: form.progressKeuangan,
-                tagihanBelumDiproses: form.tagihanBelumDiproses === '' ? null : Number(form.tagihanBelumDiproses),
+                tagihanBelumDiproses: numOrNull(form.tagihanBelumDiproses),
                 ...(hasProgram ? {
                     program: {
-                        mcCair: form.mcCair === '' ? undefined : Number(form.mcCair),
+                        mcCair: numOrNull(form.mcCair) ?? undefined,
                         mcCairLabel: form.mcCairLabel,
                         cutOffLabel: form.cutOffLabel,
                     },
@@ -871,12 +877,12 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                     {!cashInLocked && <MoneyInput label="Cash In" value={form.cashIn} onChange={v => setForm({ ...form, cashIn: v })} hint="Total uang yang sudah masuk/diterima proyek." />}
                     {!cashOutLocked && <MoneyInput label="Cash Out" value={form.cashOut} onChange={v => setForm({ ...form, cashOut: v })} hint="Total uang yang sudah keluar/dibelanjakan." />}
                     {/* Saldo kas selalu diisi manual, juga saat cash in/out berasal dari Laporan Bulanan. */}
-                    <MoneyInput label="Saldo Kas (Cash Balance)" value={form.saldoKas} onChange={v => setForm({ ...form, saldoKas: v })} hint="Sisa kas proyek saat ini (Rp). Diisi manual; boleh negatif." />
+                    <MoneyInput label="Saldo Kas (Cash Balance)" value={form.saldoKas} onChange={v => setForm({ ...form, saldoKas: v })} hint="Sisa kas proyek saat ini (Rp). Diisi manual; boleh negatif (ketik '-' atau tekan tombol ± minus)." />
                     {!hutangLocked && <MoneyInput label="Saldo Hutang" value={form.saldoHutang} onChange={v => setForm({ ...form, saldoHutang: v })} hint="Total hutang proyek saat ini." />}
                     {!badLocked && <MoneyInput label="BAD" value={form.bad} onChange={v => setForm({ ...form, bad: v })} hint="Beban yang Akan Dibayar — bagian dari hutang (lihat laporan cashflow)." />}
                     {!piutangLocked && <MoneyInput label="Piutang" value={form.piutang} onChange={v => setForm({ ...form, piutang: v })} hint="Uang yang masih ditunggu/belum dibayar ke proyek." />}
                     {!cccLocked && <div>
-                        <Input label="CCC (hari)" type="number" min={0} max={3650} step={1} value={form.ccc} onChange={v => setForm({ ...form, ccc: v })} hint="Cash Conversion Cycle — lama perputaran kas dalam hari. Di atas 90 hari ditandai merah." />
+                        <Input label="CCC (hari)" type="number" min={-3650} max={3650} step={1} value={form.ccc} onChange={v => setForm({ ...form, ccc: v })} hint="Cash Conversion Cycle — lama perputaran kas dalam hari. Di atas 90 hari ditandai merah." />
                         <p className="mt-1.5 text-[11px] text-slate-500">&gt; 90 hari ditandai perhatian (merah).</p>
                     </div>}
                 </div>
@@ -1070,8 +1076,8 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
     const saveKinerja = async () => {
         setSavingKinerja(true);
         try {
-            const puV = kinerjaForm.pu === '' ? null : Number(kinerjaForm.pu);
-            const bkV = kinerjaForm.bk === '' ? null : Number(kinerjaForm.bk);
+            const puV = numOrNull(kinerjaForm.pu);
+            const bkV = numOrNull(kinerjaForm.bk);
             await axios.patch(`/api/projects/${project._id}`, puLocked
                 ? { bk: bkV }   // PU dari laporan; server menghitung LK = PU − BK
                 : {
@@ -2195,7 +2201,7 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
         try {
             await axios.patch(`/api/projects/${project._id}`, {
                 contractNumber: form.contractNumber,
-                contractValue: form.contractValue === '' ? null : Number(form.contractValue),
+                contractValue: numOrNull(form.contractValue),
             });
             toast.success('Kontrak tersimpan');
             setEditing(false);
@@ -2225,7 +2231,7 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                 ) : (
                     <>
                         <Input label="Nomor Kontrak"   value={form.contractNumber} onChange={v => setForm({ ...form, contractNumber: v })} />
-                        <MoneyInput label="Nilai Kontrak" value={form.contractValue} onChange={v => setForm({ ...form, contractValue: v })} hint="Nilai kontrak dalam Rupiah penuh. Dipakai sebagai pembagi persen Kurva S di Laporan Bulanan." />
+                        <MoneyInput allowNegative={false} label="Nilai Kontrak" value={form.contractValue} onChange={v => setForm({ ...form, contractValue: v })} hint="Nilai kontrak dalam Rupiah penuh. Dipakai sebagai pembagi persen Kurva S di Laporan Bulanan." />
                     </>
                 )}
 
@@ -2627,7 +2633,7 @@ function QhsseTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: bo
                                     {cols.map(c => c.computed
                                         ? <ComputedField key={c.k} label={c.label} value={computedCell(active, c, r)} />
                                         : c.kind === 'money'
-                                        ? <MoneyInput key={c.k} label={c.label} value={r[c.k] ?? ''} onChange={v => upd(i, { [c.k]: v })} />
+                                        ? <MoneyInput allowNegative={false} key={c.k} label={c.label} value={r[c.k] ?? ''} onChange={v => upd(i, { [c.k]: v })} />
                                         : <Input key={c.k} label={c.label} type={c.kind === 'text' ? 'text' : 'number'} min={0} max={c.max} step={c.kind === 'int' ? 1 : 'any'} value={r[c.k] ?? ''} onChange={v => upd(i, { [c.k]: v })} />)}
                                 </div>
                             </div>
@@ -3188,16 +3194,33 @@ function InfoTip({ text, glossary }: { text?: string; glossary?: QhsseGlossary }
 
 // ── (A) Input angka uang: format ribuan live + preview "Rp ..." + tombol cepat ─
 // Nilai internal tetap angka polos (string digit). Tampilan diformat ribuan.
-function MoneyInput({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
+// allowNegative (default true): izinkan tanda minus. Nilai dikirim sebagai "-123"; "-" saja = belum diisi
+// (pakai numOrNull saat menyimpan). Matikan untuk kolom yang memang tak boleh negatif (mis. nilai kontrak).
+function MoneyInput({ label, value, onChange, hint, allowNegative = true }: { label: string; value: string; onChange: (v: string) => void; hint?: string; allowNegative?: boolean }) {
     const uid = useId();
     const digits = (value ?? '').replace(/\D/g, '');
-    const grouped = digits ? Number(digits).toLocaleString('id-ID') : '';
-    const n = digits ? Number(digits) : 0;
+    // Minus yang diketik sebelum angka: induk yang menyimpan angka (mis. DIPA) tidak bisa menyimpan "-",
+    // jadi tanda itu ditahan lokal sampai angka pertama diketik.
+    const [pendingNeg, setPendingNeg] = useState(false);
+    const neg = allowNegative && ((value ?? '').trim().startsWith('-') || (pendingNeg && !digits));
+    const sign = neg ? '-' : '';
+    const grouped = digits ? sign + Number(digits).toLocaleString('id-ID') : sign;
+    const n = digits ? (neg ? -1 : 1) * Number(digits) : 0;
 
-    const setDigits = (raw: string) => onChange(raw.replace(/\D/g, ''));
+    const setDigits = (raw: string) => {
+        const d = raw.replace(/\D/g, '');
+        const isNeg = allowNegative && raw.includes('-');
+        setPendingNeg(isNeg && !d);
+        onChange(isNeg ? `-${d}` : d);
+    };
     const mult = (factor: number) => {
         const base = digits ? Number(digits) : 0;
-        onChange(String((base || 1) * factor));
+        onChange(sign + String((base || 1) * factor));
+    };
+    // Tombol ± untuk keyboard HP yang tidak punya tanda minus.
+    const toggleSign = () => {
+        setPendingNeg(!neg && !digits);
+        onChange(neg ? digits : `-${digits}`);
     };
 
     return (
@@ -3208,7 +3231,7 @@ function MoneyInput({ label, value, onChange, hint }: { label: string; value: st
                 <input
                     id={uid}
                     type="text"
-                    inputMode="numeric"
+                    inputMode={allowNegative ? 'text' : 'numeric'}
                     value={grouped}
                     onChange={e => setDigits(e.target.value)}
                     placeholder="0"
@@ -3217,12 +3240,13 @@ function MoneyInput({ label, value, onChange, hint }: { label: string; value: st
             </div>
             <div className="flex items-center justify-between gap-2 mt-1.5">
                 <div className="flex flex-wrap gap-1.5">
+                    {allowNegative && <button type="button" onClick={toggleSign} aria-pressed={neg} aria-label={neg ? 'Ubah jadi positif' : 'Ubah jadi negatif (minus)'} className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${neg ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400' : 'bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300'}`}>± minus</button>}
                     <button type="button" onClick={() => mult(1_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">×1.000</button>
                     <button type="button" onClick={() => mult(1_000_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">× juta</button>
                     <button type="button" onClick={() => mult(1_000_000_000)} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">× miliar</button>
-                    {digits && <button type="button" onClick={() => onChange('')} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-rose-500/20 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">bersihkan</button>}
+                    {(digits || neg) && <button type="button" onClick={() => onChange('')} className="px-2.5 py-1.5 rounded-lg bg-black/[0.06] dark:bg-white/5 hover:bg-rose-500/20 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">bersihkan</button>}
                 </div>
-                {digits && <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono truncate">{formatIDRShort(n)}</span>}
+                {digits && <span className={`text-xs font-bold font-mono truncate ${n < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatIDRShort(n)}</span>}
             </div>
         </div>
     );

@@ -540,8 +540,8 @@ const LocationSchema: Schema = new Schema({
     // Laporan bulanan & rencana Kurva S (lihat src/lib/projectReport.ts)
     laporanBulanan: { type: [LaporanBulananSchema], default: [] },
     rencanaKurvaS: { type: [RencanaKurvaSSchema], default: [] },
-    cashInAwal: { type: Number, min: 0 },
-    cashOutAwal: { type: Number, min: 0 },
+    cashInAwal: { type: Number },
+    cashOutAwal: { type: Number },
 
     sectionUpdates: { type: Schema.Types.Mixed },
 

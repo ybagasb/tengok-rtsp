@@ -295,15 +295,19 @@ function compact<T extends object>(o: T): T | undefined {
     return Object.keys(out).length ? (out as T) : undefined;
 }
 
+// Semua angka Laporan Bulanan, Rencana Tahunan, dan Saldo Awal Kas boleh negatif
+// (koreksi/penyesuaian dari laporan proyek).
+const SIGNED = { min: -MAX_VALUE };
+
 function readHu(raw: unknown, prefix: string, errors: string[]): HasilUsahaPeriode | undefined {
     if (!isObj(raw)) return undefined;
     return compact({
-        pendapatan: readNum(raw.pendapatan, `${prefix} – Pendapatan`, errors),
-        hpp: readNum(raw.hpp, `${prefix} – HPP`, errors),
-        bl: readNum(raw.bl, `${prefix} – BL`, errors),
-        bau: readNum(raw.bau, `${prefix} – BAU`, errors),
-        ebitda: readNum(raw.ebitda, `${prefix} – EBITDA`, errors, { min: -MAX_VALUE }),
-        labaBersih: readNum(raw.labaBersih, `${prefix} – Laba bersih`, errors, { min: -MAX_VALUE }),
+        pendapatan: readNum(raw.pendapatan, `${prefix} – Pendapatan`, errors, SIGNED),
+        hpp: readNum(raw.hpp, `${prefix} – HPP`, errors, SIGNED),
+        bl: readNum(raw.bl, `${prefix} – BL`, errors, SIGNED),
+        bau: readNum(raw.bau, `${prefix} – BAU`, errors, SIGNED),
+        ebitda: readNum(raw.ebitda, `${prefix} – EBITDA`, errors, SIGNED),
+        labaBersih: readNum(raw.labaBersih, `${prefix} – Laba bersih`, errors, SIGNED),
     });
 }
 
@@ -314,27 +318,27 @@ export function sanitizeLaporan(raw: unknown): SanitizeResult<LaporanBulanan> {
 
     const evmRaw = isObj(raw.evm) ? raw.evm : {};
     const evm = compact<EvmData>({
-        bac: readNum(evmRaw.bac, 'BAC', errors),
-        bcws: readNum(evmRaw.bcws, 'BCWS', errors),
-        bcwp: readNum(evmRaw.bcwp, 'BCWP', errors),
-        acwp: readNum(evmRaw.acwp, 'ACWP', errors),
+        bac: readNum(evmRaw.bac, 'BAC', errors, SIGNED),
+        bcws: readNum(evmRaw.bcws, 'BCWS', errors, SIGNED),
+        bcwp: readNum(evmRaw.bcwp, 'BCWP', errors, SIGNED),
+        acwp: readNum(evmRaw.acwp, 'ACWP', errors, SIGNED),
     });
 
     const psRaw = isObj(raw.posisi) ? raw.posisi : {};
     const posisi = compact<PosisiKeuangan>({
-        saldoHutang: readNum(psRaw.saldoHutang, 'Saldo hutang', errors),
-        bad: readNum(psRaw.bad, 'BAD', errors),
-        piutang: readNum(psRaw.piutang, 'Piutang', errors),
-        ccc: readNum(psRaw.ccc, 'CCC', errors, { int: true }),
+        saldoHutang: readNum(psRaw.saldoHutang, 'Saldo hutang', errors, SIGNED),
+        bad: readNum(psRaw.bad, 'BAD', errors, SIGNED),
+        piutang: readNum(psRaw.piutang, 'Piutang', errors, SIGNED),
+        ccc: readNum(psRaw.ccc, 'CCC', errors, { min: -3650, int: true }),
     });
     if (posisi?.ccc != null && posisi.ccc > 3650) errors.push('CCC terlalu besar (maks 3650 hari)');
 
     const pRaw = isObj(raw.pengadaan) ? raw.pengadaan : {};
     const pengadaan = compact<PengadaanData>({
-        paketTotal: readNum(pRaw.paketTotal, 'Total paket', errors, { int: true }),
-        paketRealisasi: readNum(pRaw.paketRealisasi, 'Paket terealisasi', errors, { int: true }),
-        paguTotal: readNum(pRaw.paguTotal, 'Total pagu', errors),
-        paguRealisasi: readNum(pRaw.paguRealisasi, 'Pagu terealisasi', errors),
+        paketTotal: readNum(pRaw.paketTotal, 'Total paket', errors, { ...SIGNED, int: true }),
+        paketRealisasi: readNum(pRaw.paketRealisasi, 'Paket terealisasi', errors, { ...SIGNED, int: true }),
+        paguTotal: readNum(pRaw.paguTotal, 'Total pagu', errors, SIGNED),
+        paguRealisasi: readNum(pRaw.paguRealisasi, 'Pagu terealisasi', errors, SIGNED),
     });
     if (pengadaan) {
         if (pengadaan.paketTotal != null && pengadaan.paketRealisasi != null && pengadaan.paketRealisasi > pengadaan.paketTotal) {
@@ -352,10 +356,10 @@ export function sanitizeLaporan(raw: unknown): SanitizeResult<LaporanBulanan> {
     set('evm', evm);
     set('huBulanIni', readHu(raw.huBulanIni, 'Hasil usaha bulan ini', errors));
     set('huSdBulanIni', readHu(raw.huSdBulanIni, 'Hasil usaha s.d bulan ini', errors));
-    set('cashIn', readNum(raw.cashIn, 'Cash in', errors));
-    set('cashOut', readNum(raw.cashOut, 'Cash out', errors));
-    set('tagihanBruto', readNum(raw.tagihanBruto, 'Tagihan bruto', errors));
-    set('targetTagihan', readNum(raw.targetTagihan, 'Target tagihan', errors));
+    set('cashIn', readNum(raw.cashIn, 'Cash in', errors, SIGNED));
+    set('cashOut', readNum(raw.cashOut, 'Cash out', errors, SIGNED));
+    set('tagihanBruto', readNum(raw.tagihanBruto, 'Tagihan bruto', errors, SIGNED));
+    set('targetTagihan', readNum(raw.targetTagihan, 'Target tagihan', errors, SIGNED));
     set('pengadaan', pengadaan);
     set('posisi', posisi);
 
@@ -371,7 +375,7 @@ function readSeries(raw: unknown, label: string, errors: string[], opts: { signe
     if (raw.length !== 12) { errors.push(`${label} harus berisi 12 bulan (Jan–Des)`); return []; }
     const out: number[] = [];
     for (let i = 0; i < 12; i++) {
-        const n = readNum(raw[i], `${label} ${BULAN_SINGKAT[i]}`, errors, opts.signed ? { min: -MAX_VALUE } : {});
+        const n = readNum(raw[i], `${label} ${BULAN_SINGKAT[i]}`, errors, SIGNED);
         if (n === undefined) {
             if (isBlank(raw[i])) errors.push(`${label} ${BULAN_SINGKAT[i]} belum diisi`);
             return [];
@@ -393,7 +397,7 @@ export function sanitizeRencana(raw: unknown): SanitizeResult<RencanaKurvaS> {
     const tahun = Number(raw.tahun);
     if (!Number.isInteger(tahun) || tahun < 2000 || tahun > 2099) return { ok: false, errors: ['Tahun tidak valid (2000-2099)'] };
 
-    const puRkap = readNum(raw.puRkap, 'Target PU RKAP', errors);
+    const puRkap = readNum(raw.puRkap, 'Target PU RKAP', errors, SIGNED);
     const raRkap = readSeries(raw.raRkap, 'Rencana Internal', errors);
     const raEksternal = readSeries(raw.raEksternal, 'RA Eksternal', errors);
     const huRaw = isObj(raw.huRencana) ? raw.huRencana : {};
@@ -418,8 +422,8 @@ export function sanitizeSaldoAwal(raw: unknown): SanitizeResult<SaldoAwal> {
     const errors: string[] = [];
     if (!isObj(raw)) return { ok: false, errors: ['Data saldo awal tidak valid'] };
     const value = compact<SaldoAwal>({
-        cashInAwal: readNum(raw.cashInAwal, 'Cash in awal', errors),
-        cashOutAwal: readNum(raw.cashOutAwal, 'Cash out awal', errors),
+        cashInAwal: readNum(raw.cashInAwal, 'Cash in awal', errors, SIGNED),
+        cashOutAwal: readNum(raw.cashOutAwal, 'Cash out awal', errors, SIGNED),
     }) ?? {};
     if (errors.length) return { ok: false, errors };
     return { ok: true, value };

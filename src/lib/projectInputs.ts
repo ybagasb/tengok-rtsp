@@ -218,7 +218,7 @@ export function sanitizeProgram(raw: unknown, errors: string[]) {
     if (!isObj(raw)) { errors.push('Data program format tidak valid'); return undefined; }
     const out: Record<string, unknown> = {};
 
-    const mc = num(raw.mcCair, 'Program: MC cair', errors, { min: 0 });
+    const mc = num(raw.mcCair, 'Program: MC cair', errors);
     if (mc != null) out.mcCair = mc;
     const mcLabel = str(raw.mcCairLabel);
     tooLong(mcLabel, 'Program: keterangan MC cair', errors);
@@ -240,8 +240,8 @@ export function sanitizeProgressKeuangan(raw: unknown, errors: string[]) {
         if (tahun === undefined) errors.push(`${L}: tahun wajib diisi (2000-2100)`);
         else if (seen.has(tahun)) errors.push(`${L}: tahun ${tahun} terisi dua kali`);
         else seen.add(tahun);
-        const rencana = num(r.rencana, `${L}: pagu/rencana`, errors, { min: 0 }) ?? 0;
-        const realisasi = num(r.realisasi, `${L}: realisasi`, errors, { min: 0 }) ?? 0;
+        const rencana = num(r.rencana, `${L}: pagu/rencana`, errors) ?? 0;
+        const realisasi = num(r.realisasi, `${L}: realisasi`, errors) ?? 0;
         return { tahun: tahun ?? 0, rencana, realisasi };
     });
 }

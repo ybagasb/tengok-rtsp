@@ -54,11 +54,12 @@ interface FieldSpec {
 }
 interface GroupSpec { id: string; title: string; desc?: string; fields: FieldSpec[]; huKey?: 'huBulanIni' | 'huSdBulanIni' }
 
+// Semua kolom angka boleh negatif (ketik "-" di depan); `signed` hanya penanda lama.
 const huFields = (key: string, title: string): FieldSpec[] => [
-    { path: `${key}.pendapatan`, label: `${title} – Pendapatan`, short: 'Pendapatan', kind: 'money' },
-    { path: `${key}.hpp`, label: `${title} – HPP`, short: 'HPP', kind: 'money', hint: 'Harga Pokok Penjualan. Persen HPP dihitung otomatis.' },
-    { path: `${key}.bl`, label: `${title} – BL`, short: 'BL', kind: 'money', hint: 'Beban Langsung. Dipakai untuk kolom BL di dashboard RRB/program.' },
-    { path: `${key}.bau`, label: `${title} – BAU`, short: 'BAU', kind: 'money', hint: 'Beban Administrasi & Umum.' },
+    { path: `${key}.pendapatan`, label: `${title} – Pendapatan`, short: 'Pendapatan', kind: 'money', signed: true },
+    { path: `${key}.hpp`, label: `${title} – HPP`, short: 'HPP', kind: 'money', signed: true, hint: 'Harga Pokok Penjualan. Persen HPP dihitung otomatis.' },
+    { path: `${key}.bl`, label: `${title} – BL`, short: 'BL', kind: 'money', signed: true, hint: 'Beban Langsung. Dipakai untuk kolom BL di dashboard RRB/program.' },
+    { path: `${key}.bau`, label: `${title} – BAU`, short: 'BAU', kind: 'money', signed: true, hint: 'Beban Administrasi & Umum.' },
     { path: `${key}.ebitda`, label: `${title} – EBITDA`, short: 'EBITDA', kind: 'money', signed: true },
     { path: `${key}.labaBersih`, label: `${title} – Laba bersih`, short: 'Laba Bersih', kind: 'money', signed: true },
 ];
@@ -82,25 +83,25 @@ const GROUPS: GroupSpec[] = [
     {
         id: 'cash', title: 'Cash Flow Bulan Ini',
         fields: [
-            { path: 'cashIn', label: 'Cash in', short: 'Cash In', kind: 'money' },
-            { path: 'cashOut', label: 'Cash out', short: 'Cash Out', kind: 'money' },
+            { path: 'cashIn', label: 'Cash in', short: 'Cash In', kind: 'money', signed: true },
+            { path: 'cashOut', label: 'Cash out', short: 'Cash Out', kind: 'money', signed: true },
         ],
     },
     {
         id: 'posisi', title: 'Posisi Keuangan',
         desc: 'Saldo di akhir periode (bukan arus bulanan). Tampil di tab Cash & Keuangan.',
         fields: [
-            { path: 'posisi.saldoHutang', label: 'Saldo hutang', short: 'Saldo Hutang', kind: 'money' },
-            { path: 'posisi.bad', label: 'BAD', short: 'BAD', kind: 'money', hint: 'Beban yang Akan Dibayar: bagian dari hutang (lihat laporan cashflow).' },
-            { path: 'posisi.piutang', label: 'Piutang', short: 'Piutang', kind: 'money' },
+            { path: 'posisi.saldoHutang', label: 'Saldo hutang', short: 'Saldo Hutang', kind: 'money', signed: true },
+            { path: 'posisi.bad', label: 'BAD', short: 'BAD', kind: 'money', signed: true, hint: 'Beban yang Akan Dibayar: bagian dari hutang (lihat laporan cashflow).' },
+            { path: 'posisi.piutang', label: 'Piutang', short: 'Piutang', kind: 'money', signed: true },
             { path: 'posisi.ccc', label: 'CCC (hari)', short: 'CCC (hari)', kind: 'count', hint: 'Cash Conversion Cycle dalam hari. Di atas 90 hari perlu perhatian.' },
         ],
     },
     {
         id: 'tagihan', title: 'Tagihan',
         fields: [
-            { path: 'tagihanBruto', label: 'Tagihan bruto', short: 'Tagihan Bruto', kind: 'money' },
-            { path: 'targetTagihan', label: 'Target tagihan', short: 'Target Tagihan', kind: 'money' },
+            { path: 'tagihanBruto', label: 'Tagihan bruto', short: 'Tagihan Bruto', kind: 'money', signed: true },
+            { path: 'targetTagihan', label: 'Target tagihan', short: 'Target Tagihan', kind: 'money', signed: true },
         ],
     },
     {
@@ -289,9 +290,9 @@ function NumField({ spec, value, onChange, unit, readOnly, warning }: { spec: Fi
                 <input
                     id={uid}
                     type="text"
-                    inputMode={spec.signed ? 'text' : 'decimal'}
+                    inputMode="text"
                     value={value}
-                    onChange={e => onChange(cleanTyping(e.target.value, !!spec.signed, money))}
+                    onChange={e => onChange(cleanTyping(e.target.value, true, money))}
                     placeholder="0"
                     aria-invalid={bad || undefined}
                     readOnly={readOnly}
@@ -301,7 +302,7 @@ function NumField({ spec, value, onChange, unit, readOnly, warning }: { spec: Fi
                 {money && <span className="absolute right-3 top-1/2 -translate-y-1/2 mt-[3px] text-[11px] font-bold text-slate-600 dark:text-slate-400 pointer-events-none">{unit}</span>}
             </div>
             {money && Number.isFinite(n) && value.trim() !== '' && (
-                <p className="mt-1 text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtRp(n * UNITS[unit])}</p>
+                <p className={`mt-1 text-[11px] font-mono font-bold ${n < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{fmtRp(n * UNITS[unit])}</p>
             )}
             {warning && <p role="status" className="mt-1 text-[11px] font-semibold text-orange-700 dark:text-orange-400">⚠ {warning}</p>}
             {spec.hint && <p className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-400 lg:hidden">{spec.hint}</p>}
@@ -1040,7 +1041,7 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                 cols.forEach((c, k) => {
                     const idx = mIdx + k;
                     const n = parsePasteNumber(c);
-                    if (idx > 11 || n === null || (n < 0 && !sp.signed)) return;
+                    if (idx > 11 || n === null) return;
                     arr[idx] = toStr(n);
                 });
                 series[sp.id] = arr;
@@ -1147,10 +1148,10 @@ function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMe
                                                         {editing ? (
                                                             <input
                                                                 type="text"
-                                                                inputMode={sp.signed ? 'text' : 'decimal'}
+                                                                inputMode="text"
                                                                 aria-label={`${sp.label} ${BULAN_SINGKAT[i]} (${unit})`}
                                                                 value={form.series[sp.id][i]}
-                                                                onChange={e => setCell(sp.id, i, cleanTyping(e.target.value, !!sp.signed, true))}
+                                                                onChange={e => setCell(sp.id, i, cleanTyping(e.target.value, true, true))}
                                                                 onPaste={e => onPaste(e, sIdx, i)}
                                                                 className={cellCls}
                                                             />

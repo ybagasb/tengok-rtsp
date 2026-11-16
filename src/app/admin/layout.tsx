@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { 
     LayoutDashboard, Monitor, MapPin, Tags, ArrowLeft, Shield, ShieldCheck,
-    Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList, Bell 
+    Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList, ClipboardCheck, Bell 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sidebarVariants, navItemVariants } from '@/components/admin/shared';
@@ -21,6 +21,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'Kamera', href: '/admin/cameras', icon: Monitor },
         { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin },
         { name: 'Kategori', href: '/admin/categories', icon: Tags },
+        { name: 'Pengisian Proyek', href: '/admin/pengisian', icon: ClipboardCheck },
         { name: 'Share Links', href: '/admin/share-links', icon: Link2 },
         { name: 'Statistik', href: '/admin/statistics', icon: BarChart3 },
         { name: 'Uptime & SLA', href: '/admin/uptime', icon: Activity },

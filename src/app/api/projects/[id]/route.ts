@@ -248,8 +248,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         }
         if ('tagihanBelumDiproses' in update) {
             const n = Number(update.tagihanBelumDiproses);
-            if (!isBlank(update.tagihanBelumDiproses) && (!Number.isFinite(n) || n < 0)) invalid.push('Progress belum ditagihkan harus angka ≥ 0');
-            update.tagihanBelumDiproses = !isBlank(update.tagihanBelumDiproses) && Number.isFinite(n) && n >= 0 ? n : undefined;
+            if (!isBlank(update.tagihanBelumDiproses) && !Number.isFinite(n)) invalid.push('Progress belum ditagihkan harus berupa angka');
+            update.tagihanBelumDiproses = !isBlank(update.tagihanBelumDiproses) && Number.isFinite(n) ? n : undefined;
         }
         // Sub-dokumen: tiap baris divalidasi, galat menyebut baris ke-N.
         if ('milestones' in update) update.milestones = sanitizeMilestones(update.milestones, invalid);
@@ -293,20 +293,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                 update[idx] = !isBlank(update[idx]) && Number.isFinite(n) ? Math.max(0, Math.min(5, n)) : undefined;
             }
         }
-        // Finansial: angka IDR >= 0. (saldoKas & lk boleh negatif — ditangani di bawah.)
-        for (const money of ['tagihanBruto', 'cashIn', 'cashOut', 'saldoHutang', 'bad', 'piutang', 'bebanKonstruksi', 'pu', 'bk'] as const) {
+        // Finansial & operasi: angka IDR, boleh negatif (koreksi/penyesuaian).
+        for (const money of ['tagihanBruto', 'cashIn', 'cashOut', 'saldoKas', 'saldoHutang', 'bad', 'piutang', 'bebanKonstruksi', 'pu', 'bk'] as const) {
             if (money in update) {
                 const n = Number(update[money]);
-                if (!isBlank(update[money]) && (!Number.isFinite(n) || n < 0)) {
-                    invalid.push(`${FIELD_LABELS[money] ?? money} harus angka ≥ 0`);
+                if (!isBlank(update[money]) && !Number.isFinite(n)) {
+                    invalid.push(`${FIELD_LABELS[money] ?? money} harus berupa angka`);
                 }
-                update[money] = !isBlank(update[money]) && Number.isFinite(n) && n >= 0 ? n : undefined;
+                update[money] = !isBlank(update[money]) && Number.isFinite(n) ? n : undefined;
             }
-        }
-        if ('saldoKas' in update) {
-            const n = Number(update.saldoKas);
-            if (!isBlank(update.saldoKas) && !Number.isFinite(n)) invalid.push('Saldo kas harus berupa angka');
-            update.saldoKas = !isBlank(update.saldoKas) && Number.isFinite(n) ? n : undefined;
         }
         // Tanggal: harus valid, dan selesai tidak boleh sebelum mulai.
         for (const d of ['startDate', 'endDate'] as const) {
@@ -364,10 +359,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                 { status: 400 },
             );
         }
-        // CCC: Cash Conversion Cycle dalam HARI. Bulatkan, clamp 0..3650. Kosong = hapus.
+        // CCC: Cash Conversion Cycle dalam HARI. Bulatkan, clamp -3650..3650 (boleh negatif). Kosong = hapus.
         if ('ccc' in update) {
             const n = Number(update.ccc);
-            update.ccc = !isBlank(update.ccc) && Number.isFinite(n) ? Math.max(0, Math.min(3650, Math.round(n))) : undefined;
+            update.ccc = !isBlank(update.ccc) && Number.isFinite(n) ? Math.max(-3650, Math.min(3650, Math.round(n))) : undefined;
         }
         // LK (Laba Kotor) boleh negatif; jika PU & BK ada, hitung LK = PU - BK. Kosong = hapus.
         if ('lk' in update) {
@@ -380,8 +375,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         // Hasil usaha: pendapatan/biaya >= 0; laba = pendapatan - biaya (dihitung). Kosong = hapus.
         if ('hasilUsaha' in update) {
             if (update.hasilUsaha && typeof update.hasilUsaha === 'object') {
-                const p = Math.max(0, Number(update.hasilUsaha.pendapatan) || 0);
-                const b = Math.max(0, Number(update.hasilUsaha.biaya) || 0);
+                const p = Number(update.hasilUsaha.pendapatan) || 0;
+                const b = Number(update.hasilUsaha.biaya) || 0;
                 update.hasilUsaha = { pendapatan: p, biaya: b, laba: p - b };
             } else {
                 update.hasilUsaha = undefined;
