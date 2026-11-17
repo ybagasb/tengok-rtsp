@@ -1,60 +1,208 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+/**
+ * LoginForm — dua jalur masuk: SSO (Cognito, akses penuh) dan PIN (viewer).
+ *
+ * Perhatian saat mengubah:
+ * - Halaman ini PUBLIK (pra-autentikasi). Jangan memanggil endpoint
+ *   ber-`requireAuth` di sini (mis. /api/divisions) — tidak akan pernah 200.
+ * - Jangan menampilkan data operasional (status kamera per lokasi, jumlah
+ *   proyek, PII) di panel dekoratif: halaman ini bisa dibuka siapa saja yang
+ *   punya jaringan.
+ * - Pengguna PIN mayoritas memakai layar sentuh/TV lobi → keypad numerik besar.
+ *   Input teks tetap tersedia untuk keyboard fisik lewat <input> tersembunyi.
+ */
+
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { signIn } from 'next-auth/react';
 import axios from 'axios';
-import { Lock, Loader2, ShieldCheck, BookOpen } from 'lucide-react';
+import { Lock, Loader2, ShieldCheck, BookOpen, HelpCircle, Delete, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
+import { hexToRgb } from '@/lib/divisionTheme';
 
-export default function LoginForm() {
-    // Hormati preferensi "kurangi gerakan": semua animasi looping dimatikan.
-    const reduce = useReducedMotion();
+const PIN_LENGTH = 6;
+
+const PIN_MAX = (() => {
+    const raw = Number(process.env.NEXT_PUBLIC_PIN_LENGTH);
+    return Number.isFinite(raw) && raw >= 4 && raw <= 12 ? Math.floor(raw) : PIN_LENGTH;
+})();
+
+const PIN_AUTOSUBMIT = process.env.NEXT_PUBLIC_PIN_AUTOSUBMIT === '1';
+
+const SSO_ERRORS: Record<string, string> = {
+    AccessDenied: 'Akses ditolak. Akun Anda belum terdaftar atau tidak diizinkan masuk.',
+    OAuthAccountNotLinked: 'Email ini sudah terhubung dengan cara masuk lain. Hubungi admin.',
+    OAuthCallback: 'Gagal menyelesaikan proses masuk SSO. Coba lagi, atau hubungi admin.',
+    OAuthSignin: 'Tidak dapat memulai proses masuk SSO. Periksa koneksi lalu coba lagi.',
+    Callback: 'Server tidak dapat menyelesaikan proses masuk. Hubungi admin bila berulang.',
+    Configuration: 'Konfigurasi SSO di server belum lengkap. Hubungi admin.',
+    Verification: 'Tautan verifikasi sudah kedaluwarsa atau sudah dipakai.',
+    SessionRequired: 'Sesi Anda berakhir. Silakan masuk kembali.',
+    Default: 'Gagal masuk dengan SSO. Silakan coba lagi.',
+};
+
+const HELP_CONTACT = process.env.NEXT_PUBLIC_HELP_CONTACT ?? '';
+
+/** Keypad numerik — target sentuh 60px untuk TV/lobi. */
+function KeypadPin({
+    value,
+    onDigit,
+    onBackspace,
+    disabled,
+}: {
+    value: string;
+    onDigit: (d: string) => void;
+    onBackspace: () => void;
+    disabled: boolean;
+}) {
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    const atHardLimit = value.length >= 12;
+
+    const cellBase =
+        'h-14 rounded-2xl font-bold font-mono text-xl transition-all duration-150 ' +
+        'disabled:opacity-30 disabled:cursor-not-allowed ' +
+        'focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none ' +
+        'active:scale-95 select-none ';
+
+    const cellStyle =
+        cellBase +
+        'bg-white/10 hover:bg-white/20 active:bg-white/25 ' +
+        'border border-white/15 hover:border-white/30 ' +
+        'text-white backdrop-blur-sm shadow-sm';
+
+    return (
+        <div className="grid grid-cols-3 gap-2.5" role="group" aria-label="Keypad PIN">
+            {keys.map((k) => (
+                <motion.button
+                    key={k}
+                    type="button"
+                    disabled={disabled || atHardLimit}
+                    onClick={() => onDigit(k)}
+                    aria-label={`Angka ${k}`}
+                    className={cellStyle}
+                    whileTap={{ scale: 0.93 }}
+                >
+                    {k}
+                </motion.button>
+            ))}
+            <span aria-hidden="true" />
+            <motion.button
+                type="button"
+                disabled={disabled || atHardLimit}
+                onClick={() => onDigit('0')}
+                aria-label="Angka 0"
+                className={cellStyle}
+                whileTap={{ scale: 0.93 }}
+            >
+                0
+            </motion.button>
+            <motion.button
+                type="button"
+                disabled={disabled || value.length === 0}
+                onClick={onBackspace}
+                aria-label="Hapus angka terakhir"
+                className={`${cellStyle} flex items-center justify-center`}
+                whileTap={{ scale: 0.93 }}
+            >
+                <Delete className="w-5 h-5" aria-hidden="true" />
+            </motion.button>
+        </div>
+    );
+}
+
+/** Tab selector antara SSO dan PIN. */
+function TabBar({
+    active,
+    onChange,
+}: {
+    active: 'sso' | 'pin';
+    onChange: (t: 'sso' | 'pin') => void;
+}) {
+    return (
+        <div className="relative flex rounded-2xl bg-white/8 border border-white/12 p-1 mb-6">
+            {/* sliding indicator */}
+            <motion.div
+                layout
+                className="absolute inset-y-1 w-[calc(50%-0.25rem)] rounded-xl bg-white/15 backdrop-blur-sm border border-white/20"
+                animate={{ x: active === 'sso' ? 0 : 'calc(100% + 0.5rem)' }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+            {(['sso', 'pin'] as const).map((tab) => (
+                <button
+                    key={tab}
+                    type="button"
+                    onClick={() => onChange(tab)}
+                    className={`relative z-10 flex-1 py-2.5 text-sm font-semibold tracking-wide rounded-xl transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                        active === tab ? 'text-white' : 'text-white/50 hover:text-white/75'
+                    }`}
+                >
+                    {tab === 'sso' ? 'SSO' : 'PIN Viewer'}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+export default function LoginForm({ errorCode }: { errorCode?: string | null }) {
+    const reduce = useReducedMotion() ?? false;
     const [pin, setPin] = useState('');
     const [loading, setLoading] = useState(false);
     const [ssoLoading, setSsoLoading] = useState(false);
+    const [cooldown, setCooldown] = useState(0);
+    const [activeTab, setActiveTab] = useState<'sso' | 'pin'>('sso');
+    const pinInputRef = useRef<HTMLInputElement>(null);
 
-    // 2d. Hangatkan (warm-up) chunk IntroScene3D dari halaman login & reset intro flag
+    const ssoError = useMemo(() => {
+        if (!errorCode) return null;
+        return SSO_ERRORS[errorCode] ?? SSO_ERRORS.Default;
+    }, [errorCode]);
+
+    // Switch ke tab PIN jika ada error SSO
+    useEffect(() => {
+        if (ssoError) setActiveTab('sso');
+    }, [ssoError]);
+
     useEffect(() => {
         try {
-            sessionStorage.removeItem("tengok_intro_seen_v1");
+            sessionStorage.removeItem('tengok_intro_seen_v1');
         } catch {
             // ignore
         }
-        try {
-            void import('@/components/intro/IntroScene3D');
-        } catch {
-            // Abaikan kegagalan prefetch
-        }
+        import('@/components/intro/IntroScene3D').catch(() => {
+            // Prefetch best-effort
+        });
     }, []);
 
-    const handlePinLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
+    useEffect(() => {
+        if (cooldown <= 0) return;
+        const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+        return () => clearTimeout(t);
+    }, [cooldown]);
 
-        if (!pin) {
-            toast.error('Masukkan PIN akses terlebih dahulu');
-            return;
-        }
-
+    const submitPin = useCallback(async (value: string) => {
         setLoading(true);
-
         try {
-            const res = await axios.post('/api/auth/verify', { pin });
-
+            const res = await axios.post('/api/auth/verify', { pin: value });
             if (res.data.success) {
                 toast.success('Berhasil masuk');
-                // Use full page navigation so middleware sees the new auth_token cookie
                 // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                 window.location.href = '/categories';
             }
         } catch (error) {
-            console.error(error);
             const status = axios.isAxiosError(error) ? error.response?.status : undefined;
             const hasResponse = axios.isAxiosError(error) && Boolean(error.response);
             if (status === 401) {
                 toast.error('PIN salah. Periksa kembali PIN Anda.');
+                setPin('');
+                pinInputRef.current?.focus();
             } else if (status === 429) {
-                toast.error('Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.');
+                const retryAfter = axios.isAxiosError(error)
+                    ? Number(error.response?.headers?.['retry-after'])
+                    : NaN;
+                const secs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 60;
+                setCooldown(secs);
+                toast.error(`Terlalu banyak percobaan. Tunggu ${secs} detik lalu coba lagi.`);
             } else if (!hasResponse) {
                 toast.error('Tidak dapat terhubung ke server. Periksa koneksi Anda.');
             } else {
@@ -63,7 +211,28 @@ export default function LoginForm() {
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    const inputLocked = loading || cooldown > 0;
+
+    const handlePinLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!pin) {
+            toast.error('Masukkan PIN akses terlebih dahulu');
+            return;
+        }
+        if (inputLocked) return;
+        void submitPin(pin);
     };
+
+    const onDigit = (d: string) => {
+        if (inputLocked) return;
+        const next = (pin + d).slice(0, 12);
+        setPin(next);
+        if (PIN_AUTOSUBMIT && next.length === PIN_MAX) void submitPin(next);
+    };
+
+    const onBackspace = () => setPin((p) => p.slice(0, -1));
 
     const handleCognitoLogin = async () => {
         setSsoLoading(true);
@@ -75,267 +244,371 @@ export default function LoginForm() {
         }
     };
 
+    // Warna orb background (biru, teal, amber — sesuai identitas divisi)
+    const divColors = ['#3b82f6', '#14b8a6', '#f59e0b'];
+
     return (
-        <div className="min-h-dvh flex items-center justify-center bg-slate-100 dark:bg-[#060a14] relative overflow-hidden px-4 py-8 max-sm:pt-[max(1.5rem,env(safe-area-inset-top,0px))] max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
-            {/* ── Latar belakang hidup (murni visual) ─────────────────────── */}
-
-            {/* Aurora blobs bergerak lambat */}
-            <motion.div
-                aria-hidden
-                className="absolute -top-32 left-1/4 w-80 h-80 sm:w-[32rem] sm:h-[32rem] rounded-full bg-yellow-400/10 dark:bg-yellow-500/15 blur-[70px] sm:blur-[130px]"
-                animate={reduce ? undefined : { x: [0, 60, -20, 0], y: [0, 40, 10, 0], scale: [1, 1.1, 0.95, 1] }}
-                transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            <motion.div
-                aria-hidden
-                className="absolute -bottom-32 right-1/4 w-80 h-80 sm:w-[32rem] sm:h-[32rem] rounded-full bg-blue-400/10 dark:bg-blue-700/20 blur-[70px] sm:blur-[130px]"
-                animate={reduce ? undefined : { x: [0, -50, 30, 0], y: [0, -30, 20, 0], scale: [1, 1.08, 0.92, 1] }}
-                transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            <motion.div
-                aria-hidden
-                className="hidden sm:block absolute top-1/3 left-1/2 w-[26rem] h-[26rem] rounded-full bg-cyan-400/5 dark:bg-cyan-500/10 blur-[120px]"
-                animate={reduce ? undefined : { x: [0, 40, -40, 0], y: [0, 50, -30, 0] }}
-                transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
-            />
-
-            {/* Grid HUD (minor) — lebih tegas, aksen kuning brand */}
-            <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 hidden dark:block opacity-[0.18]"
-                style={{
-                    backgroundImage:
-                        'linear-gradient(rgba(234,179,8,0.55) 1px, transparent 1px), linear-gradient(90deg, rgba(234,179,8,0.55) 1px, transparent 1px)',
-                    backgroundSize: '40px 40px',
-                    maskImage: 'radial-gradient(ellipse 75% 70% at 50% 45%, #000 35%, transparent 100%)',
-                    WebkitMaskImage: 'radial-gradient(ellipse 75% 70% at 50% 45%, #000 35%, transparent 100%)',
-                }}
-            />
-
-            {/* Grid HUD (major) — garis besar berlapis ala radar */}
-            <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 hidden dark:block opacity-[0.22]"
-                style={{
-                    backgroundImage:
-                        'linear-gradient(rgba(234,179,8,0.7) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(234,179,8,0.7) 1.5px, transparent 1.5px)',
-                    backgroundSize: '200px 200px',
-                    maskImage: 'radial-gradient(ellipse 80% 75% at 50% 45%, #000 30%, transparent 100%)',
-                    WebkitMaskImage: 'radial-gradient(ellipse 80% 75% at 50% 45%, #000 30%, transparent 100%)',
-                }}
-            />
-
-            {/* Vignette gelap di tepi + frame tipis biar berasa panel */}
-            <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 z-[4] hidden dark:block"
-                style={{
-                    boxShadow: 'inset 0 0 180px 40px rgba(0,0,0,0.75)',
-                }}
-            />
-            <div aria-hidden className="pointer-events-none absolute inset-3 z-[6] rounded-lg border border-amber-600/10 dark:border-yellow-500/15" />
-
-            {/* Scanline overlay (bahasa visual sama dgn halaman categories) */}
-            <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 z-[5] hidden dark:block"
-                style={{
-                    background:
-                        'repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 3px)',
-                }}
-            />
-
-            {/* Beam cahaya menyapu vertikal */}
-            <motion.div
-                aria-hidden
-                className="pointer-events-none hidden dark:sm:block absolute inset-y-0 w-48 z-[5] bg-gradient-to-r from-transparent via-yellow-300/12 to-transparent blur-2xl"
-                animate={reduce ? { left: '-10%' } : { left: ['-10%', '110%'] }}
-                transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', repeatDelay: 3 }}
-            />
-
-            {/* Corner brackets HUD — lebih besar, tebal, bercahaya */}
-            {[
-                'top-5 left-5 border-t-2 border-l-2',
-                'top-5 right-5 border-t-2 border-r-2',
-                'bottom-5 left-5 border-b-2 border-l-2',
-                'bottom-5 right-5 border-b-2 border-r-2',
-            ].map((pos) => (
-                <span
-                    key={pos}
-                    aria-hidden
-                    className={`pointer-events-none absolute w-10 h-10 border-amber-600/30 dark:border-yellow-400/80 z-10 dark:[filter:drop-shadow(0_0_6px_rgba(234,179,8,0.5))] ${pos}`}
+        <div className="min-h-dvh bg-[#060a14] relative overflow-hidden flex items-center justify-center">
+            {/* ── Background decorative orbs ── */}
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+                {/* Orb atas kiri — biru (Divisi 1) */}
+                <motion.div
+                    className="absolute -top-32 -left-32 w-[520px] h-[520px] rounded-full blur-[120px]"
+                    style={{ backgroundColor: `rgba(${hexToRgb(divColors[0])}, 0.18)` }}
+                    animate={reduce ? undefined : { opacity: [0.6, 1, 0.6], scale: [1, 1.08, 1] }}
+                    transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
                 />
-            ))}
+                {/* Orb kanan bawah — teal (Divisi 2) */}
+                <motion.div
+                    className="absolute -bottom-40 -right-32 w-[480px] h-[480px] rounded-full blur-[130px]"
+                    style={{ backgroundColor: `rgba(${hexToRgb(divColors[1])}, 0.15)` }}
+                    animate={reduce ? undefined : { opacity: [0.5, 0.9, 0.5], scale: [1, 1.06, 1] }}
+                    transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+                />
+                {/* Orb tengah kanan — amber brand */}
+                <motion.div
+                    className="absolute top-1/2 right-1/4 w-[300px] h-[300px] rounded-full blur-[100px]"
+                    style={{ backgroundColor: `rgba(${hexToRgb(divColors[2])}, 0.10)` }}
+                    animate={reduce ? undefined : { opacity: [0.3, 0.7, 0.3] }}
+                    transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut', delay: 7 }}
+                />
 
-            {/* Label HUD kecil di sudut (dekorasi command-center) */}
-            <span aria-hidden className="pointer-events-none absolute top-6 left-16 z-10 text-[11px] font-mono tracking-[0.25em] text-yellow-700 dark:text-yellow-400/50 uppercase">
-                SEC-LINK
-            </span>
-            <span aria-hidden className="pointer-events-none absolute bottom-6 right-16 z-10 text-[11px] font-mono tracking-[0.25em] text-yellow-700 dark:text-yellow-400/50 uppercase">
-                v1.0
-            </span>
+                {/* Grid pattern */}
+                <div
+                    className="absolute inset-0 opacity-[0.055]"
+                    style={{
+                        backgroundImage:
+                            'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+                        backgroundSize: '64px 64px',
+                    }}
+                />
 
-            {/* ── Kartu login ─────────────────────────────────────────────── */}
+                {/* Radial vignette */}
+                <div
+                    className="absolute inset-0"
+                    style={{
+                        background:
+                            'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(6,10,20,0.85) 100%)',
+                    }}
+                />
+            </div>
+
+            {/* ── Theme toggle ── */}
+            {/* ── Main card ── */}
             <motion.div
-                initial={{ opacity: 0, y: 24, scale: 0.97 }}
+                initial={{ opacity: 0, y: 28, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ type: "spring", stiffness: 260, damping: 24 }}
-                className="relative z-10 w-full max-w-md"
+                transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 240, damping: 28 }}
+                className="relative z-10 w-full max-w-sm mx-4 my-6"
             >
-                {/* Border gradient animasi (conic sheen) di belakang kartu */}
-                {/* Dibungkus overflow-hidden + rounded agar sudut persegi gradien yang
-                    berputar tidak keluar dari tepi kartu (jadi terlihat seperti cincin). */}
-                <div aria-hidden className="pointer-events-none absolute -inset-[2px] rounded-3xl overflow-hidden opacity-70">
-                    <motion.div
-                        className="absolute -left-1/2 -top-1/2 w-[200%] h-[200%]"
+                {/* Glow behind card */}
+                <div
+                    aria-hidden="true"
+                    className="absolute -inset-px rounded-[2rem] blur-2xl opacity-25"
+                    style={{
+                        background: 'linear-gradient(135deg, rgba(234,179,8,0.6) 0%, rgba(37,99,235,0.4) 100%)',
+                    }}
+                />
+
+                <div className="relative rounded-[1.75rem] border border-white/12 bg-white/[0.06] backdrop-blur-2xl shadow-2xl shadow-black/50 overflow-hidden">
+                    {/* Inner top highlight */}
+                    <div
+                        aria-hidden="true"
+                        className="absolute top-0 inset-x-0 h-px"
                         style={{
                             background:
-                                'conic-gradient(from 0deg, transparent 0deg, rgba(234,179,8,0.7) 60deg, transparent 130deg, transparent 230deg, rgba(59,130,246,0.6) 300deg, transparent 360deg)',
+                                'linear-gradient(90deg, transparent, rgba(255,255,255,0.35) 40%, rgba(255,255,255,0.35) 60%, transparent)',
                         }}
-                        animate={reduce ? undefined : { rotate: 360 }}
-                        transition={{ duration: 14, repeat: Infinity, ease: 'linear' }}
-                    />
-                </div>
-
-                <div className="relative p-8 max-sm:p-5 bg-white dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-black/10 dark:border-white/10 shadow-xl shadow-slate-900/10 dark:shadow-[0_30px_60px_rgba(0,0,0,0.5)] overflow-hidden">
-                    {/* Shimmer diagonal halus di dalam kartu */}
-                    <motion.div
-                        aria-hidden
-                        className="pointer-events-none absolute -inset-y-10 -left-1/2 w-1/2 rotate-12 bg-gradient-to-r from-transparent via-white/5 to-transparent hidden dark:block"
-                        animate={reduce ? { left: '-60%' } : { left: ['-60%', '160%'] }}
-                        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', repeatDelay: 5 }}
                     />
 
-                    {/* Logo & Title */}
-                    <div className="flex flex-col items-center mb-8 max-sm:mb-5">
-                        <div className="relative mb-4">
-                            {/* Ring orbit tipis */}
-                            <motion.span
-                                aria-hidden
-                                className="absolute inset-0 -m-3 rounded-full border border-amber-600/20 dark:border-yellow-400/20"
-                                animate={reduce ? undefined : { rotate: 360 }}
-                                transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-                            />
-                            <motion.img
-                                src="/abipraya_blue.svg"
-                                alt="PT Brantas Abipraya"
-                                className="w-20 h-20 max-sm:w-16 max-sm:h-16 object-contain block dark:hidden"
-                                animate={reduce
-                                    ? { filter: 'drop-shadow(0 0 14px rgba(37,99,235,0.45))' }
-                                    : {
-                                        filter: [
-                                            'drop-shadow(0 0 10px rgba(37,99,235,0.3))',
-                                            'drop-shadow(0 0 22px rgba(37,99,235,0.55))',
-                                            'drop-shadow(0 0 10px rgba(37,99,235,0.3))',
-                                        ],
-                                    }}
-                                transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-                            />
-                            <motion.img
-                                src="/abipraya_original.svg"
-                                alt=""
-                                aria-hidden="true"
-                                className="w-20 h-20 max-sm:w-16 max-sm:h-16 object-contain hidden dark:block"
-                                animate={reduce
-                                    ? { filter: 'drop-shadow(0 0 14px rgba(254,213,51,0.45))' }
-                                    : {
-                                        filter: [
-                                            'drop-shadow(0 0 10px rgba(254,213,51,0.3))',
-                                            'drop-shadow(0 0 22px rgba(254,213,51,0.55))',
-                                            'drop-shadow(0 0 10px rgba(254,213,51,0.3))',
-                                        ],
-                                    }}
-                                transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-                            />
-                        </div>
-                        <h1 className="text-3xl font-bold tracking-[0.2em] bg-gradient-to-r from-amber-700 via-amber-500 to-amber-700 dark:from-yellow-400 dark:via-yellow-200 dark:to-yellow-400 bg-clip-text text-transparent">
-                            TENGOK
-                        </h1>
-                        <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Sistem Integrasi Pemantauan CCTV</p>
-                        <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5 uppercase tracking-wider">PT Brantas Abipraya</p>
-                    </div>
-
-                    {/* SSO Login Button (Primary) */}
-                    <motion.button
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={handleCognitoLogin}
-                        disabled={ssoLoading}
-                        className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-blue-600/25 dark:shadow-[0_8px_30px_rgba(37,99,235,0.4)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed text-sm uppercase tracking-wider mb-6 min-h-11 max-sm:min-h-12 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 focus-visible:outline-none"
-                    >
-                        {ssoLoading ? (
-                            <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                Mengalihkan...
-                            </>
-                        ) : (
-                            <>
-                                <ShieldCheck className="w-5 h-5" />
-                                Masuk dengan SSO
-                            </>
-                        )}
-                    </motion.button>
-
-                    <p className="text-xs text-slate-600 dark:text-slate-400 text-center -mt-3 mb-6">
-                        SSO untuk pengelola &amp; PIC proyek (bisa mengisi data).
-                    </p>
-
-                    {/* Divider */}
-                    <div className="flex items-center gap-4 mb-6 max-sm:mb-4">
-                        <div className="flex-1 h-px bg-gradient-to-r from-transparent to-black/15 dark:to-white/15" />
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">atau PIN</span>
-                        <div className="flex-1 h-px bg-gradient-to-l from-transparent to-black/15 dark:to-white/15" />
-                    </div>
-
-                    {/* PIN Login (Fallback) */}
-                    <form onSubmit={handlePinLogin} className="space-y-4">
-                        <div className="space-y-2">
-                            <label htmlFor="access-pin" className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider ml-1">PIN Akses (hanya melihat)</label>
-                            <div className="relative group">
-                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-amber-600 dark:group-focus-within:text-yellow-400 transition-colors" aria-hidden="true" />
-                                <input
-                                    id="access-pin"
-                                    type="password"
-                                    inputMode="numeric"
-                                    autoComplete="off"
-                                    value={pin}
-                                    onChange={(e) => setPin(e.target.value)}
-                                    className="w-full min-h-11 max-sm:min-h-12 bg-white dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl py-3 pl-12 pr-4 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-yellow-500 focus-visible:ring-2 focus-visible:ring-amber-500 transition-all text-center tracking-[0.5em] font-mono text-lg"
-                                    placeholder="••••••"
-                                    maxLength={6}
+                    <div className="p-7 max-sm:p-5">
+                        {/* ── Logo & branding ── */}
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={reduce ? { duration: 0 } : { delay: 0.1, duration: 0.5 }}
+                            className="flex flex-col items-center mb-7"
+                        >
+                            <div className="relative mb-4">
+                                {/* Halo di belakang logo */}
+                                <div
+                                    aria-hidden="true"
+                                    className="absolute inset-0 rounded-full blur-xl opacity-50"
+                                    style={{ background: 'rgba(234,179,8,0.4)', transform: 'scale(1.6)' }}
+                                />
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src="/abipraya_original.svg"
+                                    alt="PT Brantas Abipraya"
+                                    width={72}
+                                    height={72}
+                                    className="relative w-[72px] h-[72px] object-contain drop-shadow-lg"
                                 />
                             </div>
-                        </div>
 
-                        <motion.button
-                            whileHover={{ y: -1 }}
-                            whileTap={{ scale: 0.98 }}
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-3.5 rounded-xl transition-all shadow-md shadow-amber-600/20 dark:shadow-[0_0_20px_rgba(234,179,8,0.3)] dark:hover:shadow-[0_0_30px_rgba(234,179,8,0.5)] min-h-11 max-sm:min-h-12 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 focus-visible:outline-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {loading ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Memeriksa...
-                                </>
-                            ) : (
-                                'Masuk'
+                            <h1 className="text-3xl font-black tracking-[0.22em] text-transparent bg-clip-text"
+                                style={{
+                                    backgroundImage: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 40%, #fde68a 70%, #f59e0b 100%)',
+                                }}
+                            >
+                                TENGOK
+                            </h1>
+                            <p className="text-white/55 text-xs mt-1.5 tracking-wider text-center">
+                                Sistem Integrasi Pemantauan CCTV
+                            </p>
+                            <p className="text-white/35 text-[11px] mt-0.5 uppercase tracking-widest">
+                                PT Brantas Abipraya
+                            </p>
+                        </motion.div>
+
+                        {/* ── SSO Error banner ── */}
+                        <AnimatePresence>
+                            {ssoError && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.25 }}
+                                    className="overflow-hidden mb-5"
+                                >
+                                    <div
+                                        role="alert"
+                                        className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-3 text-xs text-rose-300"
+                                    >
+                                        <HelpCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                                        <span>{ssoError}</span>
+                                    </div>
+                                </motion.div>
                             )}
-                        </motion.button>
-                    </form>
+                        </AnimatePresence>
 
-                    <div className="mt-6 max-sm:mt-4 pt-5 max-sm:pt-3 border-t border-black/10 dark:border-white/10 text-center">
-                        <a
-                            href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 min-h-11 px-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-yellow-400 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
-                        >
-                            <BookOpen className="w-4 h-4" aria-hidden="true" /> Buka Panduan Pengguna (PDF)
-                        </a>
+                        {/* ── Tab bar ── */}
+                        <TabBar active={activeTab} onChange={setActiveTab} />
+
+                        {/* ── Tab content ── */}
+                        <AnimatePresence mode="wait" initial={false}>
+                            {activeTab === 'sso' ? (
+                                <motion.div
+                                    key="sso"
+                                    initial={{ opacity: 0, x: -16 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -16 }}
+                                    transition={{ duration: 0.2 }}
+                                >
+                                    {/* SSO button */}
+                                    <button
+                                        type="button"
+                                        onClick={handleCognitoLogin}
+                                        disabled={ssoLoading}
+                                        className="w-full relative overflow-hidden group flex items-center justify-center gap-3 py-4 rounded-2xl font-bold text-sm uppercase tracking-wider transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[3.5rem] focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none"
+                                        style={{
+                                            background: 'linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%)',
+                                            boxShadow: '0 8px 32px rgba(37,99,235,0.45), inset 0 1px 0 rgba(255,255,255,0.15)',
+                                        }}
+                                    >
+                                        {/* Hover shimmer */}
+                                        <span
+                                            aria-hidden="true"
+                                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                                            style={{
+                                                background: 'linear-gradient(135deg, #3b82f6 0%, #38bdf8 100%)',
+                                            }}
+                                        />
+                                        <span className="relative flex items-center gap-3 text-white">
+                                            {ssoLoading ? (
+                                                <>
+                                                    <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                                                    Mengalihkan...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <ShieldCheck className="w-5 h-5" aria-hidden="true" />
+                                                    Masuk dengan SSO
+                                                </>
+                                            )}
+                                        </span>
+                                    </button>
+
+                                    <p className="text-white/40 text-[11px] text-center mt-3 leading-relaxed">
+                                        Untuk pengelola &amp; PIC proyek — dapat mengisi data.
+                                    </p>
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    key="pin"
+                                    initial={{ opacity: 0, x: 16 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 16 }}
+                                    transition={{ duration: 0.2 }}
+                                >
+                                    <form onSubmit={handlePinLogin}>
+                                        {/* Label */}
+                                        <div className="flex items-center justify-between mb-3">
+                                            <label
+                                                htmlFor="access-pin"
+                                                className="flex items-center gap-1.5 text-[11px] font-semibold text-white/60 uppercase tracking-wider"
+                                            >
+                                                <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                                                PIN Akses
+                                            </label>
+                                            <span className="flex items-center gap-1 text-[11px] text-white/40">
+                                                <Eye className="w-3 h-3" aria-hidden="true" />
+                                                hanya melihat
+                                            </span>
+                                        </div>
+
+                                        {/* PIN dots indicator */}
+                                        <div
+                                            className="relative flex items-center justify-center gap-3 mb-4 h-14 rounded-2xl border bg-black/30 px-3 focus-within:border-amber-400/50 transition-colors"
+                                            style={{ borderColor: 'rgba(255,255,255,0.12)' }}
+                                            aria-hidden="true"
+                                        >
+                                            {Array.from({ length: Math.max(PIN_MAX, pin.length) }).map((_, i) => (
+                                                <motion.span
+                                                    key={i}
+                                                    animate={
+                                                        i < pin.length
+                                                            ? { scale: 1, opacity: 1 }
+                                                            : { scale: 0.85, opacity: 0.4 }
+                                                    }
+                                                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                                                    className={`rounded-full ${
+                                                        i < pin.length
+                                                            ? 'w-3.5 h-3.5 bg-amber-400'
+                                                            : 'w-2.5 h-2.5 border border-white/35 bg-transparent'
+                                                    }`}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        {/* Hidden real input untuk keyboard fisik */}
+                                        <input
+                                            ref={pinInputRef}
+                                            id="access-pin"
+                                            type="password"
+                                            inputMode="numeric"
+                                            autoComplete="off"
+                                            pattern="[0-9]*"
+                                            enterKeyHint="go"
+                                            value={pin}
+                                            onChange={(e) => {
+                                                const digits = e.target.value
+                                                    .replace(/\D/g, '')
+                                                    .slice(0, 12);
+                                                setPin(digits);
+                                                if (
+                                                    PIN_AUTOSUBMIT &&
+                                                    digits.length === PIN_MAX &&
+                                                    !inputLocked
+                                                ) {
+                                                    void submitPin(digits);
+                                                }
+                                            }}
+                                            disabled={inputLocked}
+                                            maxLength={12}
+                                            aria-label={`PIN akses, ${PIN_MAX} angka`}
+                                            className="sr-only"
+                                        />
+
+                                        {/* Keypad */}
+                                        <KeypadPin
+                                            value={pin}
+                                            onDigit={onDigit}
+                                            onBackspace={onBackspace}
+                                            disabled={inputLocked}
+                                        />
+
+                                        {/* Submit */}
+                                        <button
+                                            type="submit"
+                                            disabled={inputLocked || pin.length === 0}
+                                            aria-describedby={pin.length === 0 ? 'pin-hint' : undefined}
+                                            className="mt-3.5 w-full relative overflow-hidden group flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition-all duration-200 disabled:cursor-not-allowed min-h-[3.25rem] focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none"
+                                            style={
+                                                inputLocked || pin.length === 0
+                                                    ? {
+                                                          background: 'rgba(255,255,255,0.05)',
+                                                          border: '1px solid rgba(255,255,255,0.1)',
+                                                          color: 'rgba(255,255,255,0.3)',
+                                                      }
+                                                    : {
+                                                          background:
+                                                              'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                                                          boxShadow:
+                                                              '0 8px 24px rgba(245,158,11,0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
+                                                          color: '#0f172a',
+                                                      }
+                                            }
+                                        >
+                                            {!(inputLocked || pin.length === 0) && (
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                                                    style={{
+                                                        background:
+                                                            'linear-gradient(135deg, #fbbf24 0%, #fde68a 100%)',
+                                                    }}
+                                                />
+                                            )}
+                                            <span className="relative">
+                                                {loading ? (
+                                                    <span className="flex items-center gap-2">
+                                                        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                                                        Memeriksa...
+                                                    </span>
+                                                ) : cooldown > 0 ? (
+                                                    `Tunggu ${cooldown} dtk`
+                                                ) : (
+                                                    'Masuk sebagai Viewer'
+                                                )}
+                                            </span>
+                                        </button>
+
+                                        <p
+                                            id="pin-hint"
+                                            className="mt-2 text-center text-[11px] text-white/35"
+                                        >
+                                            {pin.length === 0
+                                                ? `Masukkan ${PIN_MAX} angka PIN untuk melanjutkan.`
+                                                : `${pin.length}/${PIN_MAX} angka`}
+                                        </p>
+                                    </form>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {/* ── Footer ── */}
+                        <div className="mt-5 pt-4 border-t border-white/8 flex flex-col items-center gap-1">
+                            <a
+                                href="/Panduan-Input-Detail-Proyek.pdf?v=20261117"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 min-h-10 px-2 rounded-lg text-[11px] font-medium text-white/40 hover:text-amber-400 transition-colors focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none"
+                            >
+                                <BookOpen className="w-3.5 h-3.5" aria-hidden="true" />
+                                Panduan Pengguna (PDF)
+                            </a>
+                            <p className="text-[11px] text-white/35 text-center">
+                                Lupa PIN atau belum punya akses?{' '}
+                                {HELP_CONTACT ? (
+                                    <a
+                                        href={`mailto:${HELP_CONTACT}`}
+                                        className="font-semibold text-amber-400 hover:underline"
+                                    >
+                                        Hubungi admin
+                                    </a>
+                                ) : (
+                                    <span className="font-semibold text-white/50">Hubungi admin proyek</span>
+                                )}
+                            </p>
+                        </div>
                     </div>
                 </div>
+
+                {/* Copyright */}
+                <p className="text-center text-[10px] text-white/25 mt-4">
+                    © {new Date().getFullYear()} PT Brantas Abipraya
+                </p>
             </motion.div>
         </div>
     );

@@ -5,7 +5,15 @@ import dbConnect from '@/lib/db';
 import PinSession from '@/models/PinSession';
 import LoginForm from './LoginForm';
 
-export default async function LoginPage() {
+export default async function LoginPage({
+    searchParams,
+}: {
+    searchParams: Promise<{ error?: string }>;
+}) {
+    // Kode error NextAuth (`?error=...`) diteruskan ke form agar pengguna melihat
+    // sebab kegagalan SSO, bukan kembali ke form kosong tanpa penjelasan.
+    const { error } = await searchParams;
+
     // 1. Cek sesi NextAuth (Cognito SSO)
     const session = await auth();
     if (session?.user) {
@@ -34,6 +42,6 @@ export default async function LoginPage() {
         redirect('/categories');
     }
 
-    return <LoginForm />;
+    return <LoginForm errorCode={error ?? null} />;
 }
 

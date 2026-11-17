@@ -94,8 +94,12 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ success: true, data: sanitizeCameras(location) });
         }
 
-        const query: Record<string, string> = {};
-        if (category) query.category = category;
+        const query: Record<string, string | { $in: string[] }> = {};
+        if (category) {
+            // Beberapa kategori dipisah koma (mis. grup Sekolah: "sekolah-rakyat,sekolah").
+            const cats = category.split(',').map((c) => c.trim()).filter(Boolean).slice(0, 10);
+            query.category = cats.length > 1 ? { $in: cats } : (cats[0] ?? category);
+        }
         if (division) query.division = division;
         if (projectType) query.projectType = projectType;
         const locations = await Location.find(query).populate('cameras').lean<LocationWithCamerasLean[]>();

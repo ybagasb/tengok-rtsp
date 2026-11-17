@@ -17,6 +17,7 @@ const CATEGORY_ICON: Record<string, LucideIcon> = {
     'bendungan': Waves,
     'sungai-pantai': Waves,
     'irigasi': Droplets,
+    'irigasi-pl': Droplets,
     'jiat': Droplets,
     'pipa-air': Droplets,
     'embung': Droplet,
@@ -357,6 +358,11 @@ export default function MapComponent({
             }),
     }), [locations, selectedLocation?._id]);
 
+    // Peta siap (onLoad) + tautan dalam ?project=<id>: buka panel proyek itu sekali saja.
+    const [mapLoaded, setMapLoaded] = useState(false);
+    const projectParam = searchParams.get('project');
+    const deepLinkDoneRef = useRef(false);
+
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
     const [searchFocused, setSearchFocused] = useState(false);
@@ -513,7 +519,9 @@ export default function MapComponent({
         axios.get('/api/categories')
             .then(res => {
                 const cats: CategorySummary[] = res.data || [];
-                const cat = cats.find((c) => c.identifier === category);
+                // Beberapa kategori dipisah koma (grup Sekolah): pakai default kategori pertama.
+                const firstCategory = category.split(',')[0];
+                const cat = cats.find((c) => c.identifier === firstCategory);
                 const defLat = cat?.defaultLat;
                 const defLng = cat?.defaultLng;
                 if (cat && defLat && defLng) {
@@ -660,6 +668,19 @@ export default function MapComponent({
         resetSheet(); // phone: selalu buka di titik tengah
         flyTo(loc.lng, loc.lat, { zoom: FOCUS_ZOOM, pitch: FOCUS_PITCH });
     }, [flyTo, resetSheet]);
+
+    useEffect(() => {
+        if (!projectParam || deepLinkDoneRef.current || !mapLoaded) return;
+        const loc = locations.find((l) => l._id === projectParam);
+        if (!loc) return;
+        // Lewat timer (bukan setState langsung di badan effect). Penanda selesai diset saat timer jalan.
+        const t = setTimeout(() => {
+            if (deepLinkDoneRef.current) return;
+            deepLinkDoneRef.current = true;
+            openLocation(loc);
+        }, 0);
+        return () => clearTimeout(t);
+    }, [projectParam, mapLoaded, locations, openLocation]);
 
     const handleSelectSuggestion = (s: SearchSuggestion) => {
         if (!s?.fullData) return;
@@ -896,6 +917,7 @@ export default function MapComponent({
                             };
                             map.on('rotate', sync);
                             sync();
+                            setMapLoaded(true);
                         }}
                     >
                         {/* Bangunan 3D — sumber vektor OpenFreeMap, bisa dimatikan lewat kontrol peta */}
@@ -1112,7 +1134,7 @@ export default function MapComponent({
                                             <div className="min-w-0">
                                                 <div className="text-xs font-bold uppercase tracking-wider">Kategori Ini</div>
                                                 <div className="text-[11px] text-slate-500 truncate">
-                                                    {[division, category].filter(Boolean).join(' • ') || 'Konteks saat ini'}
+                                                    {[division, category?.split(',').join(' + ')].filter(Boolean).join(' • ') || 'Konteks saat ini'}
                                                 </div>
                                             </div>
                                         </button>
@@ -1242,7 +1264,7 @@ export default function MapComponent({
                         <span className="truncate max-w-[100px] sm:max-w-none">{
                             scopeMode === 'all' ? 'Semua Proyek'
                                 : scopeMode === 'division' ? (division || 'Satu Divisi')
-                                : (category || division || 'Semua Proyek')
+                                : (category?.split(',').join(' + ') || division || 'Semua Proyek')
                         }</span>
                     </div>
                 )}

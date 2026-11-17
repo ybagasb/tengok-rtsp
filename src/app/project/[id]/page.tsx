@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, use, useId, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, use, useId, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -12,7 +12,7 @@ import {
     User, Clock, CircleDollarSign, ExternalLink,
     AlertTriangle, ShieldCheck, Plus, Minus,
     ArrowUpRight, ArrowDownRight, Layers, Target, Wallet, Receipt,
-    Menu, GitBranch, ChevronLeft, ChevronRight, BookOpen, CalendarDays, Video, FolderOpen, Download
+    Menu, GitBranch, ChevronLeft, ChevronRight, BookOpen, CalendarDays, Video, FolderOpen, Download, LayoutDashboard
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import OptimizedVideoPlayer from '@/components/OptimizedVideoPlayer';
@@ -42,15 +42,35 @@ const FootprintEditor = dynamic(() => import('@/components/FootprintEditor'), {
     ),
 });
 
-type Tab =
-    | 'ikhtiar'
-    | 'finansial'
-    | 'operasi'
-    | 'changemgmt'
-    | 'qhsse'
-    | 'laporan'
-    | 'cctv' | 'dokumen'
-    | 'info' | 'location' | 'contract' | 'progress' | 'gallery';
+// Menu halaman = 5 tab yang sama dengan panel peta + Laporan Bulanan (menu sendiri).
+type Tab = 'ikhtiar' | 'finansial' | 'operasi' | 'changemgmt' | 'qhsse' | 'laporan';
+// Sub-tampilan (pil di atas isi tab): tiap sub-tampilan tetap setinggi layar tanpa scroll di desktop.
+type RingkasanView = 'dashboard' | 'info' | 'progres' | 'cctv';
+type FinansialView = 'keuangan' | 'kontrak';
+// Panel geser "Kelola Data": berkas dan pengaturan yang tidak ada di panel peta.
+type KelolaView = 'galeri' | 'dokumen' | 'lokasi' | 'pic';
+/** Tujuan navigasi: tab, tab:sub-tampilan, atau kelola:bagian. */
+type Dest = Tab | 'ikhtiar:info' | 'ikhtiar:progres' | 'ikhtiar:cctv' | 'finansial:kontrak' | `kelola:${KelolaView}`;
+
+/** Nilai ?tab= di URL (dipakai tombol Detail di panel peta). */
+const TAB_QUERY: Record<string, Tab> = {
+    ringkasan: 'ikhtiar', finansial: 'finansial', operasi: 'operasi', change: 'changemgmt', qhsse: 'qhsse', laporan: 'laporan',
+};
+function initialTabFromUrl(): Tab {
+    if (typeof window === 'undefined') return 'ikhtiar';
+    return TAB_QUERY[new URLSearchParams(window.location.search).get('tab') ?? ''] ?? 'ikhtiar';
+}
+
+const RINGKASAN_VIEWS: { id: RingkasanView; label: string; icon: typeof Info }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'info', label: 'Informasi', icon: Info },
+    { id: 'progres', label: 'Progres Fisik', icon: TrendingUp },
+    { id: 'cctv', label: 'CCTV', icon: Video },
+];
+const FINANSIAL_VIEWS: { id: FinansialView; label: string; icon: typeof Info }[] = [
+    { id: 'keuangan', label: 'Keuangan', icon: Wallet },
+    { id: 'kontrak', label: 'Kontrak', icon: FileText },
+];
 
 interface DocumentItem { name: string; key?: string; size?: number; contentType?: string; uploadedAt: string; url?: string | null; }
 interface GalleryItem { key: string; caption?: string; uploadedAt: string; url: string | null; }
@@ -164,59 +184,12 @@ interface TabItem { id: Tab; label: string; icon: typeof Info }
 interface TabGroup { group: string; items: TabItem[] }
 
 const TAB_GROUPS: TabGroup[] = [
-    {
-        group: 'Ringkasan',
-        items: [
-            { id: 'ikhtiar', label: 'Ringkasan', icon: Target },
-        ],
-    },
-    {
-        group: 'Finansial',
-        items: [
-            { id: 'finansial', label: 'Cash & Keuangan', icon: Wallet },
-        ],
-    },
-    {
-        group: 'Operasi',
-        items: [
-            { id: 'operasi', label: 'Operasi', icon: Layers },
-        ],
-    },
-    {
-        group: 'Pemantauan',
-        items: [
-            { id: 'cctv', label: 'CCTV', icon: Video },
-        ],
-    },
-    {
-        group: 'Laporan',
-        items: [
-            { id: 'laporan', label: 'Laporan Bulanan', icon: CalendarDays },
-        ],
-    },
-    {
-        group: 'Change',
-        items: [
-            { id: 'changemgmt', label: 'Change Management', icon: GitBranch },
-        ],
-    },
-    {
-        group: 'QHSSE',
-        items: [
-            { id: 'qhsse', label: 'QHSSE', icon: ShieldCheck },
-        ],
-    },
-    {
-        group: 'Lainnya',
-        items: [
-            { id: 'info',      label: 'Informasi', icon: Info },
-            { id: 'location',  label: 'Lokasi',    icon: MapPin },
-            { id: 'contract',  label: 'Kontrak',   icon: FileText },
-            { id: 'progress',  label: 'Progres',   icon: TrendingUp },
-            { id: 'gallery',   label: 'Galeri',    icon: ImageIcon },
-            { id: 'dokumen',   label: 'Dokumen',   icon: FolderOpen },
-        ],
-    },
+    { group: 'Ringkasan', items: [{ id: 'ikhtiar', label: 'Ringkasan', icon: Target }] },
+    { group: 'Finansial', items: [{ id: 'finansial', label: 'Finansial', icon: Wallet }] },
+    { group: 'Operasi', items: [{ id: 'operasi', label: 'Operasi', icon: Layers }] },
+    { group: 'Change', items: [{ id: 'changemgmt', label: 'Change', icon: GitBranch }] },
+    { group: 'QHSSE', items: [{ id: 'qhsse', label: 'QHSSE', icon: ShieldCheck }] },
+    { group: 'Laporan', items: [{ id: 'laporan', label: 'Laporan Bulanan', icon: CalendarDays }] },
 ];
 
 // Phone: simpan tinggi header sticky ke --ph-h (dipakai bar Simpan yang menempel di bawahnya).
@@ -337,7 +310,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
     const [project, setProject] = useState<Project | null>(null);
     const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState<Tab>('ikhtiar');
+    const [tab, setTab] = useState<Tab>(initialTabFromUrl);
+    const [ringkasanView, setRingkasanView] = useState<RingkasanView>('dashboard');
+    const [finansialView, setFinansialView] = useState<FinansialView>('keuangan');
+    const [kelola, setKelola] = useState<KelolaView | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const [loadError, setLoadError] = useState<{ status: number | null; message: string } | null>(null);
@@ -404,7 +380,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const canEdit = project.access?.canEdit ?? false;
     const isSuperAdmin = project.access?.isSuperAdmin ?? false;
 
-    const selectTab = (t: Tab) => { setTab(t); setSidebarOpen(false); };
+    const selectTab = (d: Dest) => {
+        setSidebarOpen(false);
+        if (d.startsWith('kelola:')) { setKelola(d.slice('kelola:'.length) as KelolaView); return; }
+        const [t, sub] = d.split(':') as [Tab, string | undefined];
+        setTab(t);
+        if (t === 'ikhtiar') setRingkasanView((sub as RingkasanView | undefined) ?? 'dashboard');
+        if (t === 'finansial') setFinansialView((sub as FinansialView | undefined) ?? 'keuangan');
+    };
 
     // compact = rail ikon di desktop (label muncul saat hover/fokus); false = daftar penuh (drawer mobile).
     const renderNav = (compact: boolean) => (
@@ -497,7 +480,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         </div>
                     </div>
                     <a
-                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
+                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261117"
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label="Buka panduan pengisian (PDF)"
@@ -507,9 +490,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     </a>
                     <ThemeToggle />
                     <button
+                        onClick={() => setKelola('galeri')}
+                        aria-label="Kelola data: galeri, dokumen, lokasi, PIC"
+                        title="Kelola data: galeri, dokumen, lokasi, PIC"
+                        className="flex items-center gap-2 p-3 sm:px-4 sm:py-2.5 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-sm font-bold transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                    >
+                        <FolderOpen className="w-4 h-4" aria-hidden="true" /> <span className="max-sm:hidden">Kelola Data</span>
+                    </button>
+                    <button
                         onClick={() => {
                             const divisionParam = project.division ? `&division=${encodeURIComponent(project.division)}` : '';
-                            router.push(`/map?category=${encodeURIComponent(project.category)}${divisionParam}`);
+                            router.push(`/map?category=${encodeURIComponent(project.category)}${divisionParam}&project=${encodeURIComponent(project._id)}`);
                         }}
                         className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text text-sm font-bold hover:bg-[rgba(var(--div-accent-rgb),0.2)] transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                     >
@@ -555,14 +546,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                                     <button
                                         onClick={() => {
                                             const divisionParam = project.division ? `&division=${encodeURIComponent(project.division)}` : '';
-                                            router.push(`/map?category=${encodeURIComponent(project.category)}${divisionParam}`);
+                                            router.push(`/map?category=${encodeURIComponent(project.category)}${divisionParam}&project=${encodeURIComponent(project._id)}`);
                                         }}
                                         className="w-full min-h-11 flex items-center gap-2.5 px-3 rounded-xl text-sm font-bold bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
                                     >
                                         <MapPin className="w-4 h-4 shrink-0" aria-hidden="true" /> Lihat di Peta
                                     </button>
                                     <a
-                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
+                                        href="/Panduan-Input-Detail-Proyek.pdf?v=20261117"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="w-full min-h-11 flex items-center gap-2.5 px-3 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 bg-black/[0.04] dark:bg-white/5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
@@ -583,24 +574,36 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     </div>
                     <AnimatePresence mode="wait">
                         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-                            {tab === 'ikhtiar'    && <IkhtiarTab project={project} status={status} onlineCams={onlineCams} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
-                            {tab === 'finansial'  && <FinansialTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
+                            {tab === 'ikhtiar'    && <IkhtiarTab project={project} status={status} onlineCams={onlineCams} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} view={ringkasanView} onView={setRingkasanView} />}
+                            {tab === 'finansial'  && (
+                                <SubViews label="Bagian Finansial" views={FINANSIAL_VIEWS} active={finansialView} onChange={setFinansialView}>
+                                    {finansialView === 'keuangan' && <FinansialTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
+                                    {finansialView === 'kontrak' && <ContractTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
+                                </SubViews>
+                            )}
                             {tab === 'operasi'    && <OperasiTab project={project} isAdmin={canEdit} onSaved={fetchProject} onGoTab={selectTab} />}
-                            {tab === 'laporan'    && <LaporanBulananTab projectId={project._id} laporan={project.laporanBulanan ?? []} rencana={project.rencanaKurvaS ?? []} saldoAwal={{ cashInAwal: project.cashInAwal, cashOutAwal: project.cashOutAwal }} contractValue={project.contractValue} onGoContract={() => selectTab('contract')} lastUpdated={project.sectionUpdates?.laporan ?? null} isAdmin={canEdit} onSaved={fetchProject} errorMessage={saveErrorMessage} />}
+                            {tab === 'laporan'    && <LaporanBulananTab projectId={project._id} laporan={project.laporanBulanan ?? []} rencana={project.rencanaKurvaS ?? []} saldoAwal={{ cashInAwal: project.cashInAwal, cashOutAwal: project.cashOutAwal }} contractValue={project.contractValue} onGoContract={() => selectTab('finansial:kontrak')} lastUpdated={project.sectionUpdates?.laporan ?? null} isAdmin={canEdit} onSaved={fetchProject} errorMessage={saveErrorMessage} />}
                             {tab === 'changemgmt' && <ChangeManagementTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
                             {tab === 'qhsse'      && <QhsseTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'info'       && <InfoTab project={project} isAdmin={canEdit} isSuperAdmin={isSuperAdmin} onSaved={fetchProject} />}
-                            {tab === 'location'   && <LocationTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'contract'   && <ContractTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'progress'   && <ProgressTab project={project} isAdmin={canEdit} onSaved={fetchProject} />}
-                            {tab === 'gallery'    && <GalleryTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
-                            {tab === 'cctv'       && <CctvTab project={project} />}
-                            {tab === 'dokumen'    && <DocumentsTab project={project} isAdmin={canEdit} onChanged={fetchProject} />}
                         </motion.div>
                     </AnimatePresence>
                     </div>
                 </main>
             </div>
+
+            <AnimatePresence>
+                {kelola && (
+                    <KelolaDrawer
+                        project={project}
+                        view={kelola}
+                        onView={setKelola}
+                        onClose={() => setKelola(null)}
+                        isAdmin={canEdit}
+                        isSuperAdmin={isSuperAdmin}
+                        onChanged={fetchProject}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 }
@@ -648,7 +651,7 @@ function IndeksCompact({ title, value, meta }: { title: string; value?: number; 
     );
 }
 
-function IkhtiarTab({ project, status, onlineCams, isAdmin, onSaved, onGoTab }: { project: Project; status: { label: string; color: string }; onlineCams: number; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
+function IkhtiarTab({ project, status, onlineCams, isAdmin, onSaved, onGoTab, view, onView }: { project: Project; status: { label: string; color: string }; onlineCams: number; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Dest) => void; view: RingkasanView; onView: (v: RingkasanView) => void }) {
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({
         cpi: project.cpi?.toString() ?? '',
@@ -728,17 +731,25 @@ function IkhtiarTab({ project, status, onlineCams, isAdmin, onSaved, onGoTab }: 
     );
 
     return (
-        <ProjectDashboard
-            project={project}
-            status={status}
-            onlineCams={onlineCams}
-            fisikSampai={fisikSampai(project)}
-            completeness={computeCompleteness(project)}
-            canEdit={isAdmin}
-            onGoTab={onGoTab}
-            onGoLaporan={() => onGoTab('laporan')}
-            indeks={indeks}
-        />
+        <SubViews label="Bagian Ringkasan" views={RINGKASAN_VIEWS} active={view} onChange={onView}>
+            {view === 'dashboard' && (
+                <ProjectDashboard
+                    project={project}
+                    status={status}
+                    onlineCams={onlineCams}
+                    fisikSampai={fisikSampai(project)}
+                    completeness={computeCompleteness(project)}
+                    canEdit={isAdmin}
+                    onGoTab={onGoTab}
+                    onGoLaporan={() => onGoTab('laporan')}
+                    indeks={indeks}
+                    fill
+                />
+            )}
+            {view === 'info' && <InfoTab project={project} isAdmin={isAdmin} onSaved={onSaved} />}
+            {view === 'progres' && <ProgressFisikTab project={project} isAdmin={isAdmin} onSaved={onSaved} />}
+            {view === 'cctv' && <CctvTab project={project} />}
+        </SubViews>
     );
 }
 
@@ -755,7 +766,7 @@ function MoneyCard({ label, value, icon: Icon, tone }: { label: string; value?: 
     );
 }
 
-function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
+function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Dest) => void }) {
     const [editing, setEditing] = useState(false);
     // MC Cair (+ cut-off) dipakai dashboard "model RRB"; hanya untuk kategori ber-dashboard.
     const hasProgram = !!dashboardForCategory(project.category);
@@ -1026,7 +1037,7 @@ function mingguPrefill(list: ProgressMinggu[], bulan: string, minggu: number): {
 }
 
 // ── Operasi (Kinerja Operasi + Progress Mingguan W1-W4 + Milestone + Sumber Daya) ──────────
-function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Tab) => void }) {
+function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; isAdmin: boolean; onSaved: () => void; onGoTab: (t: Dest) => void }) {
     // PU diisi otomatis dari pendapatan s.d bulan ini (Laporan Bulanan terbaru). BK tetap manual
     // karena dasarnya berbeda dari HPP; LK = PU − BK dihitung server.
     const latestLap = latestLaporan(project.laporanBulanan);
@@ -1332,7 +1343,7 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
             </SectionCard>
 
             {/* ── 3. SUMBER DAYA ── */}
-            <SectionCard className="lg:col-start-2 lg:row-start-1 lg:row-span-2">
+            <SectionCard className="lg:col-start-2 lg:row-start-1">
                 <SectionHeader compact title="Sumber Daya" isAdmin={isAdmin} editing={editingSd} onEdit={() => setEditingSd(true)} onCancel={() => { setSumberDaya(project.sumberDaya ?? []); setEditingSd(false); }} onSave={saveSd} saving={savingSd} stamp={stampOf(project, 'sumberDaya')} />
                 {editingSd && (
                     <button onClick={() => setSumberDaya(s => [...s, { namaAlat: '', jumlah: 0, kategori: '', satuan: 'Unit' }])} className={`${cardBtn} self-start`}>
@@ -1381,6 +1392,9 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
                     <option value="Unit" /><option value="Orang" /><option value="m³" /><option value="Ton" /><option value="Set" /><option value="Buah" />
                 </datalist>
             </SectionCard>
+
+            {/* ── 3b. LINGKUP PEKERJAAN ── */}
+            <LingkupCard project={project} isAdmin={isAdmin} onSaved={onSaved} className="lg:col-start-2 lg:row-start-2" />
 
             {/* ── 4. MILESTONE ── */}
             <SectionCard className="lg:col-start-3 lg:row-start-1">
@@ -1615,18 +1629,18 @@ function computeCompleteness(p: Project) {
     // progressPercent default 0 di database, jadi 0% hanya dianggap terisi bila PIC pernah
     // menyimpan bulan progres (progressPeriode) atau nilainya sudah > 0.
     const progresFilled = isValidPeriode(p.progressPeriode) || (p.progressPercent ?? 0) > 0;
-    const items: { label: string; done: boolean; tab: Tab }[] = [
-        { label: 'Identitas (nama PM, no. HP PM, pengguna jasa)', done: has(p.pmName) && has(p.pmPhone) && has(p.penggunaJasa), tab: 'info' },
-        { label: 'Pelaksana & jadwal (penyedia jasa, tanggal)', done: (has(p.penyediaJasa) || has(p.contractor)) && has(p.startDate) && has(p.endDate), tab: 'info' },
-        { label: 'Kontrak (nomor & nilai)', done: has(p.contractNumber) && has(p.contractValue), tab: 'contract' },
+    const items: { label: string; done: boolean; tab: Dest }[] = [
+        { label: 'Identitas (nama PM, no. HP PM, pengguna jasa)', done: has(p.pmName) && has(p.pmPhone) && has(p.penggunaJasa), tab: 'ikhtiar:info' },
+        { label: 'Pelaksana & jadwal (penyedia jasa, tanggal)', done: (has(p.penyediaJasa) || has(p.contractor)) && has(p.startDate) && has(p.endDate), tab: 'ikhtiar:info' },
+        { label: 'Kontrak (nomor & nilai)', done: has(p.contractNumber) && has(p.contractValue), tab: 'finansial:kontrak' },
         { label: 'Laporan bulanan (bulan ini / bulan lalu)', done: isLaporanFresh(p.laporanBulanan), tab: 'laporan' },
         { label: 'Ringkasan (CPI / SPI)', done: has(p.cpi) && has(p.spi), tab: 'ikhtiar' },
         { label: 'Finansial (cash / hutang / piutang)', done: finansialFilled >= 2, tab: 'finansial' },
         { label: 'Kinerja Operasi (PU / BK / LK)', done: hasHasilUsaha || (has(p.pu) && has(p.bk)), tab: 'operasi' },
-        { label: 'Progres fisik', done: progresFilled, tab: 'progress' },
+        { label: 'Progres fisik', done: progresFilled, tab: 'ikhtiar:progres' },
         { label: 'Milestone', done: has(p.milestones), tab: 'operasi' },
         { label: 'Sumber Daya', done: has(p.sumberDaya), tab: 'operasi' },
-        { label: 'Galeri', done: has(p.gallery), tab: 'gallery' },
+        { label: 'Galeri', done: has(p.gallery), tab: 'kelola:galeri' },
     ];
     const doneCount = items.filter(i => i.done).length;
     const percent = Math.round((doneCount / items.length) * 100);
@@ -1757,7 +1771,7 @@ function ProgressFisikCard({ rencana, realisasi, deviasi, sampai, startDate, end
                 </div>
             </div>
 
-            {/* Hari kontrak: dari tanggal mulai & selesai di tab Informasi */}
+            {/* Hari kontrak: dari tanggal mulai & selesai (Ringkasan › Informasi) */}
             <div className="pt-2 border-t border-black/5 dark:border-white/5">
                 <HariKontrakRow startDate={startDate} endDate={endDate} hint />
             </div>
@@ -1879,7 +1893,7 @@ function ProgressKeuanganCard({
     );
 }
 // ── Info (editable) ──────────────────────────────────────────────────────────
-function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project; isAdmin: boolean; isSuperAdmin?: boolean; onSaved: () => void }) {
+function InfoTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({
         description: project.description || '',
@@ -1911,7 +1925,7 @@ function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project
             <SectionHeader title="Informasi Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} stamp={stampOf(project, 'info')} />
         } scroll={false}>
             <div className="lg:h-full flex flex-col gap-4 lg:grid lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)]">
-            <div className={`${isSuperAdmin ? 'lg:col-span-8' : 'lg:col-span-12'} min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-4 content-start`}>
+            <div className="lg:col-span-12 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-4 content-start">
                 {!editing ? (
                     <>
                         <Field label="Pengguna Jasa"  value={project.penggunaJasa} />
@@ -1941,12 +1955,6 @@ function InfoTab({ project, isAdmin, isSuperAdmin, onSaved }: { project: Project
                 )}
             </div>
 
-            {/* Panel PIC — hanya super-admin. Server tetap penegak via requireSuperAdmin. */}
-            {isSuperAdmin && (
-                <div className="lg:col-span-4 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-                    <PicPanel projectId={project._id} />
-                </div>
-            )}
             </div>
         </TabShell>
     );
@@ -2210,7 +2218,7 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
         finally { setSaving(false); }
     };
 
-    // Waktu kontrak dihitung dari tanggal mulai dan selesai di tab Informasi.
+    // Waktu kontrak dihitung dari tanggal mulai dan selesai (Ringkasan › Informasi).
     const kh = kontrakHari(project.startDate, project.endDate);
     const hasSpan = !!kh;
     const totalHari = kh?.total;
@@ -2251,7 +2259,7 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                                 </div>
                             </>
                         ) : (
-                            <p className="text-sm text-slate-600 dark:text-slate-400">Isi tanggal mulai dan selesai di tab Informasi untuk melihat sisa waktu kontrak.</p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400">Isi tanggal mulai dan selesai di Ringkasan › Informasi untuk melihat sisa waktu kontrak.</p>
                         )}
                     </div>
                 )}
@@ -2260,27 +2268,66 @@ function ContractTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
     );
 }
 
-// ── Progress ─────────────────────────────────────────────────────────────────
-function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
+// ── Progres fisik (Ringkasan › Progres Fisik) ────────────────────────────────
+/** "63,74" / "63.74" -> 63.74; null bila kosong, bukan angka, atau di luar 0..100. */
+function parsePercent(text: string): number | null {
+    const t = text.trim().replace(',', '.');
+    if (t === '' || !/^\d+(\.\d*)?$/.test(t)) return null;
+    const n = Number(t);
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
+}
+
+/** Input persen berupa teks: menerima koma atau titik desimal, galat inline di luar 0-100. */
+function PercentInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+    const uid = useId();
+    const errId = `${uid}-err`;
+    const bad = value.trim() !== '' && parsePercent(value) == null;
+    return (
+        <div>
+            <label htmlFor={uid} className={LABEL_CLS}>{label}</label>
+            <input
+                id={uid}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={value}
+                placeholder="mis. 63,74"
+                aria-invalid={bad || undefined}
+                aria-describedby={bad ? errId : undefined}
+                onChange={e => onChange(e.target.value)}
+                className={controlCls(bad)}
+            />
+            <FieldError id={errId} message={bad ? 'Isi angka 0 sampai 100 (boleh koma, mis. 63,74)' : undefined} />
+        </div>
+    );
+}
+
+function ProgressFisikTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
     const [editing, setEditing] = useState(false);
-    const [form, setForm] = useState({
-        progressPercent: project.progressPercent ?? 0,
-        progressRencana: project.progressRencana ?? 0,
-        progressDeviasi: project.progressDeviasi ?? 0,
+    // Persen diketik sebagai teks supaya koma desimal ("63,74") dan titik ("63.74") sama-sama bisa.
+    const pctText = (v?: number) => (v == null ? '' : String(v).replace('.', ','));
+    const initForm = () => ({
+        progressPercent: pctText(project.progressPercent ?? 0),
+        progressRencana: pctText(project.progressRencana ?? 0),
         progressPeriode: isValidPeriode(project.progressPeriode)
             ? project.progressPeriode
             : latestLaporan(project.laporanBulanan)?.periode ?? new Date().toISOString().slice(0, 7),
-        lingkupPekerjaan: project.lingkupPekerjaan ?? [],
     });
+    const [form, setForm] = useState(initForm);
     const [saving, setSaving] = useState(false);
+    const realNum = parsePercent(form.progressPercent);
+    const rencanaNum = parsePercent(form.progressRencana);
 
     const save = async () => {
+        if (realNum == null || rencanaNum == null) {
+            toast.error('Rencana dan realisasi harus berupa angka 0 sampai 100');
+            return;
+        }
         setSaving(true);
         try {
             await axios.patch(`/api/projects/${project._id}`, {
-                lingkupPekerjaan: form.lingkupPekerjaan,
-                progressPercent: form.progressPercent,
-                progressRencana: form.progressRencana,
+                progressPercent: Math.round(realNum * 100) / 100,
+                progressRencana: Math.round(rencanaNum * 100) / 100,
                 progressPeriode: form.progressPeriode,
             });
             toast.success('Progres tersimpan');
@@ -2291,14 +2338,14 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
     };
 
     const deviasi = editing
-        ? (form.progressPercent - form.progressRencana)
+        ? ((realNum ?? 0) - (rencanaNum ?? 0))
         : (project.progressDeviasi ?? ((project.progressPercent ?? 0) - (project.progressRencana ?? 0)));
 
     return (
         <TabShell header={
-            <SectionHeader title="Progres Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => setEditing(true)} onCancel={() => setEditing(false)} onSave={save} saving={saving} stamp={stampOf(project, 'progress')} />
+            <SectionHeader title="Progres Proyek" isAdmin={isAdmin} editing={editing} onEdit={() => { setForm(initForm()); setEditing(true); }} onCancel={() => { setForm(initForm()); setEditing(false); }} onSave={save} saving={saving} stamp={stampOf(project, 'progress')} />
         } scroll={false}>
-            <div className="lg:h-full flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+            <div className="lg:h-full flex flex-col gap-4 lg:grid lg:grid-cols-1 lg:grid-rows-[minmax(0,1fr)] lg:max-w-3xl">
                 <div className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1 space-y-4">
             {!editing ? (
                 <ProgressFisikCard
@@ -2319,13 +2366,9 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
                                 <label htmlFor="progress-periode" className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Progres s.d. bulan</label>
                                 <input id="progress-periode" type="month" required value={form.progressPeriode} onChange={e => setForm({ ...form, progressPeriode: e.target.value })} className="block mt-2 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
                             </div>
-                            <div>
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Rencana: {form.progressRencana.toFixed(2)}%</label>
-                                <input aria-label="Progres rencana (persen)" type="range" min={0} max={100} step={0.01} value={form.progressRencana} onChange={e => setForm({ ...form, progressRencana: Number(e.target.value) })} className="w-full mt-2 accent-slate-400" />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Realisasi: {form.progressPercent.toFixed(2)}%</label>
-                                <input aria-label="Progres realisasi (persen)" type="range" min={0} max={100} step={0.01} value={form.progressPercent} onChange={e => setForm({ ...form, progressPercent: Number(e.target.value) })} className="w-full mt-2 accent-[var(--div-accent)]" />
+                            <div className="grid grid-cols-2 gap-3">
+                                <PercentInput label="Rencana (%)" value={form.progressRencana} onChange={v => setForm({ ...form, progressRencana: v })} />
+                                <PercentInput label="Realisasi (%)" value={form.progressPercent} onChange={v => setForm({ ...form, progressPercent: v })} />
                             </div>
                         </div>
                         <div className="flex justify-between items-center pt-1 border-t border-black/5 dark:border-white/5">
@@ -2341,37 +2384,63 @@ function ProgressTab({ project, isAdmin, onSaved }: { project: Project; isAdmin:
 
             
                 </div>
-                <div className="min-w-0 lg:min-h-0 flex flex-col">
-                    {/* Lingkup pekerjaan */}
-                    <SectionCard className="lg:flex-1">
-                        <div className="flex items-center justify-between shrink-0">
-                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Lingkup Pekerjaan</h3>
-                            {editing && (
-                                <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: [...f.lingkupPekerjaan, ''] }))}
-                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
-                                    <Plus className="w-3.5 h-3.5" /> Tambah
-                                </button>
-                            )}
-                        </div>
-                        <Paged
-                            items={editing ? form.lingkupPekerjaan : (project.lingkupPekerjaan || [])}
-                            itemH={editing ? 46 : 36}
-                            cols={editing ? 1 : 2}
-                            baseClass={editing ? '' : 'grid-cols-1 sm:grid-cols-2'}
-                            empty={<p className="text-sm text-slate-600 dark:text-slate-400 italic">Belum ada lingkup pekerjaan.</p>}
-                            render={(lp, i) => editing ? (
-                                <div className="flex gap-2">
-                                    <input aria-label="Lingkup pekerjaan" value={lp} onChange={e => { const a = [...form.lingkupPekerjaan]; a[i] = e.target.value; setForm(f => ({ ...f, lingkupPekerjaan: a })); }} className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
-                                    <button onClick={() => setForm(f => ({ ...f, lingkupPekerjaan: f.lingkupPekerjaan.filter((_, j) => j !== i) }))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"><Minus className="w-4 h-4" aria-hidden="true" /></button>
-                                </div>
-                            ) : (
-                                <span className="block truncate px-3 py-1.5 rounded-full text-xs font-medium bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] div-accent-text" title={lp}>{lp}</span>
-                            )}
-                        />
-                    </SectionCard>
-                </div>
             </div>
         </TabShell>
+    );
+}
+
+// ── Lingkup pekerjaan (Operasi) ──────────────────────────────────────────────
+function LingkupCard({ project, isAdmin, onSaved, className = '' }: { project: Project; isAdmin: boolean; onSaved: () => void; className?: string }) {
+    const [editing, setEditing] = useState(false);
+    const [list, setList] = useState<string[]>(project.lingkupPekerjaan ?? []);
+    const [saving, setSaving] = useState(false);
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            await axios.patch(`/api/projects/${project._id}`, { lingkupPekerjaan: list });
+            toast.success('Lingkup pekerjaan tersimpan');
+            setEditing(false);
+            onSaved();
+        } catch (err) { toast.error(saveErrorMessage(err)); }
+        finally { setSaving(false); }
+    };
+
+    return (
+        <SectionCard className={className}>
+            <SectionHeader
+                compact
+                title="Lingkup Pekerjaan"
+                stamp={stampOf(project, 'progress')}
+                isAdmin={isAdmin}
+                editing={editing}
+                onEdit={() => { setList(project.lingkupPekerjaan ?? []); setEditing(true); }}
+                onCancel={() => { setList(project.lingkupPekerjaan ?? []); setEditing(false); }}
+                onSave={save}
+                saving={saving}
+            />
+            {editing && (
+                <button onClick={() => setList(l => [...l, ''])}
+                    className="self-start flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
+                    <Plus className="w-3.5 h-3.5" /> Tambah
+                </button>
+            )}
+            <Paged
+                items={editing ? list : (project.lingkupPekerjaan ?? [])}
+                itemH={editing ? 46 : 36}
+                cols={editing ? 1 : 2}
+                baseClass={editing ? '' : 'grid-cols-1 sm:grid-cols-2'}
+                empty={<EmptyState compact text="Belum ada lingkup pekerjaan." action={isAdmin ? { label: 'Isi sekarang', onClick: () => { setList(project.lingkupPekerjaan ?? []); setEditing(true); } } : undefined} />}
+                render={(lp, i) => editing ? (
+                    <div className="flex gap-2">
+                        <input aria-label="Lingkup pekerjaan" value={lp} onChange={e => { const a = [...list]; a[i] = e.target.value; setList(a); }} className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus:border-[rgba(var(--div-accent-rgb),0.5)]" />
+                        <button onClick={() => setList(l => l.filter((_, j) => j !== i))} aria-label="Hapus baris" className="min-w-10 min-h-10 inline-flex items-center justify-center rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none"><Minus className="w-4 h-4" aria-hidden="true" /></button>
+                    </div>
+                ) : (
+                    <span className="block truncate px-3 py-1.5 rounded-full text-xs font-medium bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] div-accent-text" title={lp}>{lp}</span>
+                )}
+            />
+        </SectionCard>
     );
 }
 
@@ -2972,13 +3041,136 @@ function SectionCard({ className = '', children }: { className?: string; childre
 /**
  * Kerangka tab setinggi layar (lg ke atas): header tetap, isi mengisi sisa tinggi.
  * Di bawah lg mengalir biasa. scroll=true: isi bisa di-scroll di dalam kerangka (tab berisi daftar/form).
+ * Di dalam SubViews / KelolaDrawer (ShellCtx = true) tinggi mengikuti induk, bukan tinggi layar.
  */
+const ShellCtx = createContext(false);
 function TabShell({ header, children, scroll = true }: { header?: React.ReactNode; children: React.ReactNode; scroll?: boolean }) {
+    const nested = useContext(ShellCtx);
     return (
-        <div className="flex flex-col gap-3 max-lg:pb-8 lg:h-[calc(100dvh-var(--ph-h,5.5rem)-1.5rem)]">
+        <div className={`flex flex-col gap-3 ${nested ? 'max-lg:pb-2 lg:h-full lg:min-h-0' : 'max-lg:pb-8 lg:h-[calc(100dvh-var(--ph-h,5.5rem)-1.5rem)]'}`}>
             {header && <div className="shrink-0">{header}</div>}
             <div className={`flex-1 min-h-0 ${scroll ? 'lg:overflow-y-auto lg:pr-1' : ''}`}>{children}</div>
         </div>
+    );
+}
+
+/** Pil pemilih sub-tampilan (gaya sama dengan pil di Laporan Bulanan). */
+function ViewPills<V extends string>({ label, views, active, onChange }: {
+    label: string; views: { id: V; label: string; icon: typeof Info }[]; active: V; onChange: (v: V) => void;
+}) {
+    return (
+        <div role="tablist" aria-label={label} className="inline-flex flex-wrap p-1 rounded-xl bg-black/[0.04] dark:bg-white/5 gap-1">
+            {views.map(v => {
+                const on = v.id === active;
+                const Icon = v.icon;
+                return (
+                    <button
+                        key={v.id}
+                        role="tab"
+                        aria-selected={on}
+                        onClick={() => onChange(v.id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 max-sm:min-h-11 rounded-lg text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none ${
+                            on ? 'div-accent-solid text-slate-950' : 'text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
+                    >
+                        <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {v.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+/** Tab dengan pil sub-tampilan di atas; tiap sub-tampilan tetap setinggi layar tanpa scroll di desktop. */
+function SubViews<V extends string>({ label, views, active, onChange, children }: {
+    label: string; views: { id: V; label: string; icon: typeof Info }[]; active: V; onChange: (v: V) => void; children: React.ReactNode;
+}) {
+    return (
+        <TabShell header={<ViewPills label={label} views={views} active={active} onChange={onChange} />} scroll={false}>
+            <ShellCtx.Provider value={true}>
+                <div className="lg:h-full lg:min-h-0">{children}</div>
+            </ShellCtx.Provider>
+        </TabShell>
+    );
+}
+
+/**
+ * Panel geser "Kelola Data": galeri, dokumen, lokasi/footprint, dan PIC proyek (super-admin).
+ * Bagian ini tidak ada di panel peta, jadi tidak jadi menu tab.
+ */
+function KelolaDrawer({ project, view, onView, onClose, isAdmin, isSuperAdmin, onChanged }: {
+    project: Project; view: KelolaView; onView: (v: KelolaView) => void; onClose: () => void;
+    isAdmin: boolean; isSuperAdmin: boolean; onChanged: () => void;
+}) {
+    const closeRef = useRef<HTMLButtonElement>(null);
+    const onCloseRef = useRef(onClose);
+    useEffect(() => { onCloseRef.current = onClose; });
+    useEffect(() => {
+        closeRef.current?.focus();
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            // Pratinjau foto / dialog konfirmasi sedang terbuka: Esc menutup itu dulu, bukan panel ini.
+            if (document.querySelectorAll('[role="dialog"]').length > 1) return;
+            onCloseRef.current();
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, []);
+
+    const views: { id: KelolaView; label: string; icon: typeof Info }[] = [
+        { id: 'galeri', label: 'Galeri', icon: ImageIcon },
+        { id: 'dokumen', label: 'Dokumen', icon: FolderOpen },
+        { id: 'lokasi', label: 'Lokasi & Footprint', icon: MapPin },
+        ...(isSuperAdmin ? [{ id: 'pic' as const, label: 'PIC Proyek', icon: User }] : []),
+    ];
+    const active: KelolaView = view === 'pic' && !isSuperAdmin ? 'galeri' : view;
+
+    return (
+        <>
+            <motion.div
+                className="fixed inset-0 z-40 bg-black/60"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={onClose}
+                aria-hidden="true"
+            />
+            <motion.aside
+                role="dialog"
+                aria-modal="true"
+                aria-label="Kelola data proyek"
+                className="fixed inset-y-0 right-0 z-[41] w-full max-w-6xl flex flex-col bg-slate-100 dark:bg-slate-950 border-l border-black/10 dark:border-white/10 shadow-2xl"
+                style={getDivisionCssVars(project.division) as React.CSSProperties}
+                initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                transition={{ type: 'tween', duration: 0.2 }}
+            >
+                <div className="shrink-0 flex items-center gap-3 px-4 py-3 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b border-black/5 dark:border-white/10">
+                    <div className="min-w-0 flex-1">
+                        <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">Kelola Data</h2>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">{project.name}</p>
+                    </div>
+                    <ViewPills label="Bagian kelola data" views={views} active={active} onChange={onView} />
+                    <button
+                        ref={closeRef}
+                        onClick={onClose}
+                        aria-label="Tutup kelola data"
+                        title="Tutup (Esc)"
+                        className="shrink-0 min-w-11 min-h-11 inline-flex items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                    >
+                        <X className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                </div>
+                <ShellCtx.Provider value={true}>
+                    <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden overscroll-contain p-3 sm:p-4 max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+                        <div className="lg:h-full lg:min-h-0">
+                            {active === 'galeri' && <GalleryTab project={project} isAdmin={isAdmin} onChanged={onChanged} />}
+                            {active === 'dokumen' && <DocumentsTab project={project} isAdmin={isAdmin} onChanged={onChanged} />}
+                            {active === 'lokasi' && <LocationTab project={project} isAdmin={isAdmin} onSaved={onChanged} />}
+                            {active === 'pic' && isSuperAdmin && (
+                                <TabShell><PicPanel projectId={project._id} /></TabShell>
+                            )}
+                        </div>
+                    </div>
+                </ShellCtx.Provider>
+            </motion.aside>
+        </>
     );
 }
 

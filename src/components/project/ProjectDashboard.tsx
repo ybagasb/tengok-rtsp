@@ -56,6 +56,8 @@ interface Props<T extends string> {
     onGoLaporan: () => void;
     /** Isi kartu CPI/SPI (tampil + edit), dikelola oleh pemanggil */
     indeks: ReactNode;
+    /** true = tinggi mengikuti induk (dipakai di dalam sub-tampilan), bukan tinggi layar. */
+    fill?: boolean;
 }
 
 const LINGKUP_MAX = 6;
@@ -193,7 +195,7 @@ function FisikBody({ realisasi, rencana, deviasi, sampai, startDate, endDate }: 
     );
 }
 
-export default function ProjectDashboard<T extends string>({ project, status, onlineCams, fisikSampai, completeness, canEdit, onGoTab, onGoLaporan, indeks }: Props<T>) {
+export default function ProjectDashboard<T extends string>({ project, status, onlineCams, fisikSampai, completeness, canEdit, onGoTab, onGoLaporan, indeks, fill = false }: Props<T>) {
     const latest = latestLaporan(project.laporanBulanan);
     const periodeText = latest ? periodeLabel(latest.periode) : '';
     const goLaporan = canEdit ? { label: 'Isi Laporan Bulanan', run: onGoLaporan } : undefined;
@@ -421,7 +423,7 @@ export default function ProjectDashboard<T extends string>({ project, status, on
     );
 
     return (
-        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-12 lg:grid-rows-[auto_minmax(0,1fr)] lg:h-[calc(100dvh-var(--ph-h,5.5rem)-1.5rem)]">
+        <div className={`flex flex-col gap-3 lg:grid lg:grid-cols-12 lg:grid-rows-[auto_minmax(0,1fr)] ${fill ? 'lg:h-full' : 'lg:h-[calc(100dvh-var(--ph-h,5.5rem)-1.5rem)]'}`}>
             {/* Baris 1: KPI */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 lg:col-span-12">
                 {kpis.map(k => (

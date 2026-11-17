@@ -65,7 +65,8 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { useIsPhone } from "@/lib/phoneMode";
 import { useTheme } from "@/components/ThemeProvider";
 import { TILE_THEME, getDivisionCssVars, type DivisionKey, type CategoryTileKey } from "@/lib/divisionTheme";
-import { dashboardForCategory } from "@/lib/categoryDashboards";
+import { dashboardForCategory, dashboardPinRank } from "@/lib/categoryDashboards";
+import { applyCategoryUnions, groupById, groupCategories, mapCategoriesFor } from "@/lib/categoryGroups";
 import type { IntroScene3DProps } from "@/components/intro/IntroScene3D";
 
 // Lazy-load IntroScene3D (Three.js tidak boleh SSR, loader tunggal via overlay HUD)
@@ -138,6 +139,7 @@ interface DivisionCategory {
   filledCount?: number;      // proyek yang sudah mengisi data (punya catatan pembaruan)
   cameraTotal?: number;
   cameraOnline?: number;
+  children?: DivisionCategory[]; // hanya item grup (lihat lib/categoryGroups.ts)
 }
 
 interface DivisionData {
@@ -246,6 +248,8 @@ export default function CategoriesPage() {
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
+  // Grup kategori yang sedang dibuka (mis. "grup-sekolah"); null = daftar kategori utama.
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [sceneMounted, setSceneMounted] = useState(false);
   const [sceneError, setSceneError] = useState(false);
@@ -557,7 +561,7 @@ export default function CategoriesPage() {
     return divisionsRes?.data?.find((d) => d.division === currentDivKey) || null;
   }, [currentDivKey, divisionsRes?.data]);
 
-  const levelItems = useMemo(() => {
+  const baseItems = useMemo(() => {
     if (!currentDivKey) return [];
     if (currentDivData?.categories && currentDivData.categories.length > 0) {
       return currentDivData.categories;
@@ -569,12 +573,25 @@ export default function CategoriesPage() {
     return [];
   }, [currentDivKey, currentDivData, divisionsError]);
 
+  // Kategori anggota grup dilipat jadi satu baris induk; saat grup dibuka, tampil sub-kategorinya.
+  const openGroup = groupById(openGroupId);
+  const levelItems = useMemo(() => {
+    if (!currentDivKey) return baseItems;
+    const grouped = groupCategories(currentDivKey, applyCategoryUnions(currentDivKey, baseItems));
+    if (openGroupId) {
+      const g = grouped.find((c) => c.identifier === openGroupId);
+      if (g?.children) return g.children;
+    }
+    return grouped;
+  }, [currentDivKey, baseItems, openGroupId]);
+
   const sortedItems = useMemo(() => {
-    // Kategori ber-dashboard (mis. PL Irigasi & JIAT) di-pin ke atas, sisanya urut proyek terbanyak.
+    // Dashboard ber-`pinned` (PL Irigasi & JIAT, Irigasi PL) di-pin ke atas menurut urutan registry,
+    // sisanya urut proyek terbanyak.
     return [...levelItems].sort((a, b) => {
-      const da = dashboardForCategory(a.identifier) ? 1 : 0;
-      const db = dashboardForCategory(b.identifier) ? 1 : 0;
-      if (da !== db) return db - da;
+      const da = dashboardPinRank(a.identifier);
+      const db = dashboardPinRank(b.identifier);
+      if (da !== db) return da < db ? -1 : 1;
       return (b.projectCount || 0) - (a.projectCount || 0);
     });
   }, [levelItems]);
@@ -585,18 +602,20 @@ export default function CategoriesPage() {
 
   const totalProjects = useMemo(() => {
     if (isDivisionsLoading) return "…";
+    if (openGroupId) return sortedItems.reduce((acc, c) => acc + (c.projectCount || 0), 0);
     return (
       currentDivData?.projectCount ??
       sortedItems.reduce((acc, c) => acc + (c.projectCount || 0), 0)
     );
-  }, [currentDivData, sortedItems, isDivisionsLoading]);
+  }, [currentDivData, sortedItems, isDivisionsLoading, openGroupId]);
 
   const isSearching = searchQuery.trim().length > 0;
   const filteredItems = useMemo(() => {
     return isSearching
-      ? sortedItems.filter((c) =>
-          c.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
-        )
+      ? sortedItems.filter((c) => {
+          const q = searchQuery.trim().toLowerCase();
+          return c.name.toLowerCase().includes(q) || !!c.children?.some((ch) => ch.name.toLowerCase().includes(q));
+        })
       : sortedItems;
   }, [isSearching, sortedItems, searchQuery]);
 
@@ -691,6 +710,7 @@ export default function CategoriesPage() {
       console.debug(`[Intro3D] onDivisionClick dipanggil: ${divKey} (index ${i}) -> beralih ke fase 'detail'`);
       setSearchQuery("");
       setShowAllCategories(false);
+      setOpenGroupId(null);
       setSelectedDiv(i);
       setPhase("detail");
       setSheetStop("mid");
@@ -708,6 +728,7 @@ export default function CategoriesPage() {
   const handleBackToSplit = useCallback(() => {
     setSearchQuery("");
     setShowAllCategories(false);
+    setOpenGroupId(null);
     setPhase("split");
     setSelectedDiv(-1);
     resetNavFocus();
@@ -719,8 +740,17 @@ export default function CategoriesPage() {
   // Tombol back panel detail: keluar panel ke pilihan divisi (hub RRB tidak lagi
   // punya sub-panel — klik divisi langsung membuka peta RRB).
   const handleDetailBack = useCallback(() => {
+    // Di dalam grup (mis. Sekolah): kembali ke daftar kategori divisi dulu.
+    if (openGroupId) {
+      setOpenGroupId(null);
+      setSearchQuery("");
+      setShowAllCategories(false);
+      resetNavFocus();
+      setAnnouncement("Kembali ke daftar kategori");
+      return;
+    }
     handleBackToSplit();
-  }, [handleBackToSplit]);
+  }, [handleBackToSplit, openGroupId, resetNavFocus]);
 
   // Pilih divisi di panel hub RRB -> buka peta proyek divisi itu (peta biasa).
   const handleRrbPick = useCallback((divKey: DivisionKey) => {
@@ -750,17 +780,34 @@ export default function CategoriesPage() {
     (divisionKey: CategoryTileKey, categoryIdentifier?: string) => {
       // Hub RRB bukan divisi DB: jangan pernah buka /map?division=REHAB.
       if (TILE_THEME[divisionKey].isHub) return;
+      // Baris grup: buka sub-kategori, jangan buka peta.
+      const grp = groupById(categoryIdentifier);
+      if (grp) {
+        setOpenGroupId(grp.id);
+        setSearchQuery("");
+        setShowAllCategories(false);
+        resetNavFocus();
+        setAnnouncement(`${grp.name} dibuka. Pilih sub-kategori.`);
+        return;
+      }
+      // "Semua proyek" di dalam grup: peta berisi semua sub-kategori grup itu.
+      if (!categoryIdentifier && openGroup) {
+        router.push(
+          `/map?division=${encodeURIComponent(divisionKey)}&category=${encodeURIComponent(openGroup.children.join(","))}`
+        );
+        return;
+      }
       if (categoryIdentifier) {
         router.push(
           `/map?division=${encodeURIComponent(divisionKey)}&category=${encodeURIComponent(
-            categoryIdentifier
+            mapCategoriesFor(divisionKey, categoryIdentifier).join(",")
           )}`
         );
       } else {
         router.push(`/map?division=${encodeURIComponent(divisionKey)}`);
       }
     },
-    [router]
+    [router, openGroup, resetNavFocus]
   );
 
   const onDivisionHover = useCallback(
@@ -1404,7 +1451,7 @@ export default function CategoriesPage() {
 
           {/* Panduan pengguna (PDF) */}
           <a
-            href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
+            href="/Panduan-Input-Detail-Proyek.pdf?v=20261117"
             target="_blank"
             rel="noopener noreferrer"
             download
@@ -1612,7 +1659,7 @@ export default function CategoriesPage() {
                     </button>
                     <a
                       role="menuitem"
-                      href="/Panduan-Input-Detail-Proyek.pdf?v=20261112"
+                      href="/Panduan-Input-Detail-Proyek.pdf?v=20261117"
                       target="_blank"
                       rel="noopener noreferrer"
                       download
@@ -1887,14 +1934,14 @@ export default function CategoriesPage() {
                         <button
                           type="button"
                           onClick={handleDetailBack}
-                          aria-label="Kembali ke pilihan divisi"
+                          aria-label={openGroup ? "Kembali ke daftar kategori" : "Kembali ke pilihan divisi"}
                           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-black/[0.04] text-slate-700 focus-visible:ring-2 focus-visible:ring-[rgba(var(--div-accent-rgb),0.7)] focus-visible:outline-none dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-200"
                         >
                           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
                         </button>
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-mono text-xs font-bold uppercase tracking-[0.18em] div-accent-text">
-                            {isHub ? currentTheme.short : `${currentTheme.short} · ${totalProjects} proyek`}
+                            {isHub ? currentTheme.short : `${currentTheme.short}${openGroup ? ` · ${openGroup.name}` : ""} · ${totalProjects} proyek`}
                           </p>
                           <h2 className="line-clamp-2 text-sm font-black uppercase leading-tight tracking-tight text-slate-900 dark:text-white">
                             {currentTheme.title}
@@ -2020,7 +2067,7 @@ export default function CategoriesPage() {
                     }`}
                   >
                     <span className="flex items-center gap-2">
-                      <span>SEMUA PROYEK DIVISI INI</span>
+                      <span>{openGroup ? `SEMUA PROYEK ${openGroup.name.toUpperCase()}` : "SEMUA PROYEK DIVISI INI"}</span>
                       <span className="px-1.5 py-0.5 text-[11px] font-mono bg-[rgba(var(--div-accent-rgb),0.2)] font-bold rounded-md">
                         {totalProjects}
                       </span>
@@ -2061,10 +2108,10 @@ export default function CategoriesPage() {
                   {/* Bar Header Kategori / Pilih Divisi (hub) */}
                   <div className="flex items-center justify-between mb-2 pb-2 border-b border-black/10 dark:border-white/10">
                     <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                      {isHub ? "PILIH DIVISI" : isSearching ? "HASIL PENCARIAN" : "PILIH LEVEL / KATEGORI"}
+                      {isHub ? "PILIH DIVISI" : isSearching ? "HASIL PENCARIAN" : openGroup ? `SUB-KATEGORI ${openGroup.name.toUpperCase()}` : "PILIH LEVEL / KATEGORI"}
                     </span>
                     <span className="text-[11px] font-bold tracking-wider text-slate-500 dark:text-slate-400 font-mono">
-                      {isHub ? `${RRB_DIVISIONS.length} Divisi` : isDivisionsLoading ? "…" : `${filteredItems.length} Kategori`}
+                      {isHub ? `${RRB_DIVISIONS.length} Divisi` : isDivisionsLoading ? "…" : `${filteredItems.length} ${openGroup ? "Sub-kategori" : "Kategori"}`}
                     </span>
                   </div>
                 </div>
@@ -2163,6 +2210,7 @@ export default function CategoriesPage() {
                             </p>
                             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                               <span>{pCount} proyek</span>
+                              {cat.children && <span>· {cat.children.length} sub-kategori</span>}
                               {/* Kelengkapan data: berapa proyek yang sudah mengisi data vs total */}
                               {pCount > 0 && (() => {
                                 const filled = cat.filledCount ?? 0;
@@ -2202,7 +2250,7 @@ export default function CategoriesPage() {
                           <span
                             className="ml-auto flex items-center gap-1 font-bold text-[11px] tracking-[0.15em] shrink-0 div-accent-text"
                           >
-                            MASUK{" "}
+                            {cat.children ? "BUKA" : "MASUK"}{" "}
                             <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" aria-hidden="true" />
                           </span>
 

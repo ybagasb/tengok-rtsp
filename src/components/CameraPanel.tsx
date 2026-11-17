@@ -148,6 +148,11 @@ interface CameraPanelProps {
 
 type TabType = 'overview' | 'financial' | 'operational' | 'changemgmt' | 'qhsse';
 
+// Tombol Detail membuka halaman detail di tab yang sama (nilai ?tab= dibaca project/[id]/page.tsx).
+const DETAIL_TAB_QUERY: Record<TabType, string> = {
+    overview: 'ringkasan', financial: 'finansial', operational: 'operasi', changemgmt: 'change', qhsse: 'qhsse',
+};
+
 // ── Status Metas ──────────────────────────────────────────────────────────────
 const STATUS_META: Record<string, { label: string; color: string; badge: string; glow: string; border: string }> = {
     planning:  {
@@ -522,7 +527,7 @@ export default function CameraPanel({ location, onClose, onStatusChange, realtim
                     {/* Action cluster (Detail + Tutup) */}
                     <div className="flex items-center gap-1.5 shrink-0">
                         <button
-                            onClick={() => router.push(`/project/${location._id}`)}
+                            onClick={() => router.push(`/project/${location._id}?tab=${DETAIL_TAB_QUERY[activeTab]}`)}
                             title="Halaman Detail Proyek Lengkap"
                             aria-label="Buka detail proyek lengkap"
                             className="flex items-center justify-center gap-1.5 px-3 py-2 min-h-11 min-w-11 rounded-xl bg-[rgba(var(--div-accent-rgb),0.15)] hover:bg-[rgba(var(--div-accent-rgb),0.25)] border border-[rgba(var(--div-accent-rgb),0.3)] div-accent-text dark:bg-[rgba(var(--div-accent-rgb),0.1)] dark:hover:bg-[rgba(var(--div-accent-rgb),0.2)] dark:border-[rgba(var(--div-accent-rgb),0.3)] text-xs font-bold transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-[rgba(var(--div-accent-rgb),0.1)]"

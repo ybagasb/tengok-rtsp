@@ -37,6 +37,11 @@ function pct(v?: number): string {
   if (v === undefined || v === null || !Number.isFinite(v)) return "—";
   return v.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
 }
+/** Persen dengan tanda + untuk nilai positif; "—" bila kosong. */
+function signedPct(v?: number): string {
+  const t = pct(v);
+  return v !== undefined && v !== null && Number.isFinite(v) && v >= 0 ? `+${t}` : t;
+}
 function tgl(v?: string): string {
   if (!v) return "—";
   const d = new Date(v);
@@ -269,19 +274,18 @@ function ProgramTable({ division, category, rows }: { division?: string; categor
   return (
     <table className="w-full table-fixed border-collapse text-left text-[11px]">
       <colgroup>
-        <col className="w-[15%]" />
-        <col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[8%]" />
-        <col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[9%]" />
-        <col className="w-[8%]" /><col className="w-[8%]" /><col className="w-[8%]" />
-        <col className="w-[10%]" />
+        <col className="w-[14%]" />
+        <col className="w-[9%]" />
+        {Array.from({ length: 12 }, (_, i) => <col key={i} className="w-[6.4%]" />)}
       </colgroup>
       <thead>
         <tr className="bg-black/[0.03] text-[10px] uppercase tracking-wider text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
           <th rowSpan={2} className="px-3 py-2 text-left font-black align-middle">Proyek</th>
+          <th rowSpan={2} className="border-l border-black/10 px-2 py-2 text-center font-black align-middle dark:border-white/10">Target</th>
           <th colSpan={3} className={thGroup}>Progress Fisik</th>
           <th colSpan={3} className={thGroup}>Progress Keuangan</th>
+          <th colSpan={3} className={thGroup} title="Progress internal: rencana internal (RBP) lawan realisasi internal (RI), dalam persen nilai kontrak">Progress Internal</th>
           <th colSpan={3} className={thGroup}>Profitabilitas (R / R)</th>
-          <th rowSpan={2} className="border-l border-black/10 px-2 py-2 text-left font-black align-middle dark:border-white/10">Target</th>
         </tr>
         <tr className="bg-black/[0.02] text-[10px] uppercase tracking-wider text-slate-500 dark:bg-white/[0.02] dark:text-slate-400">
           <th className={thSubL}>Rencana</th>
@@ -290,6 +294,9 @@ function ProgramTable({ division, category, rows }: { division?: string; categor
           <th className={thSubL}>Dipa</th>
           <th className={thSub}>MC Cair</th>
           <th className={thSub}>Tagihan</th>
+          <th className={thSubL} title="Rencana Internal s.d. bulan laporan terakhir (Rencana Tahunan)">RBP</th>
+          <th className={thSub} title="Realisasi internal: pendapatan s.d. bulan laporan terakhir (Hasil Usaha)">RI</th>
+          <th className={thSub}>Deviasi</th>
           <th className={thSubL}>BL</th>
           <th className={thSub}>BAU</th>
           <th className={thSub}>L/R</th>
@@ -304,24 +311,38 @@ function ProgramTable({ division, category, rows }: { division?: string; categor
               className={`border-t border-black/[0.06] align-top transition-colors hover:bg-[rgba(var(--div-accent-rgb),0.07)] dark:border-white/[0.06] ${idx % 2 ? "bg-black/[0.015] dark:bg-white/[0.015]" : ""}`}
             >
               <td className="px-3 py-2.5">
-                <Link href={mapHref} className="font-sans text-xs font-bold leading-tight text-slate-900 hover:underline dark:text-white" title="Buka peta proyek">
+                <Link href={`${mapHref}${mapHref.includes("?") ? "&" : "?"}project=${encodeURIComponent(id)}`} className="font-sans text-xs font-bold leading-tight text-slate-900 hover:underline dark:text-white" title="Buka peta proyek">
                   {v.name}
                 </Link>
               </td>
+              <Cell
+                top={tgl(v.targetDate)}
+                bottom={sisaHariText(v.sisaHari)}
+                bottomCls={sisaHariCls(v.sisaHari)}
+                bottom2={v.cutOffLabel ? `cut-off ${v.cutOffLabel}` : undefined}
+                border
+                small
+              />
               <Cell top={pct(v.fisikRencana.percent)} bottom={fRpShort(v.fisikRencana.rupiah)} border />
               <Cell top={pct(v.fisikRealisasi.percent)} bottom={fRpShort(v.fisikRealisasi.rupiah)} highlight />
               <Cell
-                top={`${devPositive ? "+" : ""}${pct(v.fisikDeviasi.percent)}`}
+                top={signedPct(v.fisikDeviasi.percent)}
                 bottom={fRpShort(v.fisikDeviasi.rupiah)}
                 tone={devPositive ? "emerald" : "rose"}
               />
               <Cell top={fRpShort(v.dipaTersedia)} border />
               <Cell top={fRpShort(v.mcCair)} bottom={v.mcCairLabel} />
               <Cell top={fRpShort(v.tagihanBruto)} />
+              <Cell top={pct(v.internalRencana.percent)} bottom={fRpShort(v.internalRencana.rupiah)} border />
+              <Cell top={pct(v.internalRealisasi.percent)} bottom={fRpShort(v.internalRealisasi.rupiah)} highlight />
+              <Cell
+                top={signedPct(v.internalDeviasi.percent)}
+                bottom={fRpShort(v.internalDeviasi.rupiah)}
+                tone={v.internalDeviasi.percent === undefined ? undefined : v.internalDeviasi.percent >= 0 ? "emerald" : "rose"}
+              />
               <Cell top={pct(v.bl.rencana)} bottom={pct(v.bl.realisasi)} border pair />
               <Cell top={pct(v.bau.rencana)} bottom={pct(v.bau.realisasi)} pair />
               <Cell top={pct(v.labaRugi.rencana)} bottom={pct(v.labaRugi.realisasi)} pair />
-              <Cell top={tgl(v.targetDate)} bottom={v.cutOffLabel ? `cut-off ${v.cutOffLabel}` : undefined} border small />
             </tr>
           );
         })}
@@ -330,16 +351,30 @@ function ProgramTable({ division, category, rows }: { division?: string; categor
   );
 }
 
-function Cell({ top, bottom, border = false, highlight = false, tone, pair = false, small = false }: {
-  top: string; bottom?: string; border?: boolean; highlight?: boolean; tone?: "emerald" | "rose"; pair?: boolean; small?: boolean;
+function sisaHariText(n?: number): string | undefined {
+  if (n === undefined) return undefined;
+  if (n < 0) return `lewat ${Math.abs(n)} hari`;
+  if (n === 0) return "hari ini";
+  return `sisa ${n} hari`;
+}
+function sisaHariCls(n?: number): string | undefined {
+  if (n === undefined) return undefined;
+  if (n < 0) return "font-bold text-rose-600 dark:text-rose-400";
+  if (n <= 30) return "font-bold text-amber-600 dark:text-amber-400";
+  return undefined;
+}
+
+function Cell({ top, bottom, bottomCls, bottom2, border = false, highlight = false, tone, pair = false, small = false }: {
+  top: string; bottom?: string; bottomCls?: string; bottom2?: string; border?: boolean; highlight?: boolean; tone?: "emerald" | "rose"; pair?: boolean; small?: boolean;
 }) {
   const toneCls = tone === "emerald" ? "text-emerald-600 dark:text-emerald-400" : tone === "rose" ? "text-rose-600 dark:text-rose-400" : "";
   return (
     <td className={`px-2 py-2.5 text-center ${border ? "border-l border-black/10 dark:border-white/10" : ""}`}>
       <span className={`block font-bold ${small ? "text-[11px]" : ""} ${highlight ? "div-accent-text" : toneCls}`}>{top}</span>
       {bottom && (
-        <span className={`block text-[10px] ${pair ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"}`}>{bottom}</span>
+        <span className={`block text-[10px] ${bottomCls ?? (pair ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400")}`}>{bottom}</span>
       )}
+      {bottom2 && <span className="block text-[10px] text-slate-500 dark:text-slate-400">{bottom2}</span>}
     </td>
   );
 }

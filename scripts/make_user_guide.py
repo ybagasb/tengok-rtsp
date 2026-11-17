@@ -6,8 +6,8 @@ Ditujukan untuk petugas proyek yang mengisi data (BUKAN orang teknis/IT).
 Bahasa dibuat sederhana, langkah demi langkah, tanpa jargon.
 
 Struktur menu di panduan ini mengikuti halaman /project/[id]:
-  Ringkasan (dashboard) · Cash & Keuangan · Operasi · CCTV · Laporan Bulanan ·
-  Change Management · QHSSE · Lainnya (Informasi, Lokasi, Kontrak, Progres, Galeri, Dokumen)
+  Ringkasan (pil: Dashboard, Informasi, Progres Fisik, CCTV) · Finansial (pil: Keuangan, Kontrak) ·
+  Operasi · Change · QHSSE · Laporan Bulanan; tombol Kelola Data di header (Galeri, Dokumen, Lokasi, PIC).
 
 Gambar  : scripts/guide-img/*.png (buat ulang dengan: node scripts/guide_shots.mjs)
 Jalankan: python scripts/make_user_guide.py
@@ -44,7 +44,7 @@ PIC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1tY8XWli4iPRfTJCNBUiRJbN
 CCTV_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1bHNUUJI4IQyyUfTvsVMICvD8jLQicCcA/edit?usp=sharing&ouid=103891759421561837812&rtpof=true&sd=true'
 GREEN_DK = colors.HexColor('#047857')
 
-EDISI = 'November 2026 (rev. 2)'
+EDISI = 'November 2026 (rev. 3)'
 
 OUT = 'public/Panduan-Input-Detail-Proyek.pdf'
 LOGO = 'public/LOGO_ABIPRAYA.png'
@@ -211,6 +211,10 @@ CROPS = {
     '18-progres-bulan.png': (0, 140, None, 1100),
     '20-dokumen.png': (0, 140, None, 700),
     '29-galeri.png': (0, 140, None, 1300),
+    # Panel kategori: buang bilah atas (nama dan email akun yang sedang login).
+    '33-kategori-kelengkapan.png': (0, 210, None, None),
+    '36-kategori-sekolah.png': (0, 210, None, None),
+    '37-sub-kategori-sekolah.png': (0, 210, None, None),
 }
 CAP = ParagraphStyle('CAP', parent=styles['Normal'], fontName='Helvetica-Oblique',
                      fontSize=8.5, textColor=SLATE_LIGHT, leading=12, alignment=TA_CENTER, spaceBefore=3, spaceAfter=10)
@@ -222,9 +226,13 @@ def _img(name, width_mm):
         return None
     im = PILImage.open(path).convert('RGB')
     box = CROPS.get(name)
+    # Gambar layar penuh (2880x1800): buang 140 px bawah (lencana "N" dev server Next di kiri bawah).
+    bottom = im.height - 140 if im.height >= 1790 else im.height
     if box:
         l, t, r, b = box
-        im = im.crop((l, t, r or im.width, b or im.height))
+        im = im.crop((l, t, r or im.width, b or bottom))
+    elif bottom != im.height:
+        im = im.crop((0, 0, im.width, bottom))
     buf = BytesIO()
     im.save(buf, 'JPEG', quality=88, optimize=True)
     buf.seek(0)
@@ -330,7 +338,8 @@ def build():
         'kotak pencarian kategori atau tombol panah di keyboard.',
         'Akan tampil <b>peta</b>. Klik <b>titik/penanda</b> lokasi proyek Anda '
         '(hijau = kamera CCTV mayoritas online, merah = mayoritas offline).',
-        'Pada panel yang muncul, klik tombol <b>"Detail"</b> di pojok kanan atas panel.',
+        'Pada panel yang muncul, klik tombol <b>"Detail"</b> di pojok kanan atas panel. Halaman proyek '
+        'langsung terbuka di <b>menu yang sama</b> dengan yang sedang Anda lihat di panel (mis. Finansial).',
         'Anda sekarang berada di <b>halaman proyek</b>. Di sinilah semua data diisi.',
     ]))
     E.append(tipbox(
@@ -354,13 +363,23 @@ def build():
         'mengisi data, <b>kuning</b> = sebagian, <b>merah</b> = belum ada yang mengisi. Arahkan kursor ke lencana '
         'untuk melihat rinciannya (mis. "7 proyek sudah mengisi data, 5 belum dilengkapi"). Gunakan ini untuk '
         'mengetahui proyek mana yang datanya masih perlu dilengkapi.', BODY))
+    E.append(Paragraph(
+        'Beberapa kategori digabung dalam satu baris. Contoh di Divisi 1: baris <b>Sekolah</b> berisi sub-kategori '
+        '<b>Sekolah Rakyat</b> dan <b>Sekolah</b>. Klik baris itu untuk membuka daftar sub-kategorinya; tombol '
+        '<b>"Semua proyek Sekolah"</b> membuka peta gabungan, dan tombol <b>Kembali</b> (atau Esc) menutup daftar sub-kategori. '
+        'Baris <b>PL Irigasi &amp; JIAT</b> (Divisi 2) membuka peta berisi proyek Irigasi PL dan JIAT sekaligus.', BODY))
     E.extend(shot('33-kategori-kelengkapan.png',
                   'Panel kategori sebuah divisi. Tiap kategori menampilkan lencana "n/N data" (kelengkapan pengisian) '
-                  'dan lencana CCTV. Sebagian kategori punya tombol <b>Dashboard</b> di sampingnya.', 150))
+                  'dan lencana CCTV. Setiap kategori punya tombol <b>Dashboard</b> di sampingnya.', 150))
+    E.extend(shot('36-kategori-sekolah.png',
+                  'Divisi 1: kategori Sekolah tampil sebagai satu baris (jumlah proyek dan data dari semua sub-kategorinya).', 150))
+    E.extend(shot('37-sub-kategori-sekolah.png',
+                  'Setelah baris Sekolah diklik: sub-kategori Sekolah Rakyat dan Sekolah. Tombol "Semua proyek Sekolah" membuka peta gabungan.', 150))
     E.append(Paragraph('Dashboard Model RRB (Rekap Dimensi Data)', H3))
     E.append(Paragraph(
-        'Sebagian kategori punya <b>tombol Dashboard</b> di samping tombol Masuk — mis. <b>PL Irigasi &amp; JIAT</b> '
-        '(Divisi 2), dan program <b>RRB (Rehab, Rekon &amp; Bencana)</b> lewat tombol Dashboard di menu RRB. '
+        '<b>Setiap kategori</b> punya <b>tombol Dashboard</b> di samping tombol Masuk — mis. <b>PL Irigasi &amp; JIAT</b> '
+        'dan <b>Irigasi PL</b> (Divisi 2), <b>Sekolah</b> (Divisi 1), atau <b>Jalan Tol</b> (Divisi 3). Khusus program '
+        '<b>RRB (Rehab, Rekon &amp; Bencana)</b>, dashboard dibuka lewat tombol Dashboard di menu RRB. '
         'Dashboard ini merekap dimensi data gaya RRB (Progress Fisik, Progress Keuangan, Profitabilitas BL/BAU/L-R) '
         'dari semua proyek terkait. <b>Semua angka diambil dari data proyek yang sudah Anda isi</b> '
         '(progress fisik, kontrak/DIPA, laporan bulanan) — tidak ada pengisian khusus dashboard, kecuali beberapa '
@@ -369,34 +388,37 @@ def build():
                   'Dashboard RRB: proyek kategori Bencana direkap per divisi dengan Progress Fisik (rencana/realisasi/deviasi), '
                   'Progress Keuangan (DIPA, MC Cair, Tagihan), dan Profitabilitas (BL/BAU/L-R).', 165))
     E.extend(shot('35-dashboard-irigasi-jiat.png',
-                  'Dashboard PL Irigasi & JIAT: saat ini berisi proyek JIAT (Divisi 2) dengan Progress Fisik, Progress Keuangan, dan Profitabilitas.', 165))
+                  'Dashboard PL Irigasi & JIAT: berisi dua tabel, Irigasi PL dan JIAT (Divisi 2). Kolom Target ada tepat setelah nama proyek. '
+                  'Klik nama proyek untuk membuka peta dan panel proyeknya langsung.', 165))
     E.append(callout(
-        'Dari mana angka dashboard? <b>Progress Fisik %</b> dari menu Progres; <b>nilai Rp fisik</b> = nilai kontrak × persen; '
-        '<b>DIPA</b> dari total Pagu/Rencana di Cash &amp; Keuangan; <b>Tagihan</b> dari Laporan Bulanan; '
-        '<b>BL/BAU/L-R</b> dari Hasil Usaha di Laporan Bulanan. <b>MC Cair</b> &amp; <b>cut-off</b> diisi di menu Cash &amp; Keuangan. '
+        'Dari mana angka dashboard? <b>Progress Fisik %</b> dari Ringkasan › Progres Fisik; <b>nilai Rp fisik</b> = nilai kontrak × persen; '
+        '<b>DIPA</b> dari total Pagu/Rencana di menu Finansial; <b>Tagihan</b> dari Laporan Bulanan; '
+        '<b>BL/BAU/L-R</b> dari Hasil Usaha di Laporan Bulanan. <b>MC Cair</b> &amp; <b>cut-off</b> diisi di menu Finansial. '
         'Jadi Anda cukup mengisi data proyek seperti biasa — dashboard menyusunnya otomatis.', 'Dashboard Memakai Data yang Sudah Ada'))
 
     # ══ 3. PETA MENU HALAMAN PROYEK ══════════════════════════════════════════
     E.append(Paragraph('Mengenal Menu di Halaman Proyek', H2))
     E.append(Paragraph(
-        'Di sisi kiri halaman proyek ada deretan <b>ikon menu</b>. Arahkan kursor ke deretan itu '
+        'Menu halaman proyek sama dengan panel peta: <b>lima menu</b> (Ringkasan, Finansial, Operasi, Change, QHSSE) ditambah '
+        '<b>Laporan Bulanan</b>. Di sisi kiri ada deretan <b>ikon menu</b>; arahkan kursor ke deretan itu '
         '(atau tekan Tab dengan keyboard) dan menu akan melebar menampilkan nama-namanya. '
-        'Berikut isi tiap menu dan kapan Anda memakainya:', BODY))
+        'Beberapa menu punya <b>pil pilihan</b> di bagian atas isinya. Berikut isi tiap menu:', BODY))
     E.append(field_table([
-        ('Ringkasan', '<b>Dashboard satu layar</b>: kartu status, Progress Fisik dan Keuangan, CPI/SPI, Kurva S, '
-                      'Arus Kas, Hasil Usaha, Tagihan &amp; Pengadaan, serta <b>indikator kelengkapan data</b>. '
-                      'Mulailah dari sini untuk tahu bagian mana yang belum diisi.'),
-        ('Cash &amp; Keuangan', 'Tagihan, kas masuk/keluar, hutang, piutang, CCC, hasil usaha, '
-                                'dan penyerapan anggaran (DIPA).'),
-        ('Operasi', 'Kinerja Operasi (PU/BK/LK), <b>Progress Mingguan</b>, Milestone, '
+        ('Ringkasan', 'Empat pilihan di atas: <b>Dashboard</b> (satu layar: Progress Fisik dan Keuangan, CPI/SPI, Hasil Usaha, '
+                      'Tagihan &amp; Pengadaan, QHSSE, serta <b>indikator kelengkapan data</b>), <b>Informasi</b> (identitas, pelaksana, tanggal, PM), '
+                      '<b>Progres Fisik</b> (rencana dan realisasi), dan <b>CCTV</b> (video langsung semua kamera proyek). '
+                      'Mulailah dari Dashboard untuk tahu bagian mana yang belum diisi.'),
+        ('Finansial', 'Dua pilihan: <b>Keuangan</b> (tagihan, kas, hutang, piutang, CCC, hasil usaha, penyerapan anggaran DIPA, MC Cair) '
+                      'dan <b>Kontrak</b> (nomor dan nilai kontrak, waktu kontrak).'),
+        ('Operasi', 'Kinerja Operasi (PU/BK/LK), <b>Progress Mingguan</b>, <b>Lingkup Pekerjaan</b>, Milestone, '
                     'Sumber Daya, dan Monitoring Pengadaan.'),
-        ('CCTV', '<b>Video langsung</b> semua kamera di proyek ini, lengkap dengan status online/offline.'),
-        ('Laporan Bulanan', '<b>Pusat pengisian angka rutin tiap bulan</b>: Earned Value, Kurva S, hasil usaha, '
-                            'arus kas, posisi keuangan (hutang, BAD, piutang, CCC), tagihan, dan pengadaan. Juga tempat Rencana Tahunan dan Saldo Awal Kas.'),
-        ('Change Management', 'Catatan perubahan harga/lingkup, klaim, dan masalah hukum.'),
+        ('Change', 'Catatan perubahan harga/lingkup, klaim, dan masalah hukum (Change Management).'),
         ('QHSSE', '<b>Data bulanan QHSSE</b> (Quality, Health, Safety, Security, Environment): 9 dimensi mutu &amp; K3L. '
                   'Sebagian dimensi (TRIR, Efisiensi Energi) dihitung otomatis dari elemen rumus.'),
-        ('Lainnya', 'Informasi, Lokasi, Kontrak, Progres, Galeri, dan <b>Dokumen</b> (unggah dokumen pendukung).'),
+        ('Laporan Bulanan', '<b>Pusat pengisian angka rutin tiap bulan</b>: Earned Value, Kurva S, hasil usaha, '
+                            'arus kas, posisi keuangan (hutang, BAD, piutang, CCC), tagihan, dan pengadaan. Juga tempat Rencana Tahunan dan Saldo Awal Kas.'),
+        ('Kelola Data (tombol di header)', 'Panel yang bergeser dari kanan: <b>Galeri</b> foto, <b>Dokumen</b> pendukung, '
+                                           '<b>Lokasi &amp; Footprint</b> bangunan, dan <b>PIC Proyek</b> (khusus super-admin).'),
     ], col1='Menu'))
     E.append(Spacer(1, 3 * mm))
     _menu = _img('01-menu-proyek.png', 44)
@@ -406,7 +428,8 @@ def build():
             Paragraph('Menu aktif ditandai <b>warna divisi proyek</b> (biru, hijau-tosca, atau kuning). '
                       'Klik ikon atau namanya untuk berpindah.', BODY),
             Paragraph('Urutan yang disarankan: mulai dari <b>Ringkasan</b> (cek yang belum diisi), lalu '
-                      '<b>Laporan Bulanan</b> untuk angka rutin, kemudian menu lain sesuai kebutuhan.', BODY),
+                      '<b>Laporan Bulanan</b> untuk angka rutin, kemudian menu lain sesuai kebutuhan. '
+                      'Foto dan dokumen ada di tombol <b>Kelola Data</b> di bagian atas halaman.', BODY),
             Paragraph('Di layar HP, menu dibuka lewat tombol <b>garis tiga (☰)</b> atau deretan tab di bagian atas halaman.', BODY),
             Paragraph('<i>Gambar: menu samping saat disorot kursor.</i>', CAP),
         ]
@@ -421,7 +444,7 @@ def build():
         'kecuali nilai CPI/SPI bila belum ada laporan bulanan.', BODY))
     E.extend(shot('02-dashboard-ringkasan.png',
                   'Dashboard Ringkasan: baris atas berisi kartu status, baris tengah berisi Progress Fisik, Progress Keuangan, '
-                  'CPI/SPI, dan Kurva S, baris bawah berisi Arus Kas, Hasil Usaha, Tagihan &amp; Pengadaan, serta Kelengkapan &amp; Lingkup.', 165))
+                  'CPI/SPI, dan Hasil Usaha, serta ringkasan QHSSE; baris bawah berisi Tagihan &amp; Pengadaan dan Kelengkapan &amp; Lingkup.', 165))
     E.append(Paragraph('Cara Memakai Indikator Kelengkapan', H3))
     E.append(Paragraph(
         'Kartu <b>"Kelengkapan &amp; Lingkup"</b> di kanan bawah dashboard menunjukkan persen kelengkapan data dan '
@@ -436,20 +459,21 @@ def build():
     E.append(PageBreak())
     E.append(Paragraph('Dimensi Data yang Diisi PIC', H2))
     E.append(Paragraph(
-        'Data proyek dibagi menjadi <b>16 dimensi</b>. Setiap dimensi punya tempat isi sendiri, tombol <b>Simpan</b> sendiri, '
+        'Data proyek dibagi menjadi <b>17 dimensi</b>. Setiap dimensi punya tempat isi sendiri, tombol <b>Simpan</b> sendiri, '
         'dan keterangan <b>"Diperbarui ... · nama"</b> di bawah judulnya yang menunjukkan <b>kapan dan oleh siapa</b> dimensi itu '
         'terakhir disimpan. Tabel berikut adalah daftar lengkapnya:', BODY))
     E.append(dim_table([
-        ('Informasi', 'Lainnya → Informasi',
+        ('Informasi', 'Ringkasan → Informasi',
          'Pengguna Jasa, Pengawas, Penyedia Jasa, Kontraktor, Status, Tanggal Mulai &amp; Selesai, <b>Nama PM / PIC</b>, <b>No. HP PM</b>, Deskripsi.',
          'Nama PM, No. HP PM (8–15 digit), dan Pengguna Jasa dihitung di indikator kelengkapan.'),
-        ('Kontrak', 'Lainnya → Kontrak', 'Nomor kontrak dan nilai kontrak.',
+        ('Kontrak', 'Finansial → Kontrak', 'Nomor kontrak dan nilai kontrak.',
          'Nilai kontrak menjadi pembagi persen pada Kurva S. Dokumen kontrak diunggah lewat Dokumen.'),
-        ('Progres fisik', 'Lainnya → Progres', 'Progres s.d. bulan, Rencana %, Realisasi %, Lingkup Pekerjaan.',
+        ('Progres fisik', 'Ringkasan → Progres Fisik', 'Progres s.d. bulan, Rencana %, Realisasi % (diketik, boleh koma).',
          'Deviasi dihitung otomatis (2 desimal). Angka 0% sah bila bulannya sudah diisi.'),
-        ('CPI / SPI', 'Ringkasan → kartu CPI / SPI', 'CPI dan SPI.',
+        ('Lingkup Pekerjaan', 'Operasi', 'Daftar lingkup pekerjaan proyek (satu baris satu lingkup).', 'Boleh dikosongkan.'),
+        ('CPI / SPI', 'Ringkasan → Dashboard (kartu CPI / SPI)', 'CPI dan SPI.',
          'Terkunci otomatis bila Laporan Bulanan sudah punya BCWP dan ACWP/BCWS.'),
-        ('Finansial', 'Cash &amp; Keuangan',
+        ('Finansial', 'Finansial → Keuangan',
          'Tagihan bruto, Cash In/Out, Saldo Kas, Saldo Hutang, BAD, Piutang, CCC, Hasil Usaha, Progress Keuangan (DIPA), Belum Ditagihkan.',
          'Kolom yang ada di Laporan Bulanan terkunci dan diisi dari sana. Saldo Kas selalu diisi manual di sini.'),
         ('Kinerja Operasi', 'Operasi', 'PU dan BK. LK = PU − BK dihitung otomatis.', 'PU terkunci bila Laporan Bulanan sudah ada.'),
@@ -458,15 +482,15 @@ def build():
         ('Milestone', 'Operasi', 'Nama tahapan, tanggal, persen kemajuan.', 'Nama tahapan wajib.'),
         ('Sumber Daya', 'Operasi', 'Nama, kategori, jumlah, satuan.', 'Nama wajib.'),
         ('Monitoring Pengadaan', 'Operasi', 'Nama item major dan persen (0–100).', 'Nama item wajib.'),
-        ('Change Management', 'Change Management',
+        ('Change Management', 'Change',
          'Judul, Jenis, Status, Nilai, Tanggal, Target, Penanggung Jawab, Deskripsi, Dampak, Mitigasi.',
          'Judul wajib. Nilai boleh negatif.'),
         ('QHSSE', 'QHSSE',
          'Data bulanan 9 dimensi mutu, K3, kesehatan, lingkungan, dan keamanan (NC, Cost of NC, QPASS, TRIR, SMK3L, 5R, PAK, Efisiensi Energi, Keamanan).',
          'Diisi per bulan. TRIR &amp; Efisiensi Energi dihitung otomatis dari elemen rumus. Lihat bagian khusus QHSSE.'),
-        ('Lokasi', 'Lainnya → Lokasi', 'Footprint bangunan dan tinggi blok 3D.', '3 sampai 200 titik, tinggi 1–300 m.'),
-        ('Galeri', 'Lainnya → Galeri', 'Foto proyek (JPG, PNG, WebP, GIF).', 'Maks. 25 MB per foto, 200 foto per proyek.'),
-        ('Dokumen', 'Lainnya → Dokumen', 'PDF, Word, Excel, PowerPoint, teks, arsip, gambar.', 'Maks. 25 MB per berkas, 100 dokumen per proyek.'),
+        ('Lokasi', 'Kelola Data → Lokasi &amp; Footprint', 'Footprint bangunan dan tinggi blok 3D.', '3 sampai 200 titik, tinggi 1–300 m.'),
+        ('Galeri', 'Kelola Data → Galeri', 'Foto proyek (JPG, PNG, WebP, GIF).', 'Maks. 25 MB per foto, 200 foto per proyek.'),
+        ('Dokumen', 'Kelola Data → Dokumen', 'PDF, Word, Excel, PowerPoint, teks, arsip, gambar.', 'Maks. 25 MB per berkas, 100 dokumen per proyek.'),
         ('Laporan Bulanan', 'Laporan Bulanan',
          'Earned Value, hasil usaha, arus kas, posisi keuangan, tagihan, pengadaan; Rencana Tahunan; Saldo Awal Kas.',
          'Keterangan "Diperbarui" tampil di atas menu dan mencakup ketiga tab.'),
@@ -481,7 +505,7 @@ def build():
         'Tulisan <b>"Belum ada catatan pembaruan"</b> berarti bagian itu belum pernah disimpan sejak fitur ini aktif; '
         'datanya mungkin sudah ada sebelumnya, tetapi belum ada catatan kapan diubah.', BODY))
     E.extend(shot('23-informasi.png',
-                  'Menu Informasi. Di bawah judul "Informasi Proyek" tampil kapan terakhir diperbarui dan oleh siapa. '
+                  'Ringkasan → Informasi. Di bawah judul "Informasi Proyek" tampil kapan terakhir diperbarui dan oleh siapa. '
                   'Semua isi muat dalam satu layar.', 150))
     E.append(Paragraph('Satu Layar, Tanpa Scroll', H3))
     E.append(Paragraph(
@@ -489,7 +513,7 @@ def build():
         '(misalnya Operasi) dibagi menjadi kartu-kartu, masing-masing dengan judul, keterangan "Diperbarui", dan tombol Edit sendiri. '
         'Di HP atau layar kecil, kartu ditumpuk ke bawah dan halaman boleh di-scroll seperti biasa.', BODY))
     E.extend(shot('25-operasi.png',
-                  'Menu Operasi dibagi lima kartu: Kinerja Operasi dan Progress Mingguan (kiri), Sumber Daya (tengah), '
+                  'Menu Operasi dibagi enam kartu: Kinerja Operasi dan Progress Mingguan (kiri), Sumber Daya dan Lingkup Pekerjaan (tengah), '
                   'Milestone dan Monitoring Pengadaan (kanan).', 160))
     E.append(Paragraph('Daftar Panjang Dibagi Per Halaman', H3))
     E.append(Paragraph(
@@ -514,7 +538,7 @@ def build():
         ('8. Progres fisik', 'Bulan progres sudah disimpan, atau realisasi lebih dari 0%.'),
         ('9. Milestone', 'Sedikitnya satu milestone.'),
         ('10. Sumber Daya', 'Sedikitnya satu baris sumber daya.'),
-        ('11. Galeri', 'Sedikitnya satu foto.'),
+        ('11. Galeri', 'Sedikitnya satu foto (Kelola Data → Galeri).'),
     ], col1='Butir'))
     E.append(Spacer(1, 2 * mm))
     E.append(callout(
@@ -526,7 +550,7 @@ def build():
         'Aturan Pengisian'))
     E.append(Paragraph('Langkah 2 — Pola Mengisi (Sama di Semua Bagian)', H2))
     E.append(numbered([
-        'Pilih menu di sisi kiri (misalnya "Cash &amp; Keuangan", "Operasi", atau "Laporan Bulanan").',
+        'Pilih menu di sisi kiri (misalnya "Finansial", "Operasi", atau "Laporan Bulanan"). Bila ada pil di atas isinya, pilih pil yang sesuai.',
         'Klik tombol <b>"Edit"</b> (pensil) di kanan atas bagian yang ingin diisi. '
         'Satu menu bisa punya beberapa bagian, masing-masing punya tombol Edit sendiri.',
         'Isi kolom yang tersedia. Untuk daftar (seperti tahun anggaran, bulan progress '
@@ -570,7 +594,7 @@ def build():
                   '"Belum dilaporkan", hasil hitung CPI/SPI/CV/SV, lalu tab bagian isian (Earned Value, Hasil Usaha, Cash Flow, dan seterusnya).', 140))
     # ── Setup awal ──
     E.append(Paragraph('A. Setup Awal (Cukup Sekali)', H3))
-    E.append(Paragraph('<b>1) Nilai kontrak</b> — isi di menu <b>Lainnya → Kontrak</b>. '
+    E.append(Paragraph('<b>1) Nilai kontrak</b> — isi di menu <b>Finansial → Kontrak</b>. '
                        'Nilai ini dipakai sebagai pembagi untuk menghitung persen pada Kurva S.', BODY))
     E.append(Paragraph('<b>2) Rencana Tahunan</b> — buka menu Laporan Bulanan → tab <b>Rencana Tahunan</b>:', BODY))
     E.append(numbered([
@@ -629,7 +653,7 @@ def build():
         ('Rencana s.d bulan ini', '<b>Tidak diisi di sini.</b> Dibaca otomatis dari Rencana Tahunan.'),
         ('Cash Flow Bulan Ini', '<b>Cash In</b> dan <b>Cash Out</b> khusus bulan ini.'),
         ('Posisi Keuangan', '<b>Saldo hutang, BAD, piutang</b> (saldo di akhir bulan) dan <b>CCC</b> (dalam hari). '
-                            'Ini saldo, bukan arus: isi posisi pada akhir bulan itu. Tampil di menu Cash &amp; Keuangan.'),
+                            'Ini saldo, bukan arus: isi posisi pada akhir bulan itu. Tampil di menu Finansial.'),
         ('Tagihan', '<b>Tagihan bruto</b> (posisi saat ini) dan <b>target tagihan</b> (satu angka target).'),
         ('Pengadaan', '<b>Total paket</b>, <b>paket terealisasi</b>, <b>total pagu</b>, dan <b>pagu terealisasi</b> '
                       '(kumulatif s.d bulan ini).'),
@@ -672,8 +696,8 @@ def build():
     E.append(Spacer(1, 3 * mm))
     E.append(Paragraph('Posisi Keuangan: Hutang, BAD, Piutang, CCC', H3))
     E.append(Paragraph(
-        'Empat angka ini dulu diisi di menu Cash &amp; Keuangan. Sekarang diisi <b>sekali sebulan di sini</b>, '
-        'lalu otomatis tampil di Cash &amp; Keuangan dan tidak perlu diketik lagi. Isi saldo pada <b>akhir bulan laporan</b>. '
+        'Empat angka ini dulu diisi di menu Finansial. Sekarang diisi <b>sekali sebulan di sini</b>, '
+        'lalu otomatis tampil di Finansial dan tidak perlu diketik lagi. Isi saldo pada <b>akhir bulan laporan</b>. '
         'CCC diisi dalam hari; di atas 90 hari ditandai merah (perlu perhatian).', BODY))
     E.extend(shot('17-posisi-keuangan.png',
                   'Blok Posisi Keuangan di Laporan Bulanan. Di bawah tiap kolom tampil terjemahan nilainya (Rp ... M).', 150))
@@ -712,15 +736,15 @@ def build():
         'Begitu laporan bulanan tersimpan, data berikut diperbarui sendiri mengikuti <b>laporan periode terbaru</b>:', BODY))
     E.append(field_table([
         ('CPI, SPI (+ CV, SV)', 'Dihitung dari EVM. Tampil di menu <b>Ringkasan</b> dan panel peta.'),
-        ('Saldo Hutang, BAD, Piutang, CCC', 'Dari blok Posisi Keuangan. Tampil sebagai kartu di Cash &amp; Keuangan.'),
-        ('Tagihan Bruto', 'Dari blok Tagihan. Tampil di Cash &amp; Keuangan.'),
+        ('Saldo Hutang, BAD, Piutang, CCC', 'Dari blok Posisi Keuangan. Tampil sebagai kartu di Finansial.'),
+        ('Tagihan Bruto', 'Dari blok Tagihan. Tampil di Finansial.'),
         ('Hasil Usaha dan PU', 'Dari "Hasil Usaha s.d bulan ini": Pendapatan = PU, Biaya = HPP, Laba = Pendapatan − HPP. '
-                               'Tampil di Cash &amp; Keuangan dan Operasi. <b>BK tidak sama dengan HPP</b>, jadi BK tetap diisi '
+                               'Tampil di Finansial dan Operasi. <b>BK tidak sama dengan HPP</b>, jadi BK tetap diisi '
                                'sendiri di menu Operasi, dan LK dihitung = PU − BK.'),
         ('Cash In / Cash Out (total)', 'Saldo awal + jumlah semua laporan bulanan. <b>Saldo Kas tidak ikut dihitung</b>: '
-                                       'Saldo Kas diisi manual di menu Cash &amp; Keuangan.'),
+                                       'Saldo Kas diisi manual di menu Finansial.'),
         ('Kurva S', 'Realisasi (RI) = Pendapatan s.d bulan ini; rencana (Rencana Internal) = rencana pendapatan di Rencana Tahunan. '
-                    'Progres fisik (menu Progres) <b>bukan</b> turunan Kurva S dan tetap diisi sendiri.'),
+                    'Progres fisik (Ringkasan → Progres Fisik) <b>bukan</b> turunan Kurva S dan tetap diisi sendiri.'),
     ], col1='Data'))
     E.append(Spacer(1, 2 * mm))
     E.append(callout(
@@ -731,28 +755,22 @@ def build():
     E.extend(shot('08-ringkasan.png',
                   'Kartu CPI / SPI di dashboard Ringkasan setelah laporan diisi: CPI dan SPI tampil otomatis beserta catatan sumbernya (tombol Ubah tidak muncul).', 60))
     E.extend(shot('09-cash-keuangan.png',
-                  'Menu Cash & Keuangan: Saldo Hutang, BAD, Piutang, dan CCC tampil dari Laporan Bulanan '
+                  'Finansial → Keuangan: Saldo Hutang, BAD, Piutang, dan CCC tampil dari Laporan Bulanan '
                   '(ada catatan dan tombol menuju Laporan Bulanan).', 135))
     # ── Peta ──
     E.append(Paragraph('D. Di Mana Data Ini Tampil di Peta?', H3))
     E.append(Paragraph('Panel yang terbuka saat Anda mengklik proyek di peta ikut menampilkan data laporan bulanan:', BODY))
     E.append(field_table([
-        ('Tab Ringkasan', '<b>Progress Fisik Proyek</b> (dengan keterangan bulan), <b>Kurva S</b> tahun berjalan (garis Rencana Internal, RA Eksternal, dan Realisasi; arahkan kursor atau '
-                          'tekan panah kiri/kanan untuk melihat nilai per bulan), serta <b>CPI, SPI, CV, SV</b>.'),
-        ('Tab Finansial', '<b>Arus Kas Bulanan</b> (Cash In vs Cash Out), <b>Tagihan vs Target</b>, '
+        ('Tab Ringkasan', '<b>Progress Fisik Proyek</b> (dengan keterangan bulan) serta <b>CPI, SPI, CV, SV</b>.'),
+        ('Tab Finansial', '<b>Tagihan vs Target</b> '
                           'dan tabel <b>Hasil Usaha</b> (bulan ini · s.d bulan ini · rencana).'),
         ('Tab Operasi', '<b>Ringkasan Pengadaan</b>: jumlah paket dan progres pagu (realisasi dan sisa).'),
     ], col1='Tab di Panel'))
     E.append(Spacer(1, 2 * mm))
     E.append(Paragraph('Kartu-kartu ini hanya muncul bila proyek sudah punya laporan bulanan. Grafik menampilkan '
-                       '<b>satu tahun</b>, yaitu tahun laporan yang terakhir diisi.', BODY))
-    E.extend(shot('10-peta-kurva-s.png',
-                  'Panel peta, tab Ringkasan: kartu Realisasi, Rencana, dan Deviasi untuk bulan terpilih, bar PU terhadap RKAP, lalu grafik Kurva S. '
-                  'Klik chip di bawah grafik untuk menyembunyikan satu garis; tabel Rp miliar per bulan dibuka lewat tombol "Lihat tabel".', 112))
+                       '<b>satu tahun</b>, yaitu tahun laporan yang terakhir diisi. (Rencana Tahunan tetap dipakai untuk kolom rencana pada tabel Hasil Usaha.)', BODY))
     E.extend(shot('11-peta-cpi-spi.png',
                   'Panel peta, tab Ringkasan: CPI, SPI, serta CV dan SV.', 112))
-    E.extend(shot('12-peta-arus-kas.png',
-                  'Panel peta, tab Finansial: Arus Kas Bulanan (Cash In dan Cash Out, dalam Rp miliar).', 112))
     E.extend(shot('13-peta-tagihan.png',
                   'Panel peta, tab Finansial: Tagihan Bruto dibanding target tagihan.', 112))
     E.extend(shot('14-peta-hasil-usaha.png',
@@ -792,7 +810,7 @@ def build():
     ], col1='Kolom'))
 
     # ── Cash & Keuangan ──
-    E.append(Paragraph('Menu Cash &amp; Keuangan', H3))
+    E.append(Paragraph('Menu Finansial → Keuangan', H3))
     E.append(field_table([
         ('Tagihan Bruto', 'Total tagihan bruto proyek.'),
         ('Cash In', 'Total uang yang sudah masuk/diterima proyek.'),
@@ -827,7 +845,7 @@ def build():
 
     # ── Operasi ──
     E.append(Paragraph('Menu Operasi', H3))
-    E.append(Paragraph('Menu ini punya <b>lima bagian</b>, masing-masing dengan tombol Edit sendiri:', BODY))
+    E.append(Paragraph('Menu ini punya <b>enam bagian</b>, masing-masing dengan tombol Edit sendiri:', BODY))
 
     E.append(Paragraph('1) Kinerja Operasi (PU / BK / LK)', H3))
     E.append(Paragraph('Bila Laporan Bulanan sudah berisi "Hasil Usaha s.d bulan ini", bagian ini <b>terisi otomatis dan '
@@ -860,19 +878,23 @@ def build():
         'Di <b>peta</b>, panel samping (tab <b>Operasi</b>) menampilkan RA/RI untuk <b>bulan berjalan</b>. '
         'Agar tampil, isi progres untuk bulan yang sedang berjalan. '
         'Riwayat bulan lain tetap bisa dilihat di halaman proyek → menu Operasi.', 'RA/RI di Peta'))
-    E.append(Paragraph('3) Milestone (Tahapan Pekerjaan)', H3))
+    E.append(Paragraph('3) Lingkup Pekerjaan', H3))
+    E.append(Paragraph('Daftar lingkup pekerjaan proyek, satu baris untuk satu lingkup (mis. "Pekerjaan Struktur"). Tekan "Tambah" '
+                       'untuk menambah baris, ikon minus untuk menghapusnya, lalu <b>Simpan</b>. Daftar ini tampil di dashboard Ringkasan '
+                       'dan di panel peta.', BODY))
+    E.append(Paragraph('4) Milestone (Tahapan Pekerjaan)', H3))
     E.append(Paragraph('Daftar tahapan besar proyek beserta kemajuannya. Tekan "Tambah Milestone", '
                        'tulis nama tahapan dan tanggal, lalu geser/isi persen kemajuannya (0–100). '
                        'Tahapan yang mencapai 100% otomatis ditandai selesai. '
                        'Progress keseluruhan dihitung otomatis dari rata-rata semua tahapan.', BODY))
 
-    E.append(Paragraph('4) Sumber Daya', H3))
+    E.append(Paragraph('5) Sumber Daya', H3))
     E.append(Paragraph('Daftar alat, tenaga kerja, atau material di proyek. Tekan '
                        '"Tambah Sumber Daya". Tiap baris: <b>Nama</b>, <b>Kategori</b> '
                        '(Alat Berat / Tenaga Kerja / Material / Kendaraan / Peralatan), '
                        '<b>Jumlah</b>, dan <b>Satuan</b> (Unit / Orang / m³ / Ton / Set / Buah).', BODY))
 
-    E.append(Paragraph('5) Monitoring Pengadaan', H3))
+    E.append(Paragraph('6) Monitoring Pengadaan', H3))
     E.append(Paragraph('Daftar barang/pengadaan penting (major item) beserta persen '
                        'progresnya. Tekan "Tambah Item", isi <b>Nama Item</b> dan '
                        '<b>Persentase</b> (0–100). Ada di kartu kanan bawah menu Operasi.', BODY))
@@ -952,37 +974,44 @@ def build():
         '(perhitungan gabungan antar-proyek di tingkat divisi/perusahaan). Di tingkat satu proyek, Anda cukup '
         'mengisi <b>skor/jumlah</b> dimensinya seperti biasa.', 'Soal Rumus Korporat'))
 
-    # ── Lainnya ──
-    E.append(Paragraph('Menu Lainnya', H3))
-    E.append(Paragraph('Berisi enam bagian pendukung:', BODY))
+    # ── Informasi, Kontrak, Progres, Kelola Data ──
+    E.append(Paragraph('Informasi, Kontrak, dan Progres Fisik', H3))
+    E.append(Paragraph('Bagian ini dulu ada di menu "Lainnya". Sekarang letaknya mengikuti panel peta:', BODY))
     E.append(field_table([
-        ('Informasi', 'Pengguna Jasa, Pengawas, Penyedia Jasa, Kontraktor, Status '
+        ('Ringkasan → Informasi', 'Pengguna Jasa, Pengawas, Penyedia Jasa, Kontraktor, Status '
                       '(Perencanaan / Berjalan / Selesai), Tanggal Mulai &amp; Selesai, '
                       '<b>Nama PM / PIC</b> dan <b>No. HP PM</b>, serta Deskripsi proyek.'),
-        ('Lokasi', 'Titik lokasi proyek di peta, plus <b>Footprint Bangunan</b> (bentuk bangunan proyek yang tampil sebagai '
-                   'blok 3D di peta). Cara menggambarnya ada di bawah.'),
-        ('Kontrak', 'Nomor kontrak dan nilai kontrak. Masa pelaksanaan dihitung otomatis dari tanggal mulai dan selesai di bagian Informasi.'),
-        ('Progres', 'Progress fisik: pilih <b>"Progres s.d. bulan"</b>, lalu geser <b>Rencana</b> dan <b>Realisasi</b> (deviasi dihitung '
-                    'otomatis). Diisi sendiri (bukan turunan Kurva S). Di sini juga ada <b>Lingkup Pekerjaan</b> — tekan "Tambah" '
-                    'untuk menuliskan tiap lingkup.'),
+        ('Ringkasan → Progres Fisik', 'Pilih <b>"Progres s.d. bulan"</b>, lalu <b>ketik angka</b> Rencana dan Realisasi '
+                    '(boleh memakai koma, mis. 63,74). Deviasi dihitung otomatis. Diisi sendiri (bukan turunan Kurva S).'),
+        ('Finansial → Kontrak', 'Nomor kontrak dan nilai kontrak. Masa pelaksanaan dihitung otomatis dari tanggal mulai dan selesai di Ringkasan → Informasi.'),
+        ('Operasi → Lingkup Pekerjaan', 'Daftar lingkup pekerjaan; tekan "Tambah" untuk menuliskan tiap lingkup.'),
+    ], col1='Di mana'))
+    E.append(Paragraph('Kelola Data (Galeri, Dokumen, Lokasi, PIC)', H3))
+    E.append(Paragraph(
+        'Klik tombol <b>"Kelola Data"</b> di bagian atas halaman proyek (sebelah tombol "Lihat di Peta"). Sebuah panel bergeser dari kanan '
+        'dengan empat pilihan. Tutup dengan tombol <b>X</b>, klik area gelap di luar panel, atau tekan <b>Esc</b>.', BODY))
+    E.append(field_table([
         ('Galeri', 'Tekan <b>"Unggah Foto"</b> untuk menambah foto proyek (JPG, PNG, WebP, GIF; maks. 25 MB per foto, 200 foto); boleh memilih beberapa foto sekaligus. '
                    'Klik foto untuk melihat ukuran penuh; gunakan panah kiri/kanan untuk '
                    'berpindah foto dan <b>Esc</b> untuk menutup.'),
         ('Dokumen', 'Tekan <b>"Unggah Dokumen"</b> untuk menambah dokumen pendukung (PDF, Word, Excel, PowerPoint, dan lainnya). '
                     'Lihat bagian "Mengunggah Dokumen Pendukung" di bawah.'),
+        ('Lokasi &amp; Footprint', 'Titik lokasi proyek di peta, plus <b>Footprint Bangunan</b> (bentuk bangunan proyek yang tampil sebagai '
+                   'blok 3D di peta). Cara menggambarnya ada di bawah.'),
+        ('PIC Proyek', 'Hanya tampil untuk super-admin: menetapkan siapa saja PIC proyek ini.'),
     ], col1='Bagian'))
     E.extend(shot('24-kontrak.png',
-                  'Bagian Kontrak: nomor dan nilai kontrak, serta waktu kontrak yang dihitung otomatis dari tanggal di Informasi.', 140))
+                  'Finansial → Kontrak: nomor dan nilai kontrak, serta waktu kontrak yang dihitung otomatis dari tanggal di Ringkasan → Informasi.', 140))
     E.extend(shot('29-galeri.png',
-                  'Galeri Foto: foto tampil sebagai kotak seragam, lima kolom per baris, dan berhalaman bila fotonya banyak.', 150))
+                  'Kelola Data → Galeri: foto tampil sebagai kotak seragam, lima kolom per baris, dan berhalaman bila fotonya banyak.', 150))
     E.append(Spacer(1, 2 * mm))
-    E.append(Paragraph('Menggambar Footprint Bangunan (menu Lainnya → Lokasi)', H3))
+    E.append(Paragraph('Menggambar Footprint Bangunan (Kelola Data → Lokasi &amp; Footprint)', H3))
     E.append(Paragraph(
         'Footprint adalah bentuk bangunan proyek yang Anda gambar di atas citra satelit. '
         'Hasilnya tampil sebagai <b>blok 3D berwarna divisi</b> di peta, dan bangunan itu bisa diklik '
         'untuk membuka panel proyek. Gambar ini perlu karena banyak bangunan proyek belum ada di peta dunia.', BODY))
     E.append(numbered([
-        'Buka menu <b>Lainnya → Lokasi</b>, lalu klik <b>"Gambar"</b> (atau <b>"Edit"</b> bila sudah ada).',
+        'Klik <b>Kelola Data</b> → pilih <b>Lokasi &amp; Footprint</b>, lalu klik <b>"Gambar"</b> (atau <b>"Edit"</b> bila sudah ada).',
         'Titik <b>hijau</b> di peta adalah lokasi proyek. Perbesar peta (scroll atau tombol +/−) sampai bangunan terlihat jelas.',
         '<b>Klik di sudut-sudut bangunan</b> secara berurutan mengelilingi bangunan. Setiap klik menambah satu titik. '
         'Minimal <b>3 titik</b>.',
@@ -996,35 +1025,36 @@ def build():
         'tampil sebagai bidang datar berwarna.',
         'Untuk menghapus footprint: <b>Edit → Hapus semua → Simpan</b>.',
     ]))
-    E.append(Paragraph('Mengisi "Progres s.d. Bulan" (menu Lainnya → Progres)', H3))
+    E.append(Paragraph('Mengisi "Progres s.d. Bulan" (Ringkasan → Progres Fisik)', H3))
     E.append(Paragraph(
         'Angka Progress Fisik dibaca orang sebagai posisi pada <b>bulan tertentu</b>. Karena itu setiap kali Anda memperbarui '
         'Rencana dan Realisasi, pilih juga bulan yang dimaksud pada kolom <b>"Progres s.d. bulan"</b>. '
         'Bulan itu tampil sebagai keterangan <b>"s.d. Agustus 2026"</b> pada kartu Progress Fisik di dashboard dan di panel peta.', BODY))
     E.append(numbered([
-        'Buka menu <b>Lainnya → Progres</b>, lalu klik <b>"Edit"</b>.',
+        'Buka menu <b>Ringkasan</b>, pilih pil <b>"Progres Fisik"</b>, lalu klik <b>"Edit"</b>.',
         'Pada <b>"Progres s.d. bulan"</b>, pilih bulan dan tahun posisi progres yang Anda isi.',
-        'Geser <b>Rencana</b> dan <b>Realisasi</b> (atau gunakan panah keyboard untuk menyetel angka halus).',
-        'Klik <b>Simpan</b>.',
+        '<b>Ketik angka</b> Rencana (%) dan Realisasi (%). Koma atau titik sama-sama bisa (mis. <b>63,74</b> atau <b>63.74</b>). '
+        'Angka harus 0 sampai 100; bila di luar itu muncul pesan merah di bawah kolom.',
+        'Klik <b>Simpan</b>. Deviasi (Realisasi − Rencana) dihitung otomatis.',
     ]))
     E.extend(shot('18-progres-bulan.png',
-                  'Menu Progres saat diedit: kolom "Progres s.d. bulan" di bagian atas kartu Progress Fisik.', 150))
+                  'Ringkasan → Progres Fisik saat diedit: bulan progres, lalu kolom angka Rencana dan Realisasi (diketik, tanpa slider).', 150))
     E.extend(shot('22-peta-progress-fisik.png',
                   'Kartu Progress Fisik Proyek di panel peta. Keterangan bulan tampil di bawah judul.', 105))
-    E.append(Paragraph('Melihat CCTV Proyek (menu CCTV)', H3))
+    E.append(Paragraph('Melihat CCTV Proyek (Ringkasan → CCTV)', H3))
     E.append(Paragraph(
-        'Menu <b>CCTV</b> menampilkan <b>video langsung semua kamera</b> di proyek Anda dalam satu halaman. '
+        'Pil <b>CCTV</b> di menu Ringkasan menampilkan <b>video langsung semua kamera</b> di proyek Anda dalam satu halaman. '
         'Kamera yang online tampil di atas dengan tanda <b>Live</b>; kamera yang offline otomatis turun ke bawah dengan tanda <b>Offline</b>. '
         'Video muncul beberapa detik setelah halaman dibuka.', BODY))
     E.extend(shot('19-cctv.png',
-                  'Menu CCTV: setiap kamera tampil dalam kartu berisi nama dan status. Pada gambar ini video belum tampil karena '
+                  'Ringkasan → CCTV: setiap kamera tampil dalam kartu berisi nama dan status. Pada gambar ini video belum tampil karena '
                   'gambar diambil tanpa menyalakan stream; di aplikasi, video langsung muncul di sini.', 150))
     E.append(callout(
         'Kamera belum ada di daftar? Kamera didaftarkan oleh admin berdasarkan URL RTSP yang dikirim PIC. '
         'Lihat bagian <b>"Mendaftarkan CCTV Proyek (URL RTSP)"</b> di bawah, termasuk '
         f'<link href="{CCTV_SHEET_URL}" color="#2563eb"><u>spreadsheet CCTV</u></link> tempat mengisi URL-nya.',
         'Kamera Belum Muncul?'))
-    E.append(Paragraph('Mengunggah Dokumen Pendukung (menu Lainnya → Dokumen)', H3))
+    E.append(Paragraph('Mengunggah Dokumen Pendukung (Kelola Data → Dokumen)', H3))
     E.append(Paragraph(
         'Simpan dokumen yang mendukung proyek di satu tempat, misalnya kontrak, berita acara, laporan, atau presentasi. '
         'Klik <b>"Unggah Dokumen"</b> lalu pilih satu atau <b>beberapa file sekaligus</b>. '
@@ -1038,15 +1068,14 @@ def build():
                                                 'dan tidak dapat mengunduhnya.'),
     ], col1='Aturan'))
     E.extend(shot('20-dokumen.png',
-                  'Menu Dokumen: tombol "Unggah Dokumen" di kanan atas dan daftar dokumen di bawahnya.', 150))
+                  'Kelola Data → Dokumen: tombol "Unggah Dokumen" di kanan atas dan daftar dokumen di bawahnya.', 150))
     E.append(callout(
         'File seperti .exe, .html, atau .svg <b>ditolak</b> demi keamanan. Bila perlu mengirim tipe file lain, '
         'kompres dulu menjadi .zip.', 'Kenapa Ada File yang Ditolak?'))
     E.append(bullets([
         'Ukuran tiap berkas maksimal <b>25 MB</b>.',
         'Saat menghapus foto atau dokumen, akan ada konfirmasi dulu — jadi aman.',
-        'Progress Keuangan (DIPA) tidak lagi di menu Progres; sekarang ada di menu '
-        '<b>Cash &amp; Keuangan</b>.',
+        'Progress Keuangan (DIPA) ada di menu <b>Finansial</b>, bukan di Ringkasan → Progres Fisik.',
     ]))
 
     # ══ 6. MENDAFTARKAN CCTV (RTSP) ══════════════════════════════════════════
@@ -1175,7 +1204,7 @@ def build():
     E.append(Paragraph('<b>Langkah 5 — Cek hasilnya</b>', BODY))
     E.append(Paragraph('Setelah admin memasang kamera, Anda bisa memastikannya sendiri:', BODY))
     E.append(bullets([
-        'Buka halaman proyek Anda → menu <b>CCTV</b>. Kamera yang sudah dipasang tampil di sana beserta statusnya.',
+        'Buka halaman proyek Anda → menu <b>Ringkasan</b> → pil <b>CCTV</b>. Kamera yang sudah dipasang tampil di sana beserta statusnya.',
         'Atau buka <b>Peta</b>, cari proyek Anda. Marker <b>hijau</b> berarti mayoritas kamera online. '
         'Klik marker lalu buka kamera di panel untuk memastikan <b>video tampil</b>.',
         'Jika kamera belum muncul atau tetap offline, ulangi tes VLC dari paket data, lalu kabari admin.',
@@ -1202,11 +1231,13 @@ def build():
                                      'habis (login ulang), tidak punya hak edit, atau ada isian '
                                      'yang tidak valid (misalnya persen di luar 0–100). '
                                      'Perbaiki isian lalu simpan lagi.'),
+        ('Tombol Galeri / Dokumen / Lokasi tidak ada di menu', 'Bagian itu sekarang ada di tombol <b>Kelola Data</b> di atas halaman proyek, bukan lagi di menu samping.'),
+        ('Isian Rencana / Realisasi progres ditolak', 'Ketik angka 0 sampai 100; koma atau titik boleh (mis. 63,74). Huruf atau angka di luar rentang menampilkan pesan merah di bawah kolom.'),
         ('Gagal mengunggah berkas', 'Pastikan ukuran berkas tidak lebih dari 25 MB '
                                     'dan jenis berkasnya sesuai (Galeri hanya menerima foto; Dokumen menerima PDF, Word, Excel, PowerPoint, teks, arsip, dan gambar).'),
         ('Dokumen terlihat tapi tidak bisa diunduh', 'Hanya super-admin dan PIC proyek yang dapat mengunduh dokumen. '
                                     'Minta bantuan PIC proyek bila Anda perlu berkasnya.'),
-        ('Menu CCTV kosong atau video tidak tampil', 'Kamera belum didaftarkan (isi URL di spreadsheet CCTV lalu kabari admin), '
+        ('Pil CCTV kosong atau video tidak tampil', 'Kamera belum didaftarkan (isi URL di spreadsheet CCTV lalu kabari admin), '
                                     'atau kameranya offline. Tunggu beberapa detik; bila tetap offline, tes URL-nya dengan VLC dari paket data.'),
         ('Angka uang tampil aneh', 'Tulis angka tanpa titik/koma (contoh: 400000000).'),
         ('Data hilang/tidak tersimpan', 'Pastikan menekan "Simpan" dan menunggu '
@@ -1223,7 +1254,7 @@ def build():
                                      'di bawah kolom. Bila angka sudah benar, tetap bisa disimpan setelah konfirmasi.'),
         ('Simpan Rencana Tahunan ditolak', 'Satu baris harus lengkap 12 bulan (atau kosong semua), dan nilai kumulatif '
                                      'tidak boleh turun (kecuali EBITDA dan Laba Bersih). Baca pesan yang muncul.'),
-        ('Kurva S atau kartu laporan tidak muncul di peta', 'Pastikan Laporan Bulanan (dan Rencana Tahunan untuk garis rencana) sudah tersimpan, '
+        ('Kartu laporan (arus kas, tagihan, hasil usaha) tidak muncul di peta', 'Pastikan Laporan Bulanan (dan Rencana Tahunan untuk garis rencana) sudah tersimpan, '
                                      'dan nilai kontrak sudah terisi. Muat ulang halaman peta.'),
         ('Masih bingung', 'Hubungi admin atau tim IT. Lebih baik bertanya daripada '
                           'salah isi.'),

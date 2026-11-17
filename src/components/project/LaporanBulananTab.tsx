@@ -425,7 +425,7 @@ function setupItems({ rencana, saldoAwal, contractValue, isAdmin, onGoContract, 
         {
             label: 'Nilai kontrak', done: (contractValue ?? 0) > 0, required: true,
             hint: 'Dipakai sebagai basis persen pada Kurva S.',
-            action: isAdmin ? { label: 'Isi di tab Kontrak', run: onGoContract } : undefined,
+            action: isAdmin ? { label: 'Isi di Finansial › Kontrak', run: onGoContract } : undefined,
         },
         {
             label: `Rencana tahunan ${thisYear}`, required: true,

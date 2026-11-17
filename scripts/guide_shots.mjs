@@ -75,11 +75,33 @@ async function ready(page, { waitFor, extraMs = SETTLE_MS } = {}) {
     if (loading > 0) await sleep(extraMs);
 }
 
+/**
+ * Samarkan identitas pada stempel "Diperbarui ... · <email> (sub:..., ip:...)" sebelum tangkap layar,
+ * supaya email, id akun (sub), dan alamat IP tidak masuk ke PDF panduan yang dapat diunduh publik.
+ */
+async function scrub(page) {
+    await page.evaluate(() => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        for (const n of nodes) {
+            let t = n.nodeValue || '';
+            if (!/Diperbarui|@|sub:/.test(t)) continue;
+            t = t.replace(/^(\s*Diperbarui [^·]*·\s*).+$/s, '$1Nama PIC');
+            t = t.replace(/\s*\(sub:[^)]*\)/g, '').replace(/<[^<>@\s]+@[^<>\s]+>/g, '').replace(/[\w.+-]+@[\w.-]+\.\w+/g, 'nama@perusahaan');
+            if (t !== n.nodeValue) n.nodeValue = t;
+        }
+        // Tooltip (i) memuat teks lengkap di atribut; kosongkan agar tidak ikut terbaca.
+        document.querySelectorAll('[title*="@"], [aria-label*="@"]').forEach((el) => { el.removeAttribute('title'); el.removeAttribute('aria-label'); });
+    }).catch(() => {});
+}
+
 /** Tangkap elemen / area; ulangi sampai dua hasil berturut-turut identik (animasi selesai). */
 async function stableShot(target, file, { clipPage } = {}) {
-    const take = () => (clipPage
+    const pg = typeof target.page === 'function' ? target.page() : target;
+    const take = async () => { await scrub(pg); return (clipPage
         ? target.screenshot({ clip: clipPage, animations: 'disabled', caret: 'hide' })
-        : target.screenshot({ animations: 'disabled', caret: 'hide' }));
+        : target.screenshot({ animations: 'disabled', caret: 'hide' })); };
     let prev = await take();
     for (let i = 0; i < 8; i++) {
         await sleep(900);
@@ -214,12 +236,13 @@ async function main() {
         await ready(page, { waitFor: page.getByText('Kelengkapan & Lingkup') });
         await stableShot(page.locator('section', { hasText: 'CPI / SPI' }).first(), '08-ringkasan.png');
         // 09 – Cash & Keuangan (kolom terkunci)
-        await menu('Cash & Keuangan').click();
+        await menu('Finansial').click();
         await ready(page, { waitFor: page.getByText(/diisi otomatis dari/).first() });
         await park();
         await stableShot(page, '09-cash-keuangan.png');
         // 18 – Progres: isian "Progres s.d. bulan" (mode edit, dibatalkan setelah diambil)
-        await menu('Progres').click();
+        await menu('Ringkasan').click();
+        await page.getByRole('tab', { name: 'Progres Fisik' }).click();
         await ready(page, { waitFor: page.getByRole('heading', { name: 'Progres Proyek' }) });
         await page.getByRole('button', { name: /^Edit Progres Proyek$/ }).click();
         await ready(page, { waitFor: page.getByLabel('Progres s.d. bulan'), extraMs: 1500 });
@@ -227,24 +250,29 @@ async function main() {
         await stableShot(page, '18-progres-bulan.png');
         await page.getByRole('button', { name: 'Batalkan perubahan' }).click();
         // 19 – CCTV (stream diblokir skrip, jadi hanya kerangka kartu kamera)
-        await menu('CCTV').click();
+        await menu('Ringkasan').click();
+        await page.getByRole('tab', { name: 'CCTV' }).click();
         await ready(page, { waitFor: page.getByRole('heading', { name: 'CCTV Proyek' }), extraMs: 2500 });
         await park();
         await stableShot(page, '19-cctv.png');
         // 20 – Dokumen pendukung
-        await menu('Dokumen').click();
+        await page.getByRole('button', { name: /Kelola data/ }).first().click();
+        await page.getByRole('tab', { name: 'Dokumen' }).click();
         await ready(page, { waitFor: page.getByRole('heading', { name: 'Dokumen Pendukung' }), extraMs: 1500 });
         await park();
         await stableShot(page, '20-dokumen.png');
+        await page.getByRole('button', { name: 'Tutup kelola data' }).click();
         // ── Dimensi data per menu (tata letak satu layar + stempel "Diperbarui") ──
-        const tabShot = async (label, ready_, file) => {
+        // `label` = menu samping; `sub` (opsional) = pil sub-tampilan di dalam tab itu.
+        const tabShot = async (label, ready_, file, sub) => {
             await menu(label).click();
+            if (sub) await page.getByRole('tab', { name: sub, exact: true }).click();
             await ready(page, { waitFor: ready_, extraMs: 2500 });
             await park();
             await stableShot(page, file);
         };
-        await tabShot('Informasi', page.getByRole('heading', { name: 'Informasi Proyek' }), '23-informasi.png');
-        await tabShot('Kontrak', page.getByRole('heading', { name: 'Kontrak Proyek' }), '24-kontrak.png');
+        await tabShot('Ringkasan', page.getByRole('heading', { name: 'Informasi Proyek' }), '23-informasi.png', 'Informasi');
+        await tabShot('Finansial', page.getByRole('heading', { name: 'Kontrak Proyek' }), '24-kontrak.png', 'Kontrak');
         await tabShot('Operasi', page.getByRole('heading', { name: /Kinerja Operasi/ }), '25-operasi.png');
         // Operasi saat mengisi Sumber Daya (form berhalaman; dibatalkan setelah diambil)
         await page.getByRole('button', { name: /^Edit Sumber Daya$/ }).click();
@@ -252,8 +280,7 @@ async function main() {
         await park();
         await stableShot(page, '26-operasi-isi-sumber-daya.png');
         await page.getByRole('button', { name: 'Batalkan perubahan' }).click();
-        await tabShot('Isu & Kendala', page.getByText('Kendala Operasional & Kontraktual'), '27-isu-kendala.png');
-        await tabShot('Change Management', page.getByRole('heading', { name: 'Change Management' }), '28-change-management.png');
+        await tabShot('Change', page.getByRole('heading', { name: 'Change Management' }), '28-change-management.png');
 
         // 30 – QHSSE tampilan "Semua" (ringkasan 9 kartu dimensi)
         await menu('QHSSE').click();
@@ -275,7 +302,11 @@ async function main() {
         await stableShot(page, '31-qhsse-trir-otomatis.png');
         await page.getByRole('button', { name: 'Batal' }).click();
 
-        await tabShot('Galeri', page.getByRole('heading', { name: 'Galeri Foto' }), '29-galeri.png');
+        await page.getByRole('button', { name: /Kelola data/ }).first().click();
+        await page.getByRole('tab', { name: 'Galeri' }).click();
+        await ready(page, { waitFor: page.getByRole('heading', { name: 'Galeri Foto' }), extraMs: 2500 });
+        await park();
+        await stableShot(page, '29-galeri.png');
         await ctx.close();
 
         // ═════════════ PANEL PETA (/map) ═════════════
@@ -290,26 +321,25 @@ async function main() {
         const search = mp.getByLabel('Cari lokasi proyek');
         await ready(mp, { waitFor: search, extraMs: SETTLE_MS });
         await search.fill(PROJECT_NAME);
-        await mp.getByRole('button', { name: new RegExp(PROJECT_NAME) }).first().waitFor({ state: 'visible', timeout: 30000 });
-        await search.press('Enter');
+        const suggestion = mp.getByRole('button', { name: new RegExp(PROJECT_NAME) }).first();
+        await suggestion.waitFor({ state: 'visible', timeout: 30000 });
+        await suggestion.click();   // klik (bukan Enter): lebih andal saat daftar saran masih memuat
         const panel = mp.locator('div.fixed.inset-y-0.right-0').filter({ hasText: PROJECT_NAME }).first();
         await ready(mp, { waitFor: panel.getByRole('heading', { name: PROJECT_NAME }), extraMs: SETTLE_MS + 2000 });
 
         const card = (locator, ancestorClass) => locator.locator(`xpath=ancestor::div[contains(@class,"${ancestorClass}")][1]`);
         const tab = (label) => panel.getByRole('button', { name: label, exact: true });
 
-        // 10 – Ringkasan: Kurva S, 11 – CPI/SPI + CV/SV
-        await panel.getByRole('heading', { name: /Kurva S/ }).waitFor({ state: 'visible', timeout: 60000 });
+        // 11 – Ringkasan: CPI/SPI + CV/SV (Kurva S tidak lagi ada di panel peta)
+        await panel.getByText('Progress Fisik Proyek').waitFor({ state: 'visible', timeout: 60000 });
         await sleep(2500);
-        await stableShot(card(panel.getByRole('heading', { name: /Kurva S/ }), 'rounded-2xl'), '10-peta-kurva-s.png');
         await stableShot(card(panel.getByText(/Data laporan per/), 'rounded-2xl'), '11-peta-cpi-spi.png');
 
         // 22 – Progress Fisik Proyek (dengan keterangan bulan)
         await stableShot(card(panel.getByText('Progress Fisik Proyek'), 'rounded-2xl'), '22-peta-progress-fisik.png');
-        // 12 – Finansial: arus kas bulanan, 13 – tagihan vs target, 14 – hasil usaha
+        // 13 – Finansial: tagihan vs target, 14 – hasil usaha (kartu Arus Kas sudah tidak ada di panel)
         await tab('Finansial').click();
-        await ready(mp, { waitFor: panel.getByText(/Arus Kas Bulanan/), extraMs: SETTLE_MS });
-        await stableShot(card(panel.getByText(/Arus Kas Bulanan/), 'rounded-2xl'), '12-peta-arus-kas.png');
+        await ready(mp, { waitFor: panel.getByText(/Tagihan vs Target/), extraMs: SETTLE_MS });
         await stableShot(card(panel.getByText(/Tagihan vs Target/), 'rounded-2xl'), '13-peta-tagihan.png');
         await stableShot(card(panel.getByRole('heading', { name: /Hasil Usaha ·/ }), 'space-y-2.5'), '14-peta-hasil-usaha.png');
 
@@ -343,9 +373,18 @@ async function main() {
 
         // 35 – Dashboard PL Irigasi & JIAT
         await cp.goto(`${BASE_URL}/category-dashboard/irigasi-jiat`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-        await ready(cp, { waitFor: cp.getByRole('heading', { name: /Irigasi|JIAT/ }), extraMs: SETTLE_MS + 1500 });
+        await cp.getByRole('table').first().waitFor({ state: 'visible', timeout: 90000 });
+        await ready(cp, { waitFor: cp.getByText('DIR Babel').first(), extraMs: SETTLE_MS + 1500 });
         await stableShot(cp, '35-dashboard-irigasi-jiat.png');
         void catPanel;
+
+        // 36/37 – Divisi 1: kategori Sekolah (satu baris) lalu sub-kategorinya
+        await cp.goto(`${BASE_URL}/categories?div=${encodeURIComponent('DIVISI 1')}&reduced=1`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await ready(cp, { waitFor: cp.getByText(/PILIH LEVEL|KATEGORI/).first(), extraMs: SETTLE_MS + 2000 });
+        await stableShot(cp, '36-kategori-sekolah.png');
+        await cp.getByRole('button', { name: /^Sekolah,/ }).first().click();
+        await ready(cp, { waitFor: cp.getByText(/SUB-KATEGORI SEKOLAH/), extraMs: 2500 });
+        await stableShot(cp, '37-sub-kategori-sekolah.png');
         await cctx.close();
     } finally {
         await browser.close();

@@ -36,6 +36,24 @@ export interface CategoryDashboardConfig {
     triggerCategories: string[];
     /** Section-section yang ditampilkan dashboard (tiap section = satu tabel). */
     sections: CategoryDashboardSection[];
+    /**
+     * true = baris kategori dashboard ini di-pin ke atas panel kategori (urutan = urutan entri).
+     * Dashboard lain tidak di-pin: barisnya tetap urut jumlah proyek terbanyak.
+     */
+    pinned?: boolean;
+}
+
+/** Dashboard standar untuk satu kategori di satu divisi (satu tabel, dipicu dari baris kategorinya). */
+function categoryDashboard(id: string, label: string, division: DivisionKey, category: string): CategoryDashboardConfig {
+    return {
+        id,
+        label,
+        description: `Rekap dimensi data program (fisik, keuangan, profitabilitas) proyek ${label}`,
+        themeDivision: division,
+        backHref: `/categories?div=${encodeURIComponent(division)}`,
+        triggerCategories: [category],
+        sections: [{ label, division, category }],
+    };
 }
 
 export const CATEGORY_DASHBOARDS: CategoryDashboardConfig[] = [
@@ -56,8 +74,8 @@ export const CATEGORY_DASHBOARDS: CategoryDashboardConfig[] = [
             { label: 'Divisi 3', division: 'DIVISI 3', category: 'bencana' },
         ],
     },
-    // PL Irigasi & JIAT — untuk sekarang hanya kategori JIAT (Divisi 2).
-    // Kategori Irigasi dikeluarkan dulu; tambahkan lagi di `sections` + `triggerCategories` bila diperlukan.
+    // PL Irigasi & JIAT — kategori Irigasi PL (PL INPRES I 2026) dan JIAT di Divisi 2.
+    // Kategori Irigasi (Non Inpres) sengaja tidak ikut.
     {
         id: 'irigasi-jiat',
         label: 'PL Irigasi & JIAT',
@@ -65,10 +83,64 @@ export const CATEGORY_DASHBOARDS: CategoryDashboardConfig[] = [
         themeDivision: 'DIVISI 2',
         backHref: '/categories?div=DIVISI%202',
         triggerCategories: ['jiat'],
+        pinned: true,
         sections: [
+            { label: 'Irigasi PL', division: 'DIVISI 2', category: 'irigasi-pl' },
             { label: 'JIAT', division: 'DIVISI 2', category: 'jiat' },
         ],
     },
+    // Irigasi PL (PL INPRES I 2026) — dashboard sendiri, hanya kategori Irigasi PL.
+    {
+        id: 'irigasi-pl',
+        label: 'Irigasi PL',
+        description: 'Rekap dimensi data program (fisik, keuangan, profitabilitas) proyek Irigasi PL (PL INPRES I 2026)',
+        themeDivision: 'DIVISI 2',
+        backHref: '/categories?div=DIVISI%202',
+        triggerCategories: ['irigasi-pl'],
+        pinned: true,
+        sections: [
+            { label: 'Irigasi PL', division: 'DIVISI 2', category: 'irigasi-pl' },
+        ],
+    },
+    // ── Dashboard per kategori (satu kategori = satu dashboard, satu tabel) ──────────────────
+    // Kategori Bencana sengaja tidak ada di sini: sudah punya dashboard RRB lintas divisi.
+    // DIVISI 1
+    // Grup Sekolah (baris induk di panel) = Sekolah Rakyat + Sekolah; id baris induk = 'grup-sekolah'.
+    {
+        id: 'sekolah',
+        label: 'Sekolah',
+        description: 'Rekap dimensi data program proyek Sekolah Rakyat dan Sekolah',
+        themeDivision: 'DIVISI 1',
+        backHref: '/categories?div=DIVISI%201',
+        triggerCategories: ['grup-sekolah'],
+        sections: [
+            { label: 'Sekolah Rakyat', division: 'DIVISI 1', category: 'sekolah-rakyat' },
+            { label: 'Sekolah', division: 'DIVISI 1', category: 'sekolah' },
+        ],
+    },
+    categoryDashboard('sekolah-rakyat', 'Sekolah Rakyat', 'DIVISI 1', 'sekolah-rakyat'),
+    categoryDashboard('sekolah-umum', 'Sekolah', 'DIVISI 1', 'sekolah'),
+    categoryDashboard('rumah-sakit', 'Rumah Sakit', 'DIVISI 1', 'rumah-sakit'),
+    categoryDashboard('perkantoran', 'Perkantoran', 'DIVISI 1', 'perkantoran'),
+    categoryDashboard('rusun', 'Rusun', 'DIVISI 1', 'rusun'),
+    categoryDashboard('gor', 'Gedung Olahraga', 'DIVISI 1', 'gor'),
+    categoryDashboard('bandara', 'Bandara', 'DIVISI 1', 'bandara'),
+    categoryDashboard('rumah-ibadah', 'Rumah Ibadah', 'DIVISI 1', 'rumah-ibadah'),
+    categoryDashboard('perumahan', 'Perumahan', 'DIVISI 1', 'perumahan'),
+    // DIVISI 2 (Irigasi PL dan PL Irigasi & JIAT ada di atas)
+    categoryDashboard('bendungan', 'Bendungan', 'DIVISI 2', 'bendungan'),
+    categoryDashboard('sungai-pantai', 'Sungai Pantai', 'DIVISI 2', 'sungai-pantai'),
+    categoryDashboard('lainnya', 'Lainnya', 'DIVISI 2', 'lainnya'),
+    categoryDashboard('irigasi', 'Irigasi', 'DIVISI 2', 'irigasi'),
+    categoryDashboard('embung', 'Embung', 'DIVISI 2', 'embung'),
+    categoryDashboard('pltm', 'PLTM', 'DIVISI 2', 'pltm'),
+    // DIVISI 3
+    categoryDashboard('jalan-tol', 'Jalan Tol', 'DIVISI 3', 'jalan-tol'),
+    categoryDashboard('sewerage', 'Sewerage', 'DIVISI 3', 'sewerage'),
+    categoryDashboard('brt', 'BRT', 'DIVISI 3', 'brt'),
+    categoryDashboard('pipa-gas', 'Pipa Gas', 'DIVISI 3', 'pipa-gas'),
+    categoryDashboard('pipa-air', 'Pipa Air', 'DIVISI 3', 'pipa-air'),
+    categoryDashboard('jembatan', 'Jembatan', 'DIVISI 3', 'jembatan'),
 ];
 
 /** Cari konfigurasi dashboard menurut id (dipakai halaman /category-dashboard/[id]). */
@@ -80,6 +152,15 @@ export function dashboardById(id: string): CategoryDashboardConfig | undefined {
  * Cari dashboard yang dipicu oleh sebuah Category.identifier (dipakai panel
  * kategori untuk memunculkan tombol Dashboard di samping tombol Masuk).
  */
+/**
+ * Urutan pin di panel kategori = urutan entri ber-`pinned` di CATEGORY_DASHBOARDS.
+ * Kategori yang tidak di-pin mengembalikan Infinity (urut jumlah proyek).
+ */
+export function dashboardPinRank(identifier: string): number {
+    const i = CATEGORY_DASHBOARDS.findIndex((d) => d.pinned && d.triggerCategories.includes(identifier));
+    return i < 0 ? Infinity : i;
+}
+
 export function dashboardForCategory(identifier: string): CategoryDashboardConfig | undefined {
     return CATEGORY_DASHBOARDS.find((d) => d.triggerCategories.includes(identifier));
 }

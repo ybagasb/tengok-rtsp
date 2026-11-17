@@ -6,6 +6,9 @@
  * Progress keuangan: DIPA tersedia = Σ progressKeuangan[].rencana (data existing
  *                    di tab Finansial); MC cair(+label) dari Location.program
  *                    (diisi di tab Finansial); tagihan bruto dari data existing.
+ * Progress internal: RBP = Rencana Internal (Rencana Tahunan, kumulatif s.d. bulan laporan terbaru),
+ *                    RI = pendapatan s.d. bulan itu (Hasil Usaha laporan bulanan), Deviasi = RI − RBP.
+ *                    Persen terhadap nilai kontrak (basis yang sama dengan Kurva S).
  * Profitabilitas  : BL (Beban Langsung), BAU, L/R (laba bersih) — masing-masing
  *                    rencana & realisasi dalam PERSEN terhadap pendapatan,
  *                    diambil dari Rencana Tahunan (rencana) & laporan bulanan
@@ -24,10 +27,14 @@ export interface ProgramProfitRow { rencana?: number; realisasi?: number }
 export interface ProgramView {
     name: string;
     targetDate?: string;        // dari endDate
+    sisaHari?: number;          // hari dari hari ini sampai endDate (negatif = sudah lewat)
     cutOffLabel?: string;       // dari program.cutOffLabel
     fisikRencana: ProgramFisikRow;
     fisikRealisasi: ProgramFisikRow;
     fisikDeviasi: ProgramFisikRow;
+    internalRencana: ProgramFisikRow;   // RBP
+    internalRealisasi: ProgramFisikRow; // RI
+    internalDeviasi: ProgramFisikRow;   // RI − RBP
     dipaTersedia?: number;
     mcCair?: number;
     mcCairLabel?: string;
@@ -67,6 +74,17 @@ function tanggalIso(v?: string | Date): string | undefined {
     return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
+/** Selisih hari kalender dari hari ini sampai tanggal; undefined bila tanggal tak valid. */
+function sisaHariDari(v?: string | Date, now: Date = new Date()): number | undefined {
+    if (!v) return undefined;
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return undefined;
+    const day = 86_400_000;
+    const a = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const b = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((a - b) / day);
+}
+
 export function toProgramView(src: ProgramSource): ProgramView {
     const basis = typeof src.contractValue === 'number' && src.contractValue > 0 ? src.contractValue : undefined;
 
@@ -81,6 +99,14 @@ export function toProgramView(src: ProgramSource): ProgramView {
     const latest = latestLaporan(src.laporanBulanan);
     const real: HasilUsahaPeriode | undefined = latest?.huSdBulanIni;
     const renc: HasilUsahaPeriode | undefined = latest ? huRencanaPeriode(src.rencanaKurvaS, latest.periode) : undefined;
+
+    // Progress internal: RBP = Rencana Internal s.d. periode, RI = pendapatan s.d. periode (satu sumber dengan Kurva S).
+    const rbpRp = renc?.pendapatan;
+    const riInternalRp = real?.pendapatan;
+    const rbpPct = pctOf(rbpRp, basis);
+    const riInternalPct = pctOf(riInternalRp, basis);
+    const devInternalRp = (typeof rbpRp === 'number' && typeof riInternalRp === 'number') ? riInternalRp - rbpRp : undefined;
+    const devInternalPct = (typeof rbpPct === 'number' && typeof riInternalPct === 'number') ? Math.round((riInternalPct - rbpPct) * 100) / 100 : undefined;
 
     const profit = (pickReal?: number, pickRenc?: number, pendReal?: number, pendRenc?: number): ProgramProfitRow => ({
         rencana: pctOf(pickRenc, pendRenc),
@@ -100,10 +126,14 @@ export function toProgramView(src: ProgramSource): ProgramView {
     return {
         name: src.name,
         targetDate: tanggalIso(src.endDate),
+        sisaHari: sisaHariDari(src.endDate),
         cutOffLabel: src.program?.cutOffLabel,
         fisikRencana: { percent: frPct, rupiah: frRp },
         fisikRealisasi: { percent: riPct, rupiah: riRp },
         fisikDeviasi: { percent: devPct, rupiah: devRp },
+        internalRencana: { percent: rbpPct, rupiah: rbpRp },
+        internalRealisasi: { percent: riInternalPct, rupiah: riInternalRp },
+        internalDeviasi: { percent: devInternalPct, rupiah: devInternalRp },
         dipaTersedia,
         mcCair: src.program?.mcCair,
         mcCairLabel: src.program?.mcCairLabel,
