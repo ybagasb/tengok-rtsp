@@ -441,7 +441,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             />
 
             {/* Header */}
-            <header ref={trackHeaderHeight} className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5">
+            <header ref={trackHeaderHeight} className={`sticky top-0 ${sidebarOpen ? 'z-[1]' : 'z-30'} bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5`}>
                 {/* Garis aksen divisi bercahaya di tepi bawah header */}
                 <div
                     aria-hidden
@@ -3141,21 +3141,27 @@ function KelolaDrawer({ project, view, onView, onClose, isAdmin, isSuperAdmin, o
                 initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
                 transition={{ type: 'tween', duration: 0.2 }}
             >
-                <div className="shrink-0 flex items-center gap-3 px-4 py-3 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b border-black/5 dark:border-white/10">
-                    <div className="min-w-0 flex-1">
-                        <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">Kelola Data</h2>
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">{project.name}</p>
+                <div className="shrink-0 px-4 py-3 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b border-black/5 dark:border-white/10">
+                    {/* Baris 1: judul + tombol tutup */}
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="min-w-0 flex-1">
+                            <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">Kelola Data</h2>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">{project.name}</p>
+                        </div>
+                        <button
+                            ref={closeRef}
+                            onClick={onClose}
+                            aria-label="Tutup kelola data"
+                            title="Tutup (Esc)"
+                            className="shrink-0 min-w-11 min-h-11 inline-flex items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                        >
+                            <X className="w-4 h-4" aria-hidden="true" />
+                        </button>
                     </div>
-                    <ViewPills label="Bagian kelola data" views={views} active={active} onChange={onView} />
-                    <button
-                        ref={closeRef}
-                        onClick={onClose}
-                        aria-label="Tutup kelola data"
-                        title="Tutup (Esc)"
-                        className="shrink-0 min-w-11 min-h-11 inline-flex items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
-                    >
-                        <X className="w-4 h-4" aria-hidden="true" />
-                    </button>
+                    {/* Baris 2: tab pills (scrollable horizontal di mobile) */}
+                    <div className="overflow-x-auto">
+                        <ViewPills label="Bagian kelola data" views={views} active={active} onChange={onView} />
+                    </div>
                 </div>
                 <ShellCtx.Provider value={true}>
                     <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden overscroll-contain p-3 sm:p-4 max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
