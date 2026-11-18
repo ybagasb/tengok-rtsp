@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   turbopack: {},
+  experimental: {
+    agentUpgrade: "security",
+  },
   // FFmpeg writes HLS segments into public/streams every second. Since that
   // lives under public/, the Next dev file watcher would treat each new segment
   // as a code change and trigger endless Fast Refresh rebuilds ("glitch").
