@@ -36,8 +36,11 @@ export async function POST() {
     cookieStore.delete('__Secure-authjs.csrf-token');
 
     const response = NextResponse.json({ success: true });
-    // Clear browser cache, cookies, and storage to prevent back-button access
-    response.headers.set('Clear-Site-Data', '"cache", "storage"');
+    // Clear browser cache to prevent back-button access.
+    // Sengaja TIDAK hapus "storage" agar preferensi pengguna (tema, dsb.)
+    // di localStorage tidak ikut terhapus — tema tidak akan berkedip saat logout.
+    // Keamanan sesi sudah dijamin oleh penghapusan cookies di atas + invalidasi DB.
+    response.headers.set('Clear-Site-Data', '"cache"');
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     response.headers.set('Pragma', 'no-cache');
     response.headers.set('Expires', '0');
