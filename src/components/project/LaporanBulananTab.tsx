@@ -4,7 +4,7 @@ import { Fragment, useId, useMemo, useState, useSyncExternalStore } from 'react'
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Loader2, Pencil, Check, X, Plus, Trash2, Copy, ChevronDown, Clock } from 'lucide-react';
-import { formatStampTime, type SectionStamp } from '@/lib/projectSections';
+import { formatStampTime, formatStampActor, type SectionStamp } from '@/lib/projectSections';
 import {
     BULAN_NAMA, BULAN_SINGKAT, computeEvm, derivedFromLaporan, hppPersen, huRencanaPeriode, periodeLabel, periodeOf, periodeRange, prevPeriode, sortLaporan,
     type LaporanBulanan, type RencanaKurvaS,
@@ -373,7 +373,8 @@ export default function LaporanBulananTab(props: Props) {
     const stampText = (() => {
         if (props.lastUpdated === undefined) return undefined;
         const t = props.lastUpdated ? formatStampTime(props.lastUpdated.at) : undefined;
-        return t ? `Diperbarui ${t}${props.lastUpdated?.by ? ` · ${props.lastUpdated.by}` : ''}` : 'Belum ada catatan pembaruan';
+        const actor = props.lastUpdated?.by ? formatStampActor(props.lastUpdated.by) : undefined;
+        return t ? `Diperbarui ${t}${actor ? ` · ${actor}` : ''}` : 'Belum ada catatan pembaruan';
     })();
     const tabs = (
         <div role="tablist" aria-label="Jenis data" className="inline-flex flex-wrap p-1 rounded-xl bg-black/[0.04] dark:bg-white/5 gap-1 lg:shrink-0">
@@ -389,8 +390,9 @@ export default function LaporanBulananTab(props: Props) {
         </div>
     );
     const stamp = stampText && (
-        <p className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1 lg:shrink-0">
-            <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />{stampText}
+        <p className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1 min-w-0 max-w-full truncate lg:shrink-0" title={props.lastUpdated?.by ? `Terakhir diperbarui oleh ${props.lastUpdated.by}` : undefined}>
+            <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
+            <span className="truncate min-w-0">{stampText}</span>
         </p>
     );
     const body = section === 'bulanan' ? <BulananSection {...props} /> : section === 'rencana' ? <RencanaSection {...props} /> : <SaldoAwalSection {...props} />;

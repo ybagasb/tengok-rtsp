@@ -48,10 +48,44 @@ export function stampSet(sections: ProjectSection[], by?: string, at: Date = new
     return out;
 }
 
-/** "30 Okt 2026, 14.20" atau undefined bila tak valid. */
-export function formatStampTime(at?: string | Date): string | undefined {
+/**
+ * Ekstrak nama ringkas pelaku pembaruan dari string audit.
+ * Contoh:
+ *   "hendra_irawan <hendra_irawan@unknown.com> (sub:0fc6cf1d..., ip:127.0.0.1)" -> "hendra_irawan"
+ *   "Admin (PIN) (ip:127.0.0.1)" -> "Admin (PIN)"
+ *   "admin (ip:127.0.0.1)" -> "Admin"
+ *   "budi@perusahaan.com (sub:123)" -> "budi@perusahaan.com"
+ */
+export function formatStampActor(by?: string): string | undefined {
+    if (!by) return undefined;
+    const trimmed = by.trim();
+    if (!trimmed) return undefined;
+
+    // 1. Format "Nama <email> ..." -> ambil Nama
+    const emailMatch = trimmed.match(/^([^<]+)<[^>]+>/);
+    if (emailMatch && emailMatch[1].trim()) {
+        const name = emailMatch[1].trim();
+        return name.toLowerCase() === 'admin' ? 'Admin' : name;
+    }
+
+    // 2. Buang metadata di akhir seperti "(sub:..., ip:...)" atau "(ip:...)"
+    const withoutMeta = trimmed.replace(/\s*\((?:sub:[^)]+|ip:[^)]+)\)/gi, '').trim();
+    if (!withoutMeta) return trimmed;
+    return withoutMeta.toLowerCase() === 'admin' ? 'Admin' : withoutMeta;
+}
+
+/** "17 Nov, 14.20" bila tahun ini, atau "17 Nov 2025, 14.20" bila tahun berbeda. */
+export function formatStampTime(at?: string | Date, options?: { showYear?: boolean }): string | undefined {
     if (!at) return undefined;
     const d = new Date(at);
     if (Number.isNaN(d.getTime())) return undefined;
-    return d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+
+    const now = new Date();
+    const isCurrentYear = d.getFullYear() === now.getFullYear();
+    if (!options?.showYear && isCurrentYear) {
+        const dateStr = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
+        return `${dateStr}, ${timeStr}`;
+    }
+    return d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).replace(':', '.');
 }

@@ -32,7 +32,7 @@ import ProjectDashboard from '@/components/project/ProjectDashboard';
 import { dashboardForCategory } from '@/lib/categoryDashboards';
 import HariKontrakRow from '@/components/project/HariKontrakRow';
 import { fRpShort } from '@/components/PanelCharts';
-import { formatStampTime, type ProjectSection, type SectionStamp, type SectionUpdates } from '@/lib/projectSections';
+import { formatStampTime, formatStampActor, type ProjectSection, type SectionStamp, type SectionUpdates } from '@/lib/projectSections';
 
 // Leaflet butuh browser (window) -> muat hanya di klien.
 const FootprintEditor = dynamic(() => import('@/components/FootprintEditor'), {
@@ -474,7 +474,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                             {project.updatedAt && (
                                 <span className="max-sm:hidden inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
                                     <Clock className="w-3 h-3 shrink-0" />
-                                    Terakhir diperbarui: {new Date(project.updatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                                    Terakhir diperbarui: {formatStampTime(project.updatedAt)}
                                 </span>
                             )}
                         </div>
@@ -1256,20 +1256,20 @@ function OperasiTab({ project, isAdmin, onSaved, onGoTab }: { project: Project; 
 
             {/* ── 2. PROGRESS MINGGUAN W1–W4 RA/RI ── */}
             <SectionCard className="lg:col-start-1 lg:row-start-2">
-                <div className="flex items-center justify-between gap-2 shrink-0">
-                    <div className="min-w-0">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Progress Mingguan · RA / RI</h3>
+                <div className="flex items-center justify-between gap-2 mb-2 min-w-0 shrink-0">
+                    <div className="min-w-0 flex-1">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">Progress Mingguan · RA / RI</h3>
                         <UpdatedStamp stamp={stampOf(project, 'mingguan')} />
                     </div>
                     {isAdmin && (editingMinggu ? (
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0">
                             <button onClick={() => { setMingguList(project.progressMinggu ?? []); setEditingMinggu(false); }} className={cardBtn}><X className="w-3.5 h-3.5" /> Batal</button>
                             <button onClick={saveMingguSd} disabled={savingMinggu} className="px-2.5 py-1.5 rounded-lg div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--div-accent)] focus-visible:outline-none">
                                 {savingMinggu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan
                             </button>
                         </div>
                     ) : (
-                        <button onClick={() => { setSdVal(mingguPrefill(mingguList, sdBulan, sdMinggu)); setEditingMinggu(true); }} className={cardBtn}><Pencil className="w-3.5 h-3.5" /> Isi progress s.d.</button>
+                        <button onClick={() => { setSdVal(mingguPrefill(mingguList, sdBulan, sdMinggu)); setEditingMinggu(true); }} className={`${cardBtn} shrink-0`}><Pencil className="w-3.5 h-3.5" /> Isi progress s.d.</button>
                     ))}
                 </div>
                 <div className="flex-1 min-h-0 flex flex-col gap-2 lg:overflow-hidden">
@@ -2590,9 +2590,9 @@ function QhsseTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: bo
         <div className="flex flex-col gap-3 lg:h-full">
             {/* Pemilih dimensi */}
             <SectionCard>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">QHSSE · {filledCount(data)}/{QHSSE_DIMS.length} dimensi terisi</h3>
+                <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                    <div className="min-w-0 flex-1">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">QHSSE · {filledCount(data)}/{QHSSE_DIMS.length} dimensi terisi</h3>
                         <UpdatedStamp stamp={stampOf(project, 'qhsse')} />
                     </div>
                     <div role="tablist" aria-label="Dimensi QHSSE" className="flex flex-wrap gap-1.5">
@@ -2745,9 +2745,9 @@ function GalleryTab({ project, isAdmin, onChanged }: { project: Project; isAdmin
         <TabShell scroll={false}>
             {ConfirmDialog}
             <SectionCard className="lg:h-full">
-                <div className="flex items-center justify-between shrink-0">
-                    <div className="min-w-0">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Galeri Foto</h3>
+                <div className="flex items-center justify-between gap-2 shrink-0 min-w-0">
+                    <div className="min-w-0 flex-1">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">Galeri Foto</h3>
                         <UpdatedStamp stamp={stampOf(project, 'gallery')} />
                     </div>
                     {isAdmin && <UploadButton projectId={project._id} kind="gallery" accept="image/jpeg,image/png,image/webp,image/gif" label="Unggah Foto" onDone={onChanged} multiple />}
@@ -3181,13 +3181,18 @@ function KelolaDrawer({ project, view, onView, onClose, isAdmin, isSuperAdmin, o
  */
 function UpdatedStamp({ stamp, className = '' }: { stamp: SectionStamp | null; className?: string }) {
     const t = stamp ? formatStampTime(stamp.at) : undefined;
-    const detail = t
-        ? `Terakhir diperbarui ${t}${stamp?.by ? ` oleh ${stamp.by}` : ''}.`
+    const actor = stamp?.by ? formatStampActor(stamp.by) : undefined;
+    const fullTime = stamp ? formatStampTime(stamp.at, { showYear: true }) : undefined;
+    const detail = fullTime
+        ? `Terakhir diperbarui ${fullTime}${stamp?.by ? ` oleh ${stamp.by}` : ''}.`
         : 'Dimensi ini belum pernah disimpan. Catatan pembaruan muncul setelah data disimpan sekali.';
     return (
-        <span className={`text-[11px] font-normal normal-case tracking-normal text-slate-600 dark:text-slate-400 inline-flex items-center gap-1 mt-0.5 min-w-0 ${className}`}>
+        <span
+            className={`text-[11px] font-normal normal-case tracking-normal text-slate-600 dark:text-slate-400 inline-flex items-center gap-1 mt-0.5 min-w-0 max-w-full ${className}`}
+            title={detail}
+        >
             <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
-            <span className="truncate">{t ? `Diperbarui ${t}${stamp?.by ? ` · ${stamp.by}` : ''}` : 'Belum ada catatan pembaruan'}</span>
+            <span className="truncate min-w-0">{t ? `Diperbarui ${t}${actor ? ` · ${actor}` : ''}` : 'Belum ada catatan pembaruan'}</span>
             <InfoTip text={detail} />
         </span>
     );
@@ -3201,20 +3206,20 @@ function SectionHeader({ title, isAdmin, editing, onEdit, onCancel, onSave, savi
 }) {
     const pad = compact ? 'px-2.5 py-1.5' : 'px-3.5 py-2.5';
     return (
-        <div className={`flex items-center justify-between ${editing && isAdmin ? 'max-sm:sticky max-sm:top-[calc(var(--ph-h,0px)+0.25rem)] max-sm:z-20 max-sm:-mx-4 max-sm:px-4 max-sm:py-2 max-sm:bg-slate-100/90 dark:max-sm:bg-slate-950/90 max-sm:backdrop-blur max-sm:border-b max-sm:border-black/5 dark:max-sm:border-white/5' : ''}`}>
-            <div className="min-w-0">
-                <h3 className={`${compact ? 'text-xs' : 'text-sm'} font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300`}>{title}</h3>
+        <div className={`flex items-center justify-between gap-2 min-w-0 ${editing && isAdmin ? 'max-sm:sticky max-sm:top-[calc(var(--ph-h,0px)+0.25rem)] max-sm:z-20 max-sm:-mx-4 max-sm:px-4 max-sm:py-2 max-sm:bg-slate-100/90 dark:max-sm:bg-slate-950/90 max-sm:backdrop-blur max-sm:border-b max-sm:border-black/5 dark:max-sm:border-white/5' : ''}`}>
+            <div className="min-w-0 flex-1">
+                <h3 className={`${compact ? 'text-xs' : 'text-sm'} font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate`}>{title}</h3>
                 {stamp !== undefined && <UpdatedStamp stamp={stamp} />}
             </div>
             {isAdmin && (editing ? (
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                     <button onClick={onCancel} aria-label="Batalkan perubahan" className={`${pad} max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none`}><X className="w-3.5 h-3.5" /> Batal</button>
                     <button onClick={onSave} disabled={saving} aria-label="Simpan perubahan" className={`${pad} max-sm:min-h-11 max-sm:px-5 rounded-xl div-accent-solid hover:brightness-110 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none`}>
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Simpan
                     </button>
                 </div>
             ) : (
-                <button onClick={onEdit} aria-label={`Edit ${title}`} className={`${pad} max-sm:min-h-11 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none`}><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                <button onClick={onEdit} aria-label={`Edit ${title}`} className={`${pad} max-sm:min-h-11 shrink-0 rounded-xl bg-black/[0.04] dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none`}><Pencil className="w-3.5 h-3.5" /> Edit</button>
             ))}
         </div>
     );
@@ -3571,10 +3576,10 @@ function DocumentsTab({ project, isAdmin, onChanged }: { project: Project; isAdm
         <TabShell scroll={false}>
         {ConfirmDialog}
         <SectionCard className="lg:h-full">
-            <div className="flex items-center justify-between gap-3 shrink-0">
-                <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Dokumen Pendukung</h3>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">PDF, Word, Excel, PowerPoint, teks, arsip, dan gambar. Maksimal 25 MB per file, 100 dokumen per proyek.</p>
+            <div className="flex items-center justify-between gap-3 shrink-0 min-w-0">
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 truncate">Dokumen Pendukung</h3>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 truncate">PDF, Word, Excel, PowerPoint, teks, arsip, dan gambar. Maksimal 25 MB per file, 100 dokumen per proyek.</p>
                     <UpdatedStamp stamp={stampOf(project, 'documents')} />
                 </div>
                 {isAdmin && <UploadButton projectId={project._id} kind="documents" accept={DOC_ACCEPT} label="Unggah Dokumen" onDone={onChanged} multiple />}
