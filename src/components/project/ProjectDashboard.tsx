@@ -79,14 +79,14 @@ function useBox<E extends HTMLElement>() {
 
 function Panel({ title, icon, aside, className = '', children }: { title: string; icon: ReactNode; aside?: ReactNode; className?: string; children: ReactNode }) {
     return (
-        <section className={`${CARD} p-3 flex flex-col min-h-0 min-w-0 ${className}`}>
+        <section className={`${CARD} p-3 flex flex-col min-h-0 min-w-0 overflow-hidden ${className}`}>
             <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
                 <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5 min-w-0">
                     {icon}<span className="truncate">{title}</span>
                 </h3>
                 {aside}
             </div>
-            <div className="flex-1 min-h-0 flex flex-col">{children}</div>
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>
         </section>
     );
 }
@@ -130,8 +130,8 @@ function Ring({ value, inner, color, innerColor, size = 112, label, sub }: { val
                 <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={a.circ} strokeDashoffset={a.off} />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                <span className="font-black leading-none text-slate-900 dark:text-white" style={{ fontSize: Math.max(20, size * 0.19) }}>{label}</span>
-                {sub && <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mt-1">{sub}</span>}
+                <span className="font-black leading-none text-slate-900 dark:text-white" style={{ fontSize: Math.max(14, Math.round(size * 0.18)) }}>{label}</span>
+                {sub && <span className="text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:text-slate-400 mt-0.5">{sub}</span>}
             </div>
         </div>
     );
@@ -149,7 +149,8 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'go
 /** Isi kartu Progress Fisik: ring mengisi ruang yang tersedia, bar rencana vs realisasi di bawahnya. */
 function FisikBody({ realisasi, rencana, deviasi, sampai, startDate, endDate }: { realisasi: number; rencana: number; deviasi: number; sampai?: string; startDate?: string; endDate?: string }) {
     const [ref, { w, h }] = useBox<HTMLDivElement>();
-    const size = Math.round(Math.min(Math.max(Math.min(h, w * 0.5), 96), 230));
+    const availH = h > 0 ? h : 110;
+    const size = Math.round(Math.min(Math.max(Math.min(availH, w * 0.48), 64), 180));
     const bar = (label: string, v: number, color: string) => (
         <div>
             <div className="flex justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
@@ -161,33 +162,51 @@ function FisikBody({ realisasi, rencana, deviasi, sampai, startDate, endDate }: 
         </div>
     );
     return (
-        <div className="flex-1 min-h-0 flex flex-col gap-3">
-            <div ref={ref} className="flex-1 min-h-[120px] lg:min-h-0 flex items-center justify-center gap-5">
+        <div className="flex-1 min-h-[180px] lg:min-h-0 flex flex-col gap-2 overflow-hidden">
+            <div ref={ref} className="flex-1 min-h-[90px] flex items-center justify-center gap-2 sm:gap-3.5 overflow-hidden">
                 {w > 0 && (
-                    <>
-                        <Ring value={realisasi} inner={rencana} color={ACCENT} innerColor="#38bdf8" size={size} label={`${realisasi.toFixed(1)}%`} sub="Realisasi" />
-                        <div className="min-w-0 flex flex-col gap-2 text-right">
-                            <div>
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Deviasi</div>
-                                <div className={`text-2xl font-black font-mono leading-tight ${deviasi >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
-                                    {deviasi >= 0 ? '+' : '−'}{Math.abs(deviasi).toFixed(2)}%
+                    w >= 190 ? (
+                        <>
+                            <Ring value={realisasi} inner={rencana} color={ACCENT} innerColor="#38bdf8" size={size} label={`${realisasi.toFixed(1)}%`} sub={size >= 76 ? 'Realisasi' : undefined} />
+                            <div className="min-w-0 flex flex-col gap-1 text-right shrink-0">
+                                <div>
+                                    <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Deviasi</div>
+                                    <div className={`text-lg sm:text-2xl font-black font-mono leading-tight ${deviasi >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                                        {deviasi >= 0 ? '+' : '−'}{Math.abs(deviasi).toFixed(2)}%
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Rencana</div>
+                                    <div className="text-sm sm:text-lg font-black font-mono leading-tight text-slate-900 dark:text-white">{rencana.toFixed(2)}%</div>
                                 </div>
                             </div>
-                            <div>
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Rencana</div>
-                                <div className="text-lg font-black font-mono leading-tight text-slate-900 dark:text-white">{rencana.toFixed(2)}%</div>
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center gap-1.5 w-full">
+                            <Ring value={realisasi} inner={rencana} color={ACCENT} innerColor="#38bdf8" size={size} label={`${realisasi.toFixed(1)}%`} sub={size >= 76 ? 'Realisasi' : undefined} />
+                            <div className="grid grid-cols-2 gap-2 text-center w-full">
+                                <div>
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Deviasi</div>
+                                    <div className={`text-sm font-black font-mono leading-tight ${deviasi >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                                        {deviasi >= 0 ? '+' : '−'}{Math.abs(deviasi).toFixed(2)}%
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Rencana</div>
+                                    <div className="text-sm font-black font-mono leading-tight text-slate-900 dark:text-white">{rencana.toFixed(2)}%</div>
+                                </div>
                             </div>
                         </div>
-                    </>
+                    )
                 )}
             </div>
-            <div className="shrink-0 space-y-2">
+            <div className="shrink-0 space-y-1.5">
                 {bar('Rencana', rencana, '#38bdf8')}
                 {bar('Realisasi', realisasi, ACCENT)}
-                {sampai && <p className="text-[11px] font-mono text-slate-600 dark:text-slate-400 pt-0.5">Progres s.d. {sampai}</p>}
+                {sampai && <p className="text-[10px] sm:text-[11px] font-mono text-slate-600 dark:text-slate-400 pt-0.5 truncate">Progres s.d. {sampai}</p>}
             </div>
             {kontrakHari(startDate, endDate) && (
-                <div className="shrink-0 pt-2 border-t border-black/5 dark:border-white/5">
+                <div className="shrink-0 pt-1.5 border-t border-black/5 dark:border-white/5">
                     <HariKontrakRow startDate={startDate} endDate={endDate} compact />
                 </div>
             )}
@@ -257,10 +276,10 @@ export default function ProjectDashboard<T extends string>({ project, status, on
             aside={pk.length > 0 ? <Chip tone="info">{pkPct.toFixed(1)}% terserap</Chip> : undefined}
         >
             {pk.length > 0 ? (
-                <div className="flex-1 min-h-0 flex flex-col gap-3">
-                    <div className="flex items-center gap-4 shrink-0">
-                        <Ring value={pkPct} color="#38bdf8" label={`${pkPct.toFixed(1)}%`} sub="Serapan" />
-                        <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+                    <div className="flex items-center gap-2 sm:gap-3.5 shrink-0 overflow-hidden">
+                        <Ring value={pkPct} color="#38bdf8" label={`${pkPct.toFixed(1)}%`} sub="Serapan" size={88} />
+                        <div className="flex-1 min-w-0 space-y-1">
                             <Stat label="Realisasi" value={fRpShort(pkRealisasi)} />
                             <Stat label="Rencana" value={fRpShort(pkRencana)} />
                             {project.tagihanBelumDiproses ? <Stat label="Belum diproses" value={fRpShort(project.tagihanBelumDiproses)} /> : null}
@@ -438,21 +457,21 @@ export default function ProjectDashboard<T extends string>({ project, status, on
             </div>
 
             {/* Kolom KIRI (dibaca atas → bawah): Fisik + Keuangan berdampingan, lalu CPI/SPI + Hasil Usaha */}
-            <div className="lg:col-span-5 flex flex-col gap-3 min-h-0">
-                <div className="flex flex-col sm:flex-row gap-3 lg:flex-1 lg:min-h-0">
+            <div className="lg:col-span-6 xl:col-span-5 flex flex-col gap-3 min-h-0 min-w-0 overflow-hidden">
+                <div className="flex flex-col sm:flex-row gap-3 lg:flex-1 lg:min-h-0 min-w-0">
                     {fisikPanel}
                     {keuanganPanel}
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3 lg:flex-1 lg:min-h-0">
+                <div className="flex flex-col sm:flex-row gap-3 lg:flex-1 lg:min-h-0 min-w-0">
                     {indeksPanel}
                     {hasilUsahaPanel}
                 </div>
             </div>
 
             {/* Kolom KANAN (dibaca atas → bawah): QHSSE (porsi lebih besar), lalu Tagihan + Kelengkapan */}
-            <div className="lg:col-span-7 flex flex-col gap-3 min-h-0">
+            <div className="lg:col-span-6 xl:col-span-7 flex flex-col gap-3 min-h-0 min-w-0 overflow-hidden">
                 {qhssePanel}
-                <div className="flex flex-col sm:flex-row gap-3 lg:basis-[32%] lg:shrink-0 lg:min-h-0">
+                <div className="flex flex-col sm:flex-row gap-3 lg:basis-[32%] lg:shrink-0 lg:min-h-0 min-w-0">
                     {tagihanPanel}
                     {kelengkapanPanel}
                 </div>

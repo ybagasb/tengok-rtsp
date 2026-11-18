@@ -3087,7 +3087,7 @@ function SubViews<V extends string>({ label, views, active, onChange, children }
     return (
         <TabShell header={<ViewPills label={label} views={views} active={active} onChange={onChange} />} scroll={false}>
             <ShellCtx.Provider value={true}>
-                <div className="lg:h-full lg:min-h-0">{children}</div>
+                <div className="lg:h-full lg:min-h-0 lg:overflow-y-auto">{children}</div>
             </ShellCtx.Provider>
         </TabShell>
     );
