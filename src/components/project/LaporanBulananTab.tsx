@@ -518,30 +518,39 @@ function BulananSection({ projectId, laporan, rencana, contractValue, isAdmin, o
     const entry = sorted.find(l => l.periode === periode);
     const prev = useMemo(() => findPrev(sorted, periode), [sorted, periode]);
 
-    // Batas awal daftar periode: laporan pertama ATAU 5 bulan sebelum bulan berjalan (mana yang lebih awal),
-    // supaya bulan lalu selalu bisa dipilih meski proyek belum punya laporan (atau baru mulai dari bulan ini).
+    // Batas awal daftar periode: 5 tahun lalu (Januari) atau laporan pertama (mana yang lebih awal),
+    // dengan bulan lengkap Januari–Desember.
     const windowStart = useMemo(() => {
-        let p = currentMonth;
-        for (let i = 0; i < 5; i++) p = prevPeriode(p) ?? p;
+        const cy = Number(currentMonth.slice(0, 4));
+        const defaultStart = `${cy - 5}-01`;
         const first = sorted[0]?.periode;
-        return first && first < p ? first : p;
+        return first && first < defaultStart ? `${first.slice(0, 4)}-01` : defaultStart;
     }, [sorted, currentMonth]);
 
-    // Daftar periode: dari windowStart s.d bulan berjalan (atau laporan terbaru), lengkap dengan status.
+    const windowEnd = useMemo(() => {
+        const cy = Number(currentMonth.slice(0, 4));
+        const last = sorted[sorted.length - 1]?.periode;
+        const lastYear = last ? Number(last.slice(0, 4)) : cy;
+        const endYear = Math.max(cy, lastYear);
+        return `${endYear}-12`;
+    }, [sorted, currentMonth]);
+
+    // Daftar periode: dari windowStart s.d windowEnd (Januari 5 tahun lalu s.d Desember tahun berjalan/terakhir),
+    // dengan 12 bulan lengkap untuk tiap tahunnya.
     const options = useMemo(() => {
-        const first = windowStart;
-        const last = sorted[sorted.length - 1]?.periode ?? currentMonth;
-        const list = periodeRange(first, last > currentMonth ? last : currentMonth);
+        const list = periodeRange(windowStart, windowEnd);
         if (!list.includes(periode)) list.push(periode);
         return [...new Set(list)].sort().reverse();
-    }, [sorted, periode, currentMonth, windowStart]);
+    }, [windowStart, windowEnd, periode]);
     const yearOptions = useMemo(() => {
         const cy = Number(currentMonth.slice(0, 4));
         const ys = new Set<string>();
         for (let y = cy - 6; y <= cy + 1; y++) ys.add(String(y));
+        sorted.forEach(l => ys.add(l.periode.slice(0, 4)));
+        rencana.forEach(r => ys.add(String(r.tahun)));
         ys.add(periode.slice(0, 4));
-        return [...ys].sort();
-    }, [currentMonth, periode]);
+        return [...ys].sort((a, b) => b.localeCompare(a));
+    }, [currentMonth, sorted, rencana, periode]);
     const optionLabel = (p: string) => {
         const e = sorted.find(l => l.periode === p);
         const status = e ? `terisi ${entryFilled(e)}/${ALL_FIELDS.length}` : p < currentMonth ? 'belum diisi' : 'kosong';
@@ -952,7 +961,11 @@ function rencanaToForm(r: RencanaKurvaS | undefined, unit: UnitKey): RencanaForm
 function RencanaSection({ projectId, laporan, rencana, isAdmin, onSaved, errorMessage }: Props) {
     const thisYear = new Date().getFullYear();
     const years = useMemo(() => {
-        const set = new Set<number>([thisYear, thisYear + 1, ...rencana.map(r => r.tahun)]);
+        const set = new Set<number>();
+        for (let y = thisYear - 5; y <= thisYear + 1; y++) {
+            set.add(y);
+        }
+        rencana.forEach(r => set.add(r.tahun));
         laporan.forEach(l => set.add(Number(l.periode.slice(0, 4))));
         return [...set].sort((a, b) => b - a);
     }, [rencana, laporan, thisYear]);

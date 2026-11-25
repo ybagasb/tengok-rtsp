@@ -74,8 +74,8 @@ export interface RencanaKurvaS {
     huRencana?: HuRencanaSeries;   // Rencana hasil usaha s.d tiap bulan
 }
 
-export const MAX_LAPORAN = 120;   // 10 tahun
-export const MAX_RENCANA = 15;
+export const MAX_LAPORAN = 240;   // 20 tahun
+export const MAX_RENCANA = 25;
 
 export const BULAN_NAMA = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -107,12 +107,12 @@ export function prevPeriode(p: string): string | undefined {
     return `${y}-${String(mo).padStart(2, '0')}`;
 }
 
-/** Daftar periode dari a s.d b (inklusif), maks 240 entri. */
+/** Daftar periode dari a s.d b (inklusif), maks 360 entri. */
 export function periodeRange(a: string, b: string): string[] {
     if (!PERIODE_RE.test(a) || !PERIODE_RE.test(b) || a > b) return [];
     const out: string[] = [];
     let [y, m] = [Number(a.slice(0, 4)), Number(a.slice(5, 7))];
-    while (`${y}-${String(m).padStart(2, '0')}` <= b && out.length < 240) {
+    while (`${y}-${String(m).padStart(2, '0')}` <= b && out.length < 360) {
         out.push(`${y}-${String(m).padStart(2, '0')}`);
         m += 1;
         if (m > 12) { m = 1; y += 1; }

@@ -19,8 +19,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 import make_slides as ms  # backend PPTX/PDF + palet bersama
 
 DATA = 'scripts/slides-data/rekap-pengisian.json'
-LOGO_A_SVG = 'public/abipraya_original.svg'
-LOGO_A_PNG = '/tmp/abipraya_original.png'
+LOGO_A_SVG = 'scripts/assets/abipraya_navy.svg'  # logo dengan tulisan ABIPRAYA biru
+LOGO_A_PNG = '/tmp/abipraya_navy.png'
 
 # Rata-rata pengisian di laporan sebelumnya (Jumat 13 Nov 2026 13.48), untuk perbandingan.
 PREV = {'label': '13 Nov', 'avg': {'DIVISI 1': 22, 'DIVISI 2': 58, 'DIVISI 3': 0}}
