@@ -1,350 +1,166 @@
-# 🔭 TENGOK — Surveillance Integration System
-### Dokumentasi Arsitektur & Cara Kerja Aplikasi
+# TENGOK — Surveillance & Project Control System
+
+Sistem monitoring CCTV real-time dan kendali proyek terintegrasi berbasis web untuk **PT Brantas Abipraya**. Menggabungkan pemantauan stream kamera RTSP/HLS di peta interaktif, sekuens navigasi 3D per divisi, detail proyek (kontrak, progres fisik/keuangan, laporan bulanan, Kurva S, QHSSE, change management, galeri & dokumen), dashboard program lintas proyek, serta panel administrasi berbasis role (**RBAC**).
 
 ---
 
-## 1. Apa Itu TENGOK?
-
-**TENGOK** adalah sistem monitoring CCTV berbasis web yang dibangun untuk **PT Brantas Abipraya** (BUMN Konstruksi). Aplikasi ini memungkinkan pemantauan kamera CCTV secara real-time dari berbagai lokasi proyek konstruksi di seluruh Indonesia melalui **peta interaktif**.
-
----
-
-## 2. Tech Stack
+## 1. Tech Stack
 
 | Kategori | Teknologi | Versi | Fungsi |
-|----------|-----------|-------|--------|
-| **Framework** | Next.js (App Router) | 16.1.6 | Full-stack React framework (SSR + API Routes) |
-| **Runtime** | React | 19.2.3 | UI rendering |
-| **Database** | MongoDB + Mongoose | 8.23.0 | NoSQL database untuk semua data |
-| **Styling** | Tailwind CSS | v4 | Utility-first CSS |
-| **Animasi** | Framer Motion | 12.35.2 | Micro-animations & page transitions |
-| **Peta** | Leaflet + react-leaflet | 5.0.0 | Peta interaktif OpenStreetMap |
-| **Video** | FFmpeg + hls.js | 1.6.15 | Konversi RTSP→HLS & playback di browser |
-| **Chart** | Recharts | 3.8.1 | Grafik statistik |
-| **Icons** | Lucide React | 0.574.0 | Icon set |
-| **Forms** | React Hook Form + Zod | 7.71 / 4.3 | Form validation |
-| **Data Fetching** | SWR + Axios | 2.4 / 1.13 | Client-side data fetching & caching |
-| **Auth** | Cookie-based (bcryptjs) | — | Simple token auth |
+|---|---|---|---|
+| **Framework** | Next.js (App Router) | 16.4.6 | Full-stack React framework (SSR + API Routes, `--webpack`) |
+| **Runtime** | React & TypeScript | 19.2.3 / 5 | UI rendering & type safety |
+| **Database** | MongoDB + Mongoose | 8.23.0 | Penyimpanan proyek, kamera, kategori, audit, dan role |
+| **Auth & SSO** | NextAuth v5 (Cognito) + PIN | 5.0.0-beta.30 | Dual auth: PIN viewer & Cognito SSO untuk admin/PIC |
+| **Peta & 3D** | MapLibre GL + Three.js | 5.24.0 / 0.160.1 | Peta proyek 3D footprint, intro 3D HQ/divisi (Leaflet untuk picker admin) |
+| **Video** | FFmpeg + hls.js | 1.6.15 | Transmux RTSP→HLS (`-c:v copy`) & playback browser |
+| **Storage** | MinIO / S3 (`@aws-sdk/client-s3`) | 3.1143.0 | Penyimpanan dokumen & galeri proyek (presigned URL) |
+| **Styling & UI** | Tailwind CSS v4 + Framer Motion | v4 / 12.35.2 | Utility CSS, tema divisi dinamis, animasi |
+| **Visualisasi & PDF** | Recharts + jsPDF | 3.8.1 / 4.2.1 | Grafik EVM/Kurva S/QHSSE & ekspor laporan PDF |
+| **Data & Form** | SWR + Axios + React Hook Form + Zod | 2.4 / 1.13 / 7.71 / 4.3 | Data fetching, validasi, caching |
 
 ---
 
-## 3. Arsitektur Aplikasi
+## 2. Arsitektur & Alur Utama
 
 ```mermaid
 graph TB
-    subgraph "🌐 Browser (Client)"
-        A[Halaman Login] --> B[Halaman Kategori]
-        B --> C[Halaman Map]
-        C --> D[CameraPanel + Video Player]
-        E[Admin Panel]
-        F[Shared Public Link]
-        G[Multi-View Page]
+    subgraph Browser["Browser (Client)"]
+        L["/login (PIN & SSO)"] --> C["/categories (Intro 3D 4 Tile)"]
+        C --> M["/map (MapLibre + Footprint 3D)"]
+        M --> P["CameraPanel + HLS Player"]
+        M --> D["/project/[id] (Detail Proyek 5 Tab)"]
+        C --> DB["/category-dashboard/[id] (RRB/JIAT)"]
+        C --> MV["/multiview (Maks 12 Stream)"]
+        C --> AD["/admin/* (Super-admin & Admin Divisi)"]
+        SH["/shared/[token] (Publik Berbatas Waktu)"]
     end
 
-    subgraph "⚙️ Next.js Server"
-        H[API Routes]
-        I[FFmpeg Manager]
-        J[Camera Status Checker]
-        K[SSE Status Stream]
-        L[Middleware Auth Guard]
+    subgraph Server["Next.js Server"]
+        API["42 API Route Handlers"]
+        MW["Middleware Auth & RBAC Edge Guard"]
+        FF["FFmpegManager (RTSP -> HLS)"]
+        CHK["CameraStatusChecker (ffprobe)"]
+        SSE["SSE /api/cameras/status-stream"]
     end
 
-    subgraph "💾 Data Layer"
-        M[(MongoDB)]
-        N[File System - HLS Segments]
+    subgraph Storage["Data & Media"]
+        MDB[(MongoDB)]
+        S3[(MinIO / S3)]
+        PG[(Postgres sso_users - read-only)]
     end
 
-    subgraph "📹 Kamera CCTV"
-        O[RTSP Camera 1]
-        P[RTSP Camera 2]
-        Q[RTSP Camera N...]
-    end
-
-    C --> |SSE| K
-    C --> |REST API| H
-    D --> |Start Stream| I
-    I --> |RTSP Connect| O
-    I --> |RTSP Connect| P
-    I --> |Write .m3u8 + .ts| N
-    D --> |Fetch HLS| N
-    J --> |Probe ffprobe| O
-    J --> |Probe ffprobe| P
-    J --> |Update Status| M
-    J --> |Emit Event| K
-    H --> |CRUD| M
-    L --> |Check Cookie| H
+    M -->|SSE| SSE
+    P -->|Start / Heartbeat| FF
+    CHK -->|Status Update| MDB
+    CHK -->|Emit| SSE
+    API -->|CRUD| MDB
+    API -->|Presigned URL / Upload| S3
+    API -->|Cari Kandidat PIC/Admin| PG
+    MW -->|Cookie + JWT appRole| AD
 ```
 
 ---
 
-## 4. Alur Kerja (User Flow)
+## 3. Autentikasi & RBAC
 
-### 4.1 Flow Utama (Internal User)
+Tengok memiliki dua jalur masuk dan kontrol akses bertingkat:
 
-```
-Login → Pilih Kategori → Lihat Peta → Klik Marker → Panel Kamera Terbuka → Tonton Video CCTV
-```
-
-1. **Login** (`/login`) — Autentikasi dengan username/password, disimpan di cookie `auth_token`
-2. **Kategori** (`/categories`) — Pilih jenis proyek (misal: "Sekolah Rakyat")
-3. **Peta** (`/map?category=sekolah-rakyat`) — Peta Indonesia dengan marker lokasi proyek
-4. **Klik Marker** — Panel samping muncul, menampilkan daftar kamera di lokasi tersebut
-5. **Play Video** — FFmpeg mulai konversi RTSP→HLS, video muncul di browser
-
-### 4.2 Flow Publik (Share Link)
-
-```
-Buka Link → Validasi Token & Expiry → Lihat Peta (terbatas) → Tonton CCTV
-```
-
-- Admin membuat **Share Link** dengan durasi terbatas (30/60/120/180 menit)
-- Pengguna publik mengakses `/shared/[token]`
-- Sistem validasi token + expiry → tampilkan peta dengan lokasi yang diizinkan saja
-
-### 4.3 Flow Admin
-
-```
-Login → Admin Panel → Kelola Kamera / Lokasi / Kategori / Share Links / Statistik
-```
+| Peran | Jalur Masuk | Hak Akses |
+|---|---|---|
+| **Viewer (PIN)** | Cookie `auth_token` (TTL 7 hari, `PinSession`) | Melihat `/categories`, `/map`, live CCTV, `/multiview`, dan `/category-dashboard/*`. Tidak bisa membuka `/project/[id]` maupun `/admin/*`. |
+| **User SSO / PIC** | Cognito SSO (JWT 8 jam bergulir) | Dapat membuka `/project/[id]`; hanya dapat mengedit/mengunggah proyek yang menempatkan `cognitoSub`-nya di `Location.picSubs`. Tidak masuk `/admin/*`. |
+| **Admin Divisi (`divisi_admin`)** | Cognito SSO + `AppRole` | Akses `/admin`, `/admin/cameras`, `/admin/locations`, `/admin/pengisian`, serta edit `/project/[id]` **khusus proyek & kamera di divisinya (`DIVISI 1`, `DIVISI 2`, atau `DIVISI 3`)**. Tidak punya akses ke Statistik, Uptime, Notifikasi, Share Links, Kategori, Hak Akses, maupun Audit Log. |
+| **Super-admin (`superadmin`)** | Cognito SSO + `AppRole` / `TENGOK_BOOTSTRAP_ADMIN_SUBS` | Akses penuh seluruh modul `/admin/*` (termasuk Hak Akses `/admin/roles`, Kategori, Share Links, Statistik, Audit Log), edit semua proyek, serta menunjuk PIC & Admin Divisi. |
 
 ---
 
-## 5. Komponen Utama
+## 4. Halaman Aplikasi
 
-### 📁 Struktur Folder
+| Route | Akses | Deskripsi |
+|---|---|---|
+| `/login` | Publik | Login dual-tab (PIN cepat & Cognito SSO) |
+| `/categories` | Auth (PIN/SSO) | Landing utama dengan intro 3D HQ & 4 tile (Divisi 1–3 + Hub RRB) |
+| `/map` | Auth (PIN/SSO) | Peta interaktif MapLibre dengan marker status CCTV & blok footprint 3D |
+| `/multiview` | Auth (PIN/SSO) | Pantau hingga 12 kamera serentak |
+| `/category-dashboard/[id]` | Auth (PIN/SSO) | Dashboard program model RRB (`rrb`, `irigasi-jiat`) |
+| `/project/[id]` | SSO-only | Detail proyek 5 tab + Laporan Bulanan, Kurva S, QHSSE, galeri & dokumen |
+| `/shared/[token]` | Publik (Token) | Tautan berbagi sementara lokasi CCTV tanpa login |
+| `/admin` | `superadmin` / `divisi_admin` | Executive Dashboard (super-admin) atau Dashboard Operasional (divisi) |
+| `/admin/cameras` | `superadmin` / `divisi_admin` | Manajemen kamera (tampilan tabel/kartu, filter divisi/lokasi, test stream, tautan lokasi langsung, import/export CSV) |
+| `/admin/locations` | `superadmin` / `divisi_admin` | Manajemen lokasi/proyek & koordinat peta |
+| `/admin/pengisian` | `superadmin` / `divisi_admin` | Rekap pengisian 18 dimensi per divisi + ekspor PDF |
+| `/admin/categories` | `superadmin` | Manajemen kategori (modal 2-kolom dengan sticky preview, sync peta default, proteksi identifier & hapus aman) |
+| `/admin/share-links` | `superadmin` | Buat & kelola tautan berbagi publik |
+| `/admin/statistics` | `superadmin` | Analitik kunjungan & perangkat |
+| `/admin/uptime` | `superadmin` | Riwayat ketersediaan & SLA kamera |
+| `/admin/notifications` | `superadmin` | Pengaturan notice/pengumuman global peta |
+| `/admin/roles` | `superadmin` | Kelola Super-admin dan Admin Divisi |
+| `/admin/audit-log` | `superadmin` | Log jejak perubahan sistem (TTL 90 hari) |
+
+---
+
+## 5. Struktur Direktori Utama
 
 ```
 src/
-├── app/                          # Next.js App Router pages
-│   ├── layout.tsx                # Root layout (font, providers)
-│   ├── globals.css               # Global styles
-│   ├── login/                    # Halaman login
-│   ├── categories/               # Pilih kategori proyek
-│   ├── map/                      # Peta utama CCTV
-│   ├── multiview/                # Multi-kamera grid view
-│   ├── shared/[token]/           # Public share link page
-│   ├── admin/                    # Admin dashboard
-│   │   ├── layout.tsx            # Sidebar + navigation
-│   │   ├── page.tsx              # Manajemen kamera
-│   │   ├── locations/            # Manajemen lokasi/proyek
-│   │   ├── categories/           # Manajemen kategori
-│   │   ├── share-links/          # Manajemen share link
-│   │   └── statistics/           # Statistik pengunjung
-│   └── api/                      # Backend API Routes
-│       ├── auth/                 # Login/logout endpoints
-│       ├── cameras/              # CRUD kamera
-│       │   ├── probe-now/        # Trigger probe status on-demand
-│       │   ├── status-stream/    # SSE endpoint (real-time push)
-│       │   └── check-status/     # One-off status check
-│       ├── categories/           # CRUD kategori
-│       ├── locations/            # CRUD lokasi
-│       ├── share-links/          # CRUD share links
-│       ├── streams/              # Start/stop/heartbeat FFmpeg
-│       │   ├── start/            # Mulai stream RTSP→HLS
-│       │   ├── stop/             # Hentikan stream
-│       │   ├── heartbeat/        # Keep-alive dari viewer
-│       │   └── probe/            # Probe single camera
-│       ├── stream-file/          # Serve HLS .m3u8 & .ts files
-│       ├── stats/                # Analytics data
-│       └── system/               # System health info
-│
-├── components/                   # React components
-│   ├── MapComponent.tsx          # Peta Leaflet + marker + search
-│   ├── CameraPanel.tsx           # Panel samping detail kamera
-│   ├── OptimizedVideoPlayer.tsx  # HLS video player (hls.js)
-│   ├── ResourceMonitor.tsx       # Monitor CPU/RAM server
-│   └── Providers.tsx             # React context providers
-│
-├── hooks/
-│   └── useCameraStatusSSE.ts     # Hook SSE real-time status
-│
-├── lib/                          # Server-side utilities
-│   ├── db.ts                     # MongoDB connection (singleton)
-│   ├── ffmpegManager.ts          # FFmpeg process manager
-│   ├── cameraStatusChecker.ts    # Background probe service
-│   ├── cameraStatusEmitter.ts    # EventEmitter for SSE bridge
-│   └── StreamManager.ts          # Stream session management
-│
-├── models/                       # Mongoose schemas
-│   ├── Camera.ts                 # { name, streamUrl, status }
-│   ├── Location.ts               # { name, category, lat, lng, cameras[], pmName }
-│   ├── Category.ts               # { name, identifier, icon, color }
-│   ├── ShareLink.ts              # { token, locations[], duration, expiresAt }
-│   └── AccessLog.ts              # { token, ip, userAgent, timestamp }
-│
-└── middleware.ts                 # Auth guard + redirects
+├── app/
+│   ├── api/                 # 42 route handlers (auth, admin, cameras, categories, locations, projects, streams, dll.)
+│   ├── admin/               # Halaman konsol admin (layout gating + RBAC)
+│   ├── categories/          # Intro 3D & navigasi divisi
+│   ├── category-dashboard/  # Dashboard program RRB/JIAT
+│   ├── login/               # Halaman login PIN & SSO
+│   ├── map/                 # Peta MapLibre + panel kamera
+│   ├── multiview/           # Grid multi-stream
+│   ├── project/[id]/        # Detail proyek 5 tab + Laporan Bulanan
+│   └── shared/[token]/      # Halaman share link publik
+├── components/
+│   ├── admin/               # AdminUI, CoordinateInput, shared, dan cameras/* (modals)
+│   ├── intro/               # IntroScene3D, hqModel, divisionModels
+│   └── project/             # ProjectDashboard, LaporanBulananTab, QHSSE components
+├── hooks/                   # useCameraStatusSSE, usePageTracking
+├── lib/                     # auth, apiAuth, db, ffmpegManager, cameraStatusChecker, projectReport, pengisian, storage, dll.
+├── models/                  # Mongoose models (Location, Camera, Category, AppRole, ShareLink, AuditLog, PinSession, SsoIdentity, dll.)
+└── middleware.ts            # Auth & RBAC edge guard + allowlist publik
 ```
 
 ---
 
-## 6. Sistem Streaming Video (Core Feature)
+## 6. Menjalankan Secara Lokal
 
-Ini adalah fitur paling kritis dari TENGOK. Berikut cara kerjanya:
+### Prasyarat
+- **Node.js 24 LTS** (`.nvmrc`)
+- **FFmpeg & ffprobe** tersedia di `PATH`
+- **MongoDB** (lokal atau Atlas)
+- Opsional: **MinIO/S3** (upload dokumen/galeri), **Postgres** (direktori user SSO `sso_users`), **AWS Cognito** (SSO login)
 
-### Alur RTSP → Browser
+### Perintah
 
-```mermaid
-sequenceDiagram
-    participant B as 🌐 Browser
-    participant S as ⚙️ Next.js Server
-    participant F as 🎬 FFmpeg Process
-    participant C as 📹 Kamera CCTV
+```bash
+# 1. Install dependencies
+npm install
 
-    B->>S: POST /api/streams/start {cameraId}
-    S->>F: spawn ffmpeg -i rtsp://... -f hls output.m3u8
-    F->>C: Connect RTSP (TCP)
-    C-->>F: H.264 video stream
-    F->>S: Write .m3u8 + .ts segments to disk
-    S-->>B: Return HLS URL path
+# 2. Salin & lengkapi variabel lingkungan (.env.local)
+cp .env.example .env.local
 
-    loop Setiap 1 detik
-        F->>S: Generate new .ts segment
-    end
+# 3. Jalankan mode development (memakai webpack)
+npm run dev
 
-    loop Setiap 10 detik
-        B->>S: POST /api/streams/heartbeat {cameraId}
-    end
-
-    Note over S: Jika tidak ada heartbeat 60 detik → kill FFmpeg
-```
-
-### Key Design Decisions:
-- **`-c:v copy`** — Tidak ada transcoding, video langsung di-copy dari RTSP ke HLS (0% CPU usage)
-- **`-hls_time 1`** — Segment 1 detik untuk latency rendah
-- **`-hls_list_size 3`** — Hanya simpan 3 segment terakhir (hemat disk)
-- **Heartbeat system** — Client kirim heartbeat tiap 10 detik, jika idle 60s → FFmpeg dimatikan otomatis
-- **Singleton pattern** — `ffmpegManager` di-persist di `global` agar survive Next.js HMR
-
----
-
-## 7. Sistem Pengecekan Status (Real-time)
-
-```mermaid
-flowchart LR
-    A[CameraStatusChecker] -->|ffprobe setiap 5 menit| B[(MongoDB)]
-    A -->|Emit event| C[cameraStatusEmitter]
-    C -->|Push via SSE| D[Browser EventSource]
-    D -->|Update state| E[Map Marker warna berubah]
-
-    F[probe-now API] -->|On-demand saat user buka halaman| A
-```
-
-| Komponen | File | Fungsi |
-|----------|------|--------|
-| **CameraStatusChecker** | `lib/cameraStatusChecker.ts` | Background service, probe RTSP via `ffprobe` tiap 5 menit |
-| **cameraStatusEmitter** | `lib/cameraStatusEmitter.ts` | Node.js EventEmitter sebagai bridge ke SSE |
-| **SSE Endpoint** | `api/cameras/status-stream/route.ts` | Long-lived HTTP connection, push status ke browser |
-| **useCameraStatusSSE** | `hooks/useCameraStatusSSE.ts` | React hook, terima event → update `realtimeStatuses` state |
-| **probe-now** | `api/cameras/probe-now/route.ts` | Fire-and-forget trigger saat page load |
-
----
-
-## 8. Database Schema (MongoDB)
-
-```mermaid
-erDiagram
-    Category {
-        string name
-        string identifier
-        string description
-        string icon
-        string color
-    }
-
-    Location {
-        string name
-        string category
-        string description
-        string image
-        number lat
-        number lng
-        string pmName
-        string pmPhone
-        ObjectId[] cameras
-    }
-
-    Camera {
-        string name
-        string streamUrl
-        string status
-        Date createdAt
-    }
-
-    ShareLink {
-        string token
-        string label
-        ObjectId[] locations
-        number duration
-        Date expiresAt
-        boolean isActive
-        number accessCount
-    }
-
-    AccessLog {
-        string token
-        string ip
-        string userAgent
-        Date timestamp
-    }
-
-    Category ||--o{ Location : "category identifier"
-    Location ||--o{ Camera : "cameras ref"
-    ShareLink ||--o{ Location : "locations ref"
-    ShareLink ||--o{ AccessLog : "token"
+# 4. Build & jalankan produksi (standalone)
+npm run build
+npm start
 ```
 
 ---
 
-## 9. Keamanan & Auth
+## 7. Variabel Lingkungan Penting
 
-| Mekanisme | Detail |
-|-----------|--------|
-| **Login** | Username/password → `bcryptjs` hash comparison → set cookie `auth_token` |
-| **Middleware** | `middleware.ts` intercept semua route, redirect ke `/login` jika tidak ada cookie |
-| **Public Routes** | `/categories`, `/map`, `/multiview`, `/shared/*`, `/api/*` → bebas akses |
-| **Protected Routes** | `/admin/*` → wajib login |
-| **Share Links** | Token-based, auto-expire setelah durasi habis |
-
----
-
-## 10. Halaman-Halaman Aplikasi
-
-| Route | Akses | Deskripsi |
-|-------|-------|-----------|
-| `/login` | Public | Halaman login admin |
-| `/categories` | Public | Pilih kategori proyek (grid cards) |
-| `/map?category=x` | Public | Peta interaktif dengan marker CCTV |
-| `/multiview` | Public | Grid view multi-kamera sekaligus |
-| `/shared/[token]` | Public | Akses CCTV via link berbatas waktu |
-| `/admin` | Auth | Manajemen perangkat kamera (CRUD) |
-| `/admin/locations` | Auth | Manajemen lokasi proyek + peta picker |
-| `/admin/categories` | Auth | Manajemen kategori + icon/warna |
-| `/admin/share-links` | Auth | Buat & kelola share link publik |
-| `/admin/statistics` | Auth | Dashboard statistik pengunjung |
-
----
-
-## 11. Dependency Eksternal
-
-| Software | Wajib? | Fungsi |
-|----------|--------|--------|
-| **FFmpeg** | ✅ Ya | Konversi RTSP→HLS, harus terinstall di PATH server |
-| **MongoDB** | ✅ Ya | Database utama, bisa Atlas (cloud) atau lokal |
-| **Node.js** | ✅ Ya | Runtime Next.js |
-| **Kamera RTSP** | ✅ Ya | Sumber video (IP Camera dengan protokol RTSP) |
-
----
-
-## 12. Ringkasan Alur Data
-
-```
-[Kamera RTSP] ←→ [FFmpeg on Server] → [HLS .m3u8/.ts files] → [hls.js di Browser] → [Video tampil]
-                                    ↓
-                            [MongoDB status update]
-                                    ↓
-                          [SSE push ke semua client]
-                                    ↓
-                         [Marker peta hijau/merah]
-```
-
-> **TENGOK** pada intinya adalah **jembatan antara protokol RTSP (kamera industri) dan browser web modern** — menggunakan FFmpeg sebagai penerjemah dan Next.js sebagai full-stack platform yang menangani UI, API, dan background services sekaligus.
+Lihat `.env.example` untuk daftar lengkap:
+- `MONGODB_URI` — URL koneksi MongoDB
+- `APP_PIN` — PIN akses viewer (kosong = semua login PIN ditolak)
+- `COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_ISSUER`, `COGNITO_DOMAIN` — Konfigurasi AWS Cognito SSO
+- `NEXTAUTH_SECRET`, `NEXTAUTH_URL` — Konfigurasi NextAuth v5
+- `TENGOK_BOOTSTRAP_ADMIN_SUBS` — Daftar `cognito_sub` super-admin permanen (dipisah koma)
+- `NEXT_PUBLIC_MAPTILER_KEY` — API key peta MapTiler (opsional; fallback OpenFreeMap)
+- `MINIO_ENDPOINT`, `MINIO_PORT`, `MINIO_USE_SSL`, `MINIO_REGION`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` — Storage objek proyek
+- `SSO_PG_HOST`, `SSO_PG_DATABASE`, `SSO_PG_USER`, `SSO_PG_PASSWORD`, `SSO_PG_PORT`, `SSO_PG_SSL` — Direktori user SSO read-only untuk pencarian kandidat PIC & admin

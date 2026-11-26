@@ -64,7 +64,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         error: "/login",
     },
     callbacks: {
-        async jwt({ token, account, profile }) {
+        async jwt({ token, account, profile, trigger }) {
             // On initial sign-in, persist Cognito data into the JWT.
             // IMPORTANT: do NOT store id_token/access_token here. With the JWT
             // session strategy these are written into the (chunked) session
@@ -121,6 +121,39 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     console.warn('[auth] Gagal merekam SsoIdentity:', (e as { message?: string })?.message);
                 }
             }
+
+            // Sinkronkan appRole & appDivisi dari DB (saat login, update, atau
+            // belum disinkronkan / lebih dari 5 menit) agar perubahan hak akses
+            // segera terbaca oleh middleware tanpa membebani setiap request.
+            const roleSyncedAt = typeof token.roleSyncedAt === 'number' ? token.roleSyncedAt : 0;
+            const needsRoleSync =
+                Boolean(account && profile) ||
+                trigger === 'update' ||
+                token.appRole === undefined ||
+                Date.now() - roleSyncedAt > 5 * 60 * 1000;
+
+            if (token.sub && needsRoleSync) {
+                try {
+                    const { isBootstrapAdmin } = await import('@/lib/apiAuth');
+                    if (isBootstrapAdmin(token.sub)) {
+                        token.appRole = 'superadmin';
+                        token.appDivisi = null;
+                        token.roleSyncedAt = Date.now();
+                    } else {
+                        const { default: dbConnect } = await import('@/lib/db');
+                        const { default: AppRole } = await import('@/models/AppRole');
+                        await dbConnect();
+                        const roleRow = await AppRole.findOne({ cognitoSub: token.sub }).lean() as {
+                            role?: string; divisi?: string;
+                        } | null;
+                        token.appRole = (roleRow?.role ?? null) as import('@/models/AppRole').AppRoleName | null;
+                        token.appDivisi = (roleRow?.divisi ?? null) as import('@/models/AppRole').DivisiName | null;
+                        token.roleSyncedAt = Date.now();
+                    }
+                } catch (e) {
+                    console.warn('[auth] Gagal membaca AppRole:', (e as { message?: string })?.message);
+                }
+            }
             return token;
         },
         async session({ session, token }) {
@@ -129,8 +162,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 session.user.id = token.sub as string;
                 session.user.email = token.email as string;
                 session.user.name = token.name as string;
-                (session.user as { username?: string | null }).username =
-                    (token.username as string | null) ?? null;
+                session.user.username = (token.username as string | null) ?? null;
+                session.user.appRole = (token.appRole as import('@/models/AppRole').AppRoleName | null) ?? null;
+                session.user.appDivisi = (token.appDivisi as import('@/models/AppRole').DivisiName | null) ?? null;
             }
             return session;
         },

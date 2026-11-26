@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireDivisiAdmin } from '@/lib/apiAuth';
 import { isPublicHttpUrl } from '@/lib/urlGuard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-    // Hanya admin (SSO) — endpoint ini membuat request keluar ke URL dari klien,
-    // jadi tidak boleh terbuka untuk viewer PIN.
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    // Hanya superadmin atau admin divisi — endpoint ini membuat request keluar.
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
 
     const { url } = await req.json();
 

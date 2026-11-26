@@ -1,7 +1,19 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getToken } from 'next-auth/jwt';
 
-export function middleware(request: NextRequest) {
+// Halaman yang hanya boleh diakses superadmin (bukan divisi_admin)
+const SUPERADMIN_ONLY_PATHS = [
+    '/admin/statistics',
+    '/admin/uptime',
+    '/admin/notifications',
+    '/admin/roles',
+    '/admin/audit-log',
+    '/admin/share-links',
+    '/admin/categories',
+];
+
+export async function middleware(request: NextRequest) {
     const pathname = request.nextUrl.pathname;
 
     // 1. Priority Redirects
@@ -69,6 +81,36 @@ export function middleware(request: NextRequest) {
         const url = request.nextUrl.clone();
         url.pathname = '/categories';
         return NextResponse.redirect(url);
+    }
+
+    // 5. RBAC Guard di /admin — hanya superadmin dan divisi_admin yang boleh masuk,
+    // serta blokir divisi_admin dari halaman sensitif (SUPERADMIN_ONLY_PATHS).
+    if (nextAuthSession && pathname.startsWith('/admin')) {
+        try {
+            const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+            const secureCookie = Boolean(request.cookies.get('__Secure-authjs.session-token'));
+            const token = await getToken({
+                req: request,
+                secret,
+                secureCookie,
+                cookieName: secureCookie ? '__Secure-authjs.session-token' : 'authjs.session-token',
+            });
+            if (token && 'appRole' in token) {
+                const appRole = token.appRole as string | null | undefined;
+                if (appRole !== 'superadmin' && appRole !== 'divisi_admin') {
+                    const url = request.nextUrl.clone();
+                    url.pathname = '/categories';
+                    return NextResponse.redirect(url);
+                }
+                if (appRole === 'divisi_admin' && SUPERADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p))) {
+                    const url = request.nextUrl.clone();
+                    url.pathname = '/admin';
+                    return NextResponse.redirect(url);
+                }
+            }
+        } catch {
+            // Gagal decode token → biarkan lewat; page & API guard tetap menegakkan akses.
+        }
     }
 
     const response = NextResponse.next();

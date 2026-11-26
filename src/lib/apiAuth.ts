@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import AppRole from '@/models/AppRole';
+import type { AppRoleName, DivisiName } from '@/models/AppRole';
+import Camera from '@/models/Camera';
 import Location from '@/models/Location';
 import PinSession from '@/models/PinSession';
 import dbConnect from '@/lib/db';
@@ -135,6 +137,119 @@ export async function isSuperAdmin(cognitoSub?: string | null): Promise<boolean>
     return !!row;
 }
 
+/**
+ * Ambil role + divisi caller dari sesi SSO saat ini.
+ * Bootstrap admin selalu superadmin meski belum ada entri DB.
+ * PIN session → { role: null, divisi: null, isSuperAdmin: false }.
+ */
+export async function getCallerRole(): Promise<{
+    role: AppRoleName | null;
+    divisi: DivisiName | null;
+    isSuperAdmin: boolean;
+}> {
+    const sub = await getSessionSub();
+    if (!sub) return { role: null, divisi: null, isSuperAdmin: false };
+    if (isBootstrapAdmin(sub)) return { role: 'superadmin', divisi: null, isSuperAdmin: true };
+    await dbConnect();
+    const row = await AppRole.findOne({ cognitoSub: sub }).lean() as {
+        role?: AppRoleName; divisi?: DivisiName;
+    } | null;
+    if (!row) return { role: null, divisi: null, isSuperAdmin: false };
+    const sa = row.role === 'superadmin';
+    return { role: row.role ?? null, divisi: row.divisi ?? null, isSuperAdmin: sa };
+}
+
+/**
+ * Guard admin-divisi: lolos bila caller adalah superadmin ATAU divisi_admin.
+ * PIN tidak pernah lolos.
+ *
+ * Return:
+ *  - { error: NextResponse } jika tidak diizinkan
+ *  - { divisi: DivisiName | null; isSuperAdmin: boolean } jika lolos
+ *    (divisi = null berarti superadmin → akses ke semua data)
+ */
+export async function requireDivisiAdmin(
+    req: NextRequest,
+): Promise<{ error: NextResponse } | { divisi: DivisiName | null; isSuperAdmin: boolean }> {
+    void req;
+    const caller = await getCallerRole();
+    if (!caller.role) {
+        return {
+            error: NextResponse.json(
+                { success: false, error: 'Akses ini memerlukan login SSO.' },
+                { status: 403 },
+            ),
+        };
+    }
+    if (caller.role !== 'superadmin' && caller.role !== 'divisi_admin') {
+        return {
+            error: NextResponse.json(
+                { success: false, error: 'Anda tidak memiliki hak akses admin.' },
+                { status: 403 },
+            ),
+        };
+    }
+    if (caller.role === 'divisi_admin' && !caller.divisi) {
+        return {
+            error: NextResponse.json(
+                { success: false, error: 'Akun admin divisi belum memiliki divisi yang valid.' },
+                { status: 403 },
+            ),
+        };
+    }
+    return { divisi: caller.isSuperAdmin ? null : caller.divisi, isSuperAdmin: caller.isSuperAdmin };
+}
+
+/**
+ * Ambil semua ID kamera yang berada dalam cakupan divisi tertentu:
+ *  - kamera yang field `division`-nya sama dengan `divisi`, ATAU
+ *  - kamera yang ditautkan pada Location ber-`division === divisi`
+ *    (selama kamera tersebut tidak memiliki `division` milik divisi lain).
+ */
+export async function getDivisiCameraIds(divisi: DivisiName): Promise<string[]> {
+    await dbConnect();
+    const [locs, ownCams] = await Promise.all([
+        Location.find({ division: divisi }).select('cameras').lean() as Promise<Array<{ cameras?: unknown[] }>>,
+        Camera.find({ division: divisi }).select('_id').lean() as Promise<Array<{ _id: unknown }>>,
+    ]);
+
+    const ids = new Set<string>();
+    for (const c of ownCams) {
+        if (c._id) ids.add(String(c._id));
+    }
+    const locCamIds: string[] = [];
+    for (const loc of locs) {
+        if (Array.isArray(loc.cameras)) {
+            for (const cid of loc.cameras) {
+                if (cid) locCamIds.push(String(cid));
+            }
+        }
+    }
+    if (locCamIds.length > 0) {
+        const linkedCams = await Camera.find({
+            _id: { $in: locCamIds },
+            $or: [{ division: null }, { division: { $exists: false } }, { division: divisi }],
+        }).select('_id').lean() as Array<{ _id: unknown }>;
+        for (const c of linkedCams) {
+            if (c._id) ids.add(String(c._id));
+        }
+    }
+    return [...ids];
+}
+
+/**
+ * Verifikasi bahwa seluruh `cameraIds` berada dalam cakupan `divisi`.
+ * Mengembalikan false jika ada satu pun ID yang tidak ditemukan / bukan milik divisi.
+ */
+export async function areCamerasAccessibleByDivisi(
+    cameraIds: string[],
+    divisi: DivisiName,
+): Promise<boolean> {
+    if (cameraIds.length === 0) return false;
+    const allowed = new Set(await getDivisiCameraIds(divisi));
+    return cameraIds.every((id) => allowed.has(String(id)));
+}
+
 /** cognito_sub dari sesi SSO, atau null bila tak ada sesi SSO (PIN → null). */
 export async function getSessionSub(): Promise<string | null> {
     const session = await auth();
@@ -220,10 +335,10 @@ export async function requireProjectAccess(
     }
 
     try {
-        const superAdmin = await isSuperAdmin(sub);
+        const caller = await getCallerRole();
         await dbConnect();
-        const loc = await Location.findById(projectId).select('_id picSubs').lean() as
-            | { _id: unknown; picSubs?: string[] }
+        const loc = await Location.findById(projectId).select('_id picSubs division').lean() as
+            | { _id: unknown; picSubs?: string[]; division?: string }
             | null;
 
         if (!loc) {
@@ -233,7 +348,10 @@ export async function requireProjectAccess(
             );
         }
 
-        if (superAdmin) return null;
+        if (caller.isSuperAdmin) return null;
+        if (caller.role === 'divisi_admin' && caller.divisi && loc.division === caller.divisi) {
+            return null;
+        }
 
         const picSubs = Array.isArray(loc.picSubs) ? loc.picSubs : [];
         const { match, placeholder } = matchProjectPic(picSubs, { sub, username });

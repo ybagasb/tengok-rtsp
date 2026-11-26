@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { 
     Monitor, MapPin, Tags, Link2, BarChart3, Activity, 
-    ClipboardList, Wifi, WifiOff, ArrowUpRight, 
+    ClipboardList, ClipboardCheck, Wifi, WifiOff, ArrowUpRight, 
     ShieldCheck, AlertTriangle, PlayCircle, RefreshCw,
     CheckCircle2, ArrowRight, FileDown, Loader2
 } from 'lucide-react';
@@ -15,6 +15,8 @@ import { containerVariants, cardVariants } from '@/components/admin/shared';
 import toast from 'react-hot-toast';
 import { swrFetcher } from '@/lib/swrFetcher';
 import { useTheme } from '@/components/ThemeProvider';
+import { PanduanDivisiButton } from '@/components/admin/PanduanDivisiButton';
+import type { DivisionKey } from '@/lib/divisionTheme';
 
 // Bentuk minimal data yang dipakai dashboard (hasil API)
 interface DashCamera {
@@ -58,14 +60,25 @@ export default function AdminOverviewDashboard() {
     const isDark = theme === 'dark';
     const axisColor = isDark ? '#94a3b8' : '#475569';
 
-    // Data Fetching
+    // Role & Data Fetching
+    const { data: accessData } = useSWR<{
+        isSuperAdmin?: boolean;
+        isAdmin?: boolean;
+        appRole?: 'superadmin' | 'divisi_admin' | null;
+        appDivisi?: string | null;
+    }>('/api/me/access', swrFetcher);
+    const isSuperAdmin = accessData?.isSuperAdmin === true;
+    const isDivisiAdmin = accessData?.appRole === 'divisi_admin';
+
     // includeStreamUrl=1: dashboard PDF export includes the stream URL column.
-    const { data: cameraData, isLoading: loadingCameras, mutate: refreshCameras } = useSWR('/api/cameras?includeStreamUrl=1', swrFetcher);
-    const { data: locationData, mutate: refreshLocations } = useSWR('/api/locations', swrFetcher);
+    // scope=admin: memfilter proyek & kamera sesuai divisi caller (bila divisi_admin).
+    const { data: cameraData, isLoading: loadingCameras, mutate: refreshCameras } = useSWR('/api/cameras?includeStreamUrl=1&scope=admin', swrFetcher);
+    const { data: locationData, mutate: refreshLocations } = useSWR('/api/locations?scope=admin', swrFetcher);
     const { data: categoryData } = useSWR('/api/categories', swrFetcher);
-    const { data: shareLinkData } = useSWR('/api/share-links', swrFetcher);
-    const { data: statsData } = useSWR('/api/stats/summary?days=7', swrFetcher);
-    const { data: auditData, mutate: refreshAudit } = useSWR('/api/admin/audit-log?limit=5', swrFetcher);
+    // Hanya fetch endpoint sensitif bila superadmin (hindari 403 di console untuk divisi_admin)
+    const { data: shareLinkData } = useSWR(isSuperAdmin ? '/api/share-links' : null, swrFetcher);
+    const { data: statsData } = useSWR(isSuperAdmin ? '/api/stats/summary?days=7' : null, swrFetcher);
+    const { data: auditData, mutate: refreshAudit } = useSWR(isSuperAdmin ? '/api/admin/audit-log?limit=5' : null, swrFetcher);
 
     const [currentTime, setCurrentTime] = useState<string>('');
     const [isExportingPDF, setIsExportingPDF] = useState(false);
@@ -129,7 +142,7 @@ export default function AdminOverviewDashboard() {
     const handleRefreshAll = () => {
         refreshCameras();
         refreshLocations();
-        refreshAudit();
+        if (isSuperAdmin) refreshAudit();
         toast.success('Data dashboard diperbarui');
     };
 
@@ -180,8 +193,13 @@ export default function AdminOverviewDashboard() {
                             <div aria-hidden="true" className="w-2 h-2 rounded-full bg-emerald-400 animate-ping motion-reduce:animate-none" />
                             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Sistem Berjalan Aktif</span>
                         </div>
-                        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
-                            Executive Dashboard
+                        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-3 flex-wrap">
+                            {isDivisiAdmin ? 'Dashboard Operasional' : 'Executive Dashboard'}
+                            {isDivisiAdmin && accessData?.appDivisi && (
+                                <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border border-yellow-500/30">
+                                    {accessData.appDivisi}
+                                </span>
+                            )}
                         </h1>
                         <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
                             {currentTime || 'Pusat Komando & Analitik Pengawasan Terpadu TENGOK'}
@@ -189,6 +207,11 @@ export default function AdminOverviewDashboard() {
                     </div>
 
                     <div className="flex items-center gap-2.5 flex-wrap">
+                        <PanduanDivisiButton
+                            isSuperAdmin={isSuperAdmin}
+                            appDivisi={(accessData?.appDivisi as DivisionKey | null) ?? null}
+                            variant="header"
+                        />
                         <button
                             onClick={handleExportPDF}
                             disabled={isExportingPDF}
@@ -220,7 +243,7 @@ export default function AdminOverviewDashboard() {
                     variants={containerVariants}
                     initial="hidden"
                     animate="show"
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+                    className={`grid grid-cols-1 sm:grid-cols-2 ${isSuperAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}
                 >
                     {/* KPI 1: CCTV Status & Health */}
                     <motion.div 
@@ -299,7 +322,8 @@ export default function AdminOverviewDashboard() {
                         </div>
                     </motion.div>
 
-                    {/* KPI 4: Public Share Links & Traffic */}
+                    {/* KPI 4: Public Share Links & Traffic (super-admin only) */}
+                    {isSuperAdmin && (
                     <motion.div 
                         variants={cardVariants}
                         className="bg-gradient-to-br from-white/90 dark:from-slate-900/90 to-slate-200/50 dark:to-slate-900/40 border border-black/10 dark:border-white/10 p-5 rounded-3xl relative overflow-hidden shadow-lg"
@@ -321,6 +345,7 @@ export default function AdminOverviewDashboard() {
                             </Link>
                         </div>
                     </motion.div>
+                    )}
                 </motion.div>
 
                 {/* Section: Alert Widgets & Traffic Chart Grid */}
@@ -402,7 +427,8 @@ export default function AdminOverviewDashboard() {
                             </div>
                         </div>
 
-                        {/* 7-Day Traffic Trends */}
+                        {/* 7-Day Traffic Trends (super-admin only) */}
+                        {isSuperAdmin && (
                         <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl">
                             <div className="flex items-center justify-between pb-4 border-b border-black/5 dark:border-white/5">
                                 <div>
@@ -459,6 +485,7 @@ export default function AdminOverviewDashboard() {
                                 )}
                             </div>
                         </div>
+                        )}
                     </div>
 
                     {/* Right 1 Col: Unassigned Cameras & Recent Audit Activity */}
@@ -505,7 +532,8 @@ export default function AdminOverviewDashboard() {
                             </div>
                         </div>
 
-                        {/* Recent Activity / Audit Feed */}
+                        {/* Recent Activity / Audit Feed (super-admin only) */}
+                        {isSuperAdmin && (
                         <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
                             <div className="flex items-center justify-between pb-3 border-b border-black/5 dark:border-white/5">
                                 <div className="flex items-center gap-2">
@@ -548,6 +576,7 @@ export default function AdminOverviewDashboard() {
                                 )}
                             </div>
                         </div>
+                        )}
                     </div>
                 </div>
 
@@ -556,15 +585,16 @@ export default function AdminOverviewDashboard() {
                     <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4 ml-1">
                         Pusat Akses Cepat Modul
                     </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div className={`grid grid-cols-2 md:grid-cols-3 ${isSuperAdmin ? 'lg:grid-cols-6' : 'lg:grid-cols-3'} gap-3`}>
                         {[
-                            { name: 'Kamera', href: '/admin/cameras', icon: Monitor, color: 'text-yellow-700 dark:text-yellow-400', desc: 'RTSP & Streams' },
-                            { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin, color: 'text-blue-700 dark:text-blue-400', desc: 'Peta & Titik CCTV' },
-                            { name: 'Kategori', href: '/admin/categories', icon: Tags, color: 'text-emerald-700 dark:text-emerald-400', desc: 'Sektor & Wilayah' },
-                            { name: 'Share Links', href: '/admin/share-links', icon: Link2, color: 'text-purple-700 dark:text-purple-400', desc: 'Token Berbagi' },
-                            { name: 'Statistik', href: '/admin/statistics', icon: BarChart3, color: 'text-orange-700 dark:text-orange-400', desc: 'Analitik Trafik' },
-                            { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList, color: 'text-teal-700 dark:text-teal-400', desc: 'Log Keamanan' },
-                        ].map((item) => {
+                            { name: 'Kamera', href: '/admin/cameras', icon: Monitor, color: 'text-yellow-700 dark:text-yellow-400', desc: 'RTSP & Streams', superOnly: false },
+                            { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin, color: 'text-blue-700 dark:text-blue-400', desc: 'Peta & Titik CCTV', superOnly: false },
+                            { name: 'Pengisian Proyek', href: '/admin/pengisian', icon: ClipboardCheck, color: 'text-amber-700 dark:text-amber-400', desc: 'Rekap Data 18 Dimensi', superOnly: false },
+                            { name: 'Kategori', href: '/admin/categories', icon: Tags, color: 'text-emerald-700 dark:text-emerald-400', desc: 'Sektor & Wilayah', superOnly: true },
+                            { name: 'Share Links', href: '/admin/share-links', icon: Link2, color: 'text-purple-700 dark:text-purple-400', desc: 'Token Berbagi', superOnly: true },
+                            { name: 'Statistik', href: '/admin/statistics', icon: BarChart3, color: 'text-orange-700 dark:text-orange-400', desc: 'Analitik Trafik', superOnly: true },
+                            { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList, color: 'text-teal-700 dark:text-teal-400', desc: 'Log Keamanan', superOnly: true },
+                        ].filter((item) => isSuperAdmin || !item.superOnly).map((item) => {
                             const Icon = item.icon;
                             return (
                                 <Link

@@ -3,7 +3,9 @@ import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
 import Location from '@/models/Location';
 import { logAudit } from '@/lib/adminAuditLog';
-import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import {
+    requireDivisiAdmin, areCamerasAccessibleByDivisi, getAuditActor,
+} from '@/lib/apiAuth';
 
 /**
  * POST /api/cameras/bulk
@@ -11,16 +13,32 @@ import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
  * Body: { cameras: Array<{ name: string; streamUrl: string }> }
  */
 export async function POST(req: NextRequest) {
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     await dbConnect();
     try {
         const body = await req.json();
-        const { cameras } = body as { cameras: Array<{ name: string; streamUrl: string }> };
+        const { cameras, locationId } = body as {
+            cameras: Array<{ name: string; streamUrl: string }>;
+            locationId?: string;
+        };
 
         if (!cameras || !Array.isArray(cameras) || cameras.length === 0) {
             return NextResponse.json({ success: false, error: 'Daftar kamera kosong' }, { status: 400 });
+        }
+
+        let targetLocName: string | null = null;
+        if (locationId) {
+            const loc = await Location.findById(locationId).select('name division').lean<{ name: string; division?: string }>();
+            if (!loc) {
+                return NextResponse.json({ success: false, error: 'Lokasi tujuan tidak ditemukan' }, { status: 404 });
+            }
+            if (!isSuperAdmin && callerDivisi && loc.division !== callerDivisi) {
+                return NextResponse.json({ success: false, error: 'Lokasi tujuan berada di luar divisi Anda' }, { status: 403 });
+            }
+            targetLocName = loc.name;
         }
 
         const actor = await getAuditActor(req);
@@ -35,9 +53,16 @@ export async function POST(req: NextRequest) {
                 name: c.name.trim(),
                 streamUrl: c.streamUrl.trim(),
                 status: 'offline',
+                ...(!isSuperAdmin && callerDivisi ? { division: callerDivisi } : {}),
                 createdAt: new Date(),
             }))
         );
+
+        if (locationId && inserted.length > 0) {
+            await Location.findByIdAndUpdate(locationId, {
+                $addToSet: { cameras: { $each: inserted.map(c => c._id) } },
+            });
+        }
 
         logAudit({
             action: 'CREATE',
@@ -45,7 +70,7 @@ export async function POST(req: NextRequest) {
             entityId: 'BULK_IMPORT',
             entityName: `${inserted.length} Kamera (Batch Import)`,
             by: actor,
-            detail: `Import massal ${inserted.length} perangkat kamera dari file CSV`,
+            detail: `Import massal ${inserted.length} perangkat kamera dari file CSV${targetLocName ? ` ke lokasi ${targetLocName}` : ''}`,
         });
 
         return NextResponse.json({
@@ -65,8 +90,9 @@ export async function POST(req: NextRequest) {
  * Body: { cameraIds: string[] }
  */
 export async function DELETE(req: NextRequest) {
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     await dbConnect();
     try {
@@ -75,6 +101,12 @@ export async function DELETE(req: NextRequest) {
 
         if (!cameraIds || !Array.isArray(cameraIds) || cameraIds.length === 0) {
             return NextResponse.json({ success: false, error: 'Pilih kamera yang ingin dihapus' }, { status: 400 });
+        }
+
+        if (!isSuperAdmin && callerDivisi) {
+            if (!(await areCamerasAccessibleByDivisi(cameraIds, callerDivisi))) {
+                return NextResponse.json({ success: false, error: 'Terdapat kamera di luar cakupan divisi Anda' }, { status: 403 });
+            }
         }
 
         const actor = await getAuditActor(req);
@@ -111,8 +143,9 @@ export async function DELETE(req: NextRequest) {
  * Body: { cameraIds: string[], locationId: string }
  */
 export async function PATCH(req: NextRequest) {
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     await dbConnect();
     try {
@@ -127,6 +160,15 @@ export async function PATCH(req: NextRequest) {
         const location = await Location.findById(locationId);
         if (!location) {
             return NextResponse.json({ success: false, error: 'Lokasi tujuan tidak ditemukan' }, { status: 404 });
+        }
+
+        if (!isSuperAdmin && callerDivisi) {
+            if (location.division !== callerDivisi) {
+                return NextResponse.json({ success: false, error: 'Lokasi tujuan berada di luar divisi Anda' }, { status: 403 });
+            }
+            if (!(await areCamerasAccessibleByDivisi(cameraIds, callerDivisi))) {
+                return NextResponse.json({ success: false, error: 'Terdapat kamera di luar cakupan divisi Anda' }, { status: 403 });
+            }
         }
 
         // Add cameras to target location without duplicates

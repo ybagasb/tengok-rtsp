@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Settings, { DEFAULT_NOTIFICATION_SETTINGS, INotice } from '@/models/Settings';
-import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import { requireSuperAdmin, getAuditActor } from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
 
 export const dynamic = 'force-dynamic';
@@ -51,7 +51,7 @@ export async function GET() {
  * Replace the whole notices config.
  */
 export async function PUT(req: NextRequest) {
-    const authError = await requireAdmin(req);
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     await dbConnect();

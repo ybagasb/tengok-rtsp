@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireDivisiAdmin } from '@/lib/apiAuth';
 import {
     DIVISI_LIST, DIMENSI_LABELS, PENGISIAN_FIELDS, hitungBaris, isDivisiKey,
     type BarisPengisian, type DivisiKey, type PengisianResponse, type PengisianSumber,
@@ -12,17 +12,18 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/admin/pengisian
  * Rekap pengisian data proyek (18 dimensi) untuk Divisi 1, 2, dan 3.
- * Hanya SSO (requireAdmin); data dihitung di server supaya klien tidak perlu
- * menarik laporan bulanan / QHSSE yang berat.
+ * Super-admin melihat semua divisi; divisi_admin hanya melihat divisinya sendiri.
  */
 export async function GET(req: NextRequest) {
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     await dbConnect();
 
     try {
-        const docs = await Location.find({})
+        const filter = !isSuperAdmin && callerDivisi ? { division: callerDivisi } : {};
+        const docs = await Location.find(filter)
             .select(`${PENGISIAN_FIELDS} division`)
             .sort({ category: 1, name: 1 })
             .lean<(PengisianSumber & { division?: string })[]>();
@@ -31,15 +32,16 @@ export async function GET(req: NextRequest) {
         let tanpaDivisi = 0;
         for (const doc of docs) {
             if (isDivisiKey(doc.division)) divisi[doc.division].push(hitungBaris(doc));
-            else tanpaDivisi++;
+            else if (isSuperAdmin) tanpaDivisi++;
         }
 
-        const body: PengisianResponse = {
+        const body: PengisianResponse & { scopedDivisi?: DivisiKey | null } = {
             success: true,
             generatedAt: new Date().toISOString(),
             dimensi: [...DIMENSI_LABELS],
             divisi,
             tanpaDivisi,
+            scopedDivisi: isSuperAdmin ? null : (callerDivisi as DivisiKey),
         };
         return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } });
     } catch (error) {

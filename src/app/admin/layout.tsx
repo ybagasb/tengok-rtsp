@@ -2,37 +2,72 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { 
     LayoutDashboard, Monitor, MapPin, Tags, ArrowLeft, Shield, ShieldCheck,
-    Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList, ClipboardCheck, Bell 
+    Link2, BarChart3, Activity, MoreHorizontal, X, ClipboardList, ClipboardCheck, Bell, Lock 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sidebarVariants, navItemVariants } from '@/components/admin/shared';
 import ThemeToggle from '@/components/ThemeToggle';
+import { PanduanDivisiButton } from '@/components/admin/PanduanDivisiButton';
+import { swrFetcher } from '@/lib/swrFetcher';
+
+interface AccessInfo {
+    isSuperAdmin: boolean;
+    isAdmin: boolean;
+    appRole: 'superadmin' | 'divisi_admin' | null;
+    appDivisi: 'DIVISI 1' | 'DIVISI 2' | 'DIVISI 3' | null;
+}
+
+const ALL_NAVIGATION = [
+    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, superOnly: false },
+    { name: 'Kamera', href: '/admin/cameras', icon: Monitor, superOnly: false },
+    { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin, superOnly: false },
+    { name: 'Kategori', href: '/admin/categories', icon: Tags, superOnly: true },
+    { name: 'Pengisian Proyek', href: '/admin/pengisian', icon: ClipboardCheck, superOnly: false },
+    { name: 'Share Links', href: '/admin/share-links', icon: Link2, superOnly: true },
+    { name: 'Statistik', href: '/admin/statistics', icon: BarChart3, superOnly: true },
+    { name: 'Uptime & SLA', href: '/admin/uptime', icon: Activity, superOnly: true },
+    { name: 'Notifikasi', href: '/admin/notifications', icon: Bell, superOnly: true },
+    { name: 'Hak Akses', href: '/admin/roles', icon: ShieldCheck, superOnly: true },
+    { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList, superOnly: true },
+];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
     const [showMore, setShowMore] = useState(false);
 
-    const navigation = [
-        { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-        { name: 'Kamera', href: '/admin/cameras', icon: Monitor },
-        { name: 'Lokasi Proyek', href: '/admin/locations', icon: MapPin },
-        { name: 'Kategori', href: '/admin/categories', icon: Tags },
-        { name: 'Pengisian Proyek', href: '/admin/pengisian', icon: ClipboardCheck },
-        { name: 'Share Links', href: '/admin/share-links', icon: Link2 },
-        { name: 'Statistik', href: '/admin/statistics', icon: BarChart3 },
-        { name: 'Uptime & SLA', href: '/admin/uptime', icon: Activity },
-        { name: 'Notifikasi', href: '/admin/notifications', icon: Bell },
-        { name: 'Hak Akses', href: '/admin/roles', icon: ShieldCheck },
-        { name: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
-    ];
+    const { data: access, isLoading: loadingAccess } = useSWR<AccessInfo>('/api/me/access', swrFetcher);
 
-    // Mobile: show first 4 (Dashboard, Kamera, Lokasi, Kategori), put rest in "More" menu
+    const isSuperAdmin = access?.isSuperAdmin === true;
+    const isAdmin = access?.isAdmin === true || isSuperAdmin;
+
+    const navigation = useMemo(() => {
+        if (isSuperAdmin) return ALL_NAVIGATION;
+        return ALL_NAVIGATION.filter((item) => !item.superOnly);
+    }, [isSuperAdmin]);
+
+    // Mobile: show first 4 items, put rest in "More" menu (if any)
     const mobileMainNav = navigation.slice(0, 4);
     const mobileMoreNav = navigation.slice(4);
+
+    // Redirect defensif bila divisi_admin membuka rute superadmin-only secara langsung
+    // (mis. memakai cookie lama yang belum ter-sync role-nya di middleware).
+    const onSuperOnlyPath = ALL_NAVIGATION.some(
+        (item) => item.superOnly && pathname.startsWith(item.href),
+    );
+    useEffect(() => {
+        if (!loadingAccess && access) {
+            if (!isAdmin) {
+                router.replace('/categories');
+            } else if (!isSuperAdmin && onSuperOnlyPath) {
+                router.replace('/admin');
+            }
+        }
+    }, [loadingAccess, access, isAdmin, isSuperAdmin, onSuperOnlyPath, router]);
 
     // Escape menutup sheet "Lainnya"
     useEffect(() => {
@@ -41,6 +76,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
     }, [showMore]);
+
+    const systemLabel = access?.appRole === 'divisi_admin' && access.appDivisi
+        ? `Admin ${access.appDivisi}`
+        : 'Tengok System';
+
+    if (!loadingAccess && access && !isAdmin) {
+        return (
+            <div className="min-h-dvh flex flex-col items-center justify-center gap-4 bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white p-6 text-center">
+                <Lock aria-hidden="true" className="w-10 h-10 text-rose-600 dark:text-rose-400" />
+                <h1 className="text-xl font-bold">Akses Admin Ditolak</h1>
+                <p className="text-sm text-slate-500 max-w-md">Akun Anda belum ditetapkan sebagai Admin Divisi atau Super-admin TENGOK.</p>
+                <button
+                    onClick={() => router.replace('/categories')}
+                    className="px-5 py-2.5 rounded-xl bg-yellow-500 text-slate-950 font-bold text-xs uppercase tracking-wider"
+                >
+                    Kembali ke Beranda
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="flex min-h-dvh bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white font-sans">
@@ -61,7 +116,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </motion.div>
                     <div>
                         <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1">Admin Panel</h2>
-                        <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Tengok System</span>
+                        <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">{systemLabel}</span>
                     </div>
                 </div>
 
@@ -118,6 +173,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         </span>
                         System Online
                     </div>
+                    <div className="px-1">
+                        <PanduanDivisiButton
+                            isSuperAdmin={isSuperAdmin}
+                            appDivisi={access?.appDivisi ?? null}
+                            variant="sidebar"
+                        />
+                    </div>
                     <div className="px-1"><ThemeToggle className="w-full justify-start" /></div>
                     <button
                         onClick={() => router.push('/categories')}
@@ -160,20 +222,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         );
                     })}
 
-                    {/* More Menu Trigger */}
-                    <button
-                        type="button"
-                        onClick={() => setShowMore(true)}
-                        aria-expanded={showMore}
-                        aria-haspopup="dialog"
-                        aria-label="Menu lainnya"
-                        className={`flex flex-col items-center justify-center gap-1 py-2 px-1 flex-1 min-w-0 min-h-12 rounded-xl transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
-                            mobileMoreNav.some(n => pathname.startsWith(n.href)) ? 'text-yellow-700 dark:text-yellow-500' : 'text-slate-500'
-                        }`}
-                    >
-                        <MoreHorizontal aria-hidden="true" className="w-5 h-5" />
-                        <span className="text-[11px] font-bold">Lainnya</span>
-                    </button>
+                    {/* More Menu Trigger (hanya bila ada menu tambahan) */}
+                    {mobileMoreNav.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setShowMore(true)}
+                            aria-expanded={showMore}
+                            aria-haspopup="dialog"
+                            aria-label="Menu lainnya"
+                            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 flex-1 min-w-0 min-h-12 rounded-xl transition-all focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none ${
+                                mobileMoreNav.some(n => pathname.startsWith(n.href)) ? 'text-yellow-700 dark:text-yellow-500' : 'text-slate-500'
+                            }`}
+                        >
+                            <MoreHorizontal aria-hidden="true" className="w-5 h-5" />
+                            <span className="text-[11px] font-bold">Lainnya</span>
+                        </button>
+                    )}
                 </div>
             </nav>
 
@@ -230,6 +294,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                                         </Link>
                                     );
                                 })}
+                            </div>
+                            <div className="mt-4">
+                                <PanduanDivisiButton
+                                    isSuperAdmin={isSuperAdmin}
+                                    appDivisi={access?.appDivisi ?? null}
+                                    variant="mobile"
+                                />
                             </div>
                             <button
                                 onClick={() => { setShowMore(false); router.push('/categories'); }}

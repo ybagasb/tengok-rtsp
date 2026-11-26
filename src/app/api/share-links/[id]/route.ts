@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import ShareLink from '@/models/ShareLink';
 import { logAudit } from '@/lib/adminAuditLog';
-import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import { requireSuperAdmin, getAuditActor } from '@/lib/apiAuth';
 
-// DELETE — Remove a share link (admin only)
+// DELETE — Remove a share link (super-admin only)
 export async function DELETE(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const authError = await requireAdmin(req);
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     try {
@@ -36,12 +36,12 @@ export async function DELETE(
     }
 }
 
-// PATCH — Toggle isActive status (admin only)
+// PATCH — Toggle isActive status (super-admin only)
 export async function PATCH(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const authError = await requireAdmin(req);
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     try {

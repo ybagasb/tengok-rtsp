@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireDivisiAdmin } from '@/lib/apiAuth';
 import { buildKeyUnder, putPublicObject, isStorageConfigured } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
@@ -16,8 +16,8 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
  * public URL — suitable to store directly in a DB field rendered via <img src>.
  */
 export async function POST(req: NextRequest) {
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
 
     if (!isStorageConfigured()) {
         return NextResponse.json(

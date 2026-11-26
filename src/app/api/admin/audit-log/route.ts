@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AuditLog from '@/models/AuditLog';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireSuperAdmin } from '@/lib/apiAuth';
 import { escapeRegExp } from '@/lib/escapeRegExp';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 const MAX_SEARCH_LEN = 100;
 
 export async function GET(req: NextRequest) {
-    const authError = await requireAdmin(req);
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     await dbConnect();

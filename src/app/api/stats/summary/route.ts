@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AccessLog from '@/models/AccessLog';
 import ShareLink from '@/models/ShareLink';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireSuperAdmin } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-    // Only admin can view statistics
-    const authError = await requireAdmin(req);
+    // Only super-admin can view statistics
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     try {

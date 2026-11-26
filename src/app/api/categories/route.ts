@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Category from '@/models/Category';
 import { logAudit } from '@/lib/adminAuditLog';
-import { requireAuth, requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import { requireAuth, requireSuperAdmin, getAuditActor } from '@/lib/apiAuth';
 import { pickCategoryFields } from '@/lib/categoryFields';
 
 export const dynamic = 'force-dynamic';
@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    // Only admin can create categories
-    const authError = await requireAdmin(req);
+    // Only super-admin can create categories
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     await dbConnect();

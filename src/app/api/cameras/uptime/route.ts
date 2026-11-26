@@ -4,7 +4,7 @@ import StatusLog from '@/models/StatusLog';
 // Side-effect import: registers the Camera model (needed for populate / refs)
 import '@/models/Camera';
 import Location from '@/models/Location';
-import { requireAuth } from '@/lib/apiAuth';
+import { requireSuperAdmin } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -42,8 +42,8 @@ interface UptimeResult {
 }
 
 export async function GET(req: NextRequest) {
-    // Require authentication
-    const authError = await requireAuth(req);
+    // Only super-admin can view system uptime & SLA
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     const days = parseInt(req.nextUrl.searchParams.get('days') || '7');

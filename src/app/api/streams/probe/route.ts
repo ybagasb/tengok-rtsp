@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireDivisiAdmin } from '@/lib/apiAuth';
 
 // Quick check if an RTSP stream is reachable using ffprobe
 // Much faster than starting a full FFmpeg transcode
@@ -37,9 +37,9 @@ function probeRtsp(rtspUrl: string): Promise<boolean> {
 }
 
 export async function POST(req: NextRequest) {
-    // Only admin can probe RTSP streams (contains credentials)
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    // Only superadmin / divisi_admin can probe RTSP streams (contains credentials)
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
 
     try {
         const { cameras } = await req.json() as {

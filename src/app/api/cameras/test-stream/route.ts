@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
-import { requireAdmin } from '@/lib/apiAuth';
+import { requireDivisiAdmin } from '@/lib/apiAuth';
 import { isRtspUrl } from '@/lib/urlGuard';
 
 export const runtime = 'nodejs';
@@ -66,8 +66,8 @@ function probeStream(streamUrl: string): Promise<{ success: boolean; codec?: str
 }
 
 export async function POST(req: NextRequest) {
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
 
     try {
         const body = await req.json();

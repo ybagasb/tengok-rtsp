@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
-import { requireAdmin, requireProjectAccess, getAuditActor, getSessionIdentity, isSuperAdmin, matchProjectPic } from '@/lib/apiAuth';
+import {
+    requireAdmin, requireProjectAccess, getAuditActor,
+    getSessionIdentity, getCallerRole, matchProjectPic,
+} from '@/lib/apiAuth';
 import { logAudit } from '@/lib/adminAuditLog';
 import { derivedFromLaporan, isValidPeriode } from '@/lib/projectReport';
 import { loadDeriveSource, syncLegacy } from '@/lib/projectSync';
@@ -118,12 +121,17 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         // Hitung kemampuan akses SEBELUM menandatangani file. Server tetap
         // penegak: hanya editor yang menerima presigned URL / raw key.
         const { sub, username } = await getSessionIdentity();
-        const superAdmin = sub ? await isSuperAdmin(sub) : false;
+        const caller = await getCallerRole();
+        const superAdmin = caller.isSuperAdmin;
+        const isDivisiEditor =
+            caller.role === 'divisi_admin' &&
+            Boolean(caller.divisi) &&
+            (loc as { division?: string }).division === caller.divisi;
         const picSubs: string[] = Array.isArray(loc.picSubs) ? loc.picSubs : [];
         // Kecocokan PIC: sub asli ATAU placeholder `ldap_<username>` (user yang
         // belum pernah login ke aplikasi penulis sub asli). Lihat matchProjectPic.
         const { match: isPic, placeholder } = matchProjectPic(picSubs, { sub, username });
-        const canEdit = superAdmin || isPic;
+        const canEdit = superAdmin || isDivisiEditor || isPic;
 
         // SELF-HEAL: bila PIC dikenali lewat placeholder, upgrade ke sub asli
         // begitu halaman proyek dibuka (best-effort; tak boleh menggagalkan GET).

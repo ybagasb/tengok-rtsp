@@ -6,7 +6,7 @@
 // schema Camera; body mentah tidak boleh di-$set langsung agar tidak ada field
 // tak terduga yang tersisip.
 export const CAMERA_EDITABLE_FIELDS = [
-    'name', 'streamUrl', 'status', 'lastCheckedAt', 'lastOnlineAt',
+    'name', 'streamUrl', 'status', 'division', 'lastCheckedAt', 'lastOnlineAt',
 ] as const;
 
 /** Salin HANYA key allowlist dari body kamera. */

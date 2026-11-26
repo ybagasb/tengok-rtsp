@@ -3,11 +3,11 @@ import { randomBytes } from 'crypto';
 import dbConnect from '@/lib/db';
 import ShareLink from '@/models/ShareLink';
 import { logAudit } from '@/lib/adminAuditLog';
-import { requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import { requireSuperAdmin, getAuditActor } from '@/lib/apiAuth';
 
-// GET — List all share links (admin only)
+// GET — List all share links (super-admin only)
 export async function GET(req: NextRequest) {
-    const authError = await requireAdmin(req);
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     try {
@@ -23,9 +23,9 @@ export async function GET(req: NextRequest) {
     }
 }
 
-// POST — Create a new share link (admin only)
+// POST — Create a new share link (super-admin only)
 export async function POST(req: NextRequest) {
-    const authError = await requireAdmin(req);
+    const authError = await requireSuperAdmin(req);
     if (authError) return authError;
 
     try {

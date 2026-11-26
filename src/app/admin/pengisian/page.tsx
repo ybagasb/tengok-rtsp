@@ -22,11 +22,16 @@ const btnBase =
     'focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold uppercase tracking-wider transition-all min-h-11 disabled:opacity-50 disabled:cursor-not-allowed';
 const btnSecondary = `${btnBase} bg-white/80 dark:bg-slate-900/80 border-black/10 dark:border-white/10 hover:border-yellow-500/30 text-slate-600 dark:text-slate-300 hover:text-yellow-800 dark:hover:text-yellow-400`;
 
+type PengisianApiResponse = PengisianResponse & { scopedDivisi?: DivisiKey | null };
+
 export default function PengisianProyekPage() {
-    const { data, error, isLoading, isValidating, mutate } = useSWR<PengisianResponse>('/api/admin/pengisian', swrFetcher, {
+    const { data, error, isLoading, isValidating, mutate } = useSWR<PengisianApiResponse>('/api/admin/pengisian', swrFetcher, {
         revalidateOnFocus: false,
     });
-    const [aktif, setAktif] = useState<DivisiKey>('DIVISI 1');
+    const [aktifTab, setAktif] = useState<DivisiKey>('DIVISI 1');
+    const scopedDivisi = data?.scopedDivisi ?? null;
+    const visibleDivisiList: readonly DivisiKey[] = scopedDivisi ? [scopedDivisi] : DIVISI_LIST;
+    const aktif = scopedDivisi ?? aktifTab;
     const [cari, setCari] = useState('');
     const [mengunduh, setMengunduh] = useState<DivisiKey | 'semua' | null>(null);
 
@@ -77,17 +82,19 @@ export default function PengisianProyekPage() {
                     subtitle={`Rekap kelengkapan data ${TOTAL_DIMENSI} dimensi tiap proyek per divisi. Unduh sebagai PDF kapan pun, datanya selalu diambil terbaru.`}
                     actions={
                         <div className="flex items-center gap-3 flex-wrap justify-end">
-                            <button
-                                type="button"
-                                onClick={() => unduh('semua')}
-                                disabled={sibuk || !data}
-                                className={btnSecondary}
-                            >
-                                {mengunduh === 'semua'
-                                    ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin motion-reduce:animate-none" />
-                                    : <Files aria-hidden="true" className="w-4 h-4" />}
-                                Unduh Ketiganya
-                            </button>
+                            {!scopedDivisi && (
+                                <button
+                                    type="button"
+                                    onClick={() => unduh('semua')}
+                                    disabled={sibuk || !data}
+                                    className={btnSecondary}
+                                >
+                                    {mengunduh === 'semua'
+                                        ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin motion-reduce:animate-none" />
+                                        : <Files aria-hidden="true" className="w-4 h-4" />}
+                                    Unduh Ketiganya
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={() => mutate()}
@@ -134,9 +141,9 @@ export default function PengisianProyekPage() {
                             animate="show"
                             role="group"
                             aria-label="Pilih divisi"
-                            className="grid grid-cols-1 md:grid-cols-3 gap-4"
+                            className={`grid grid-cols-1 ${visibleDivisiList.length > 1 ? 'md:grid-cols-3' : 'md:grid-cols-1 max-w-md'} gap-4`}
                         >
-                            {DIVISI_LIST.map(d => {
+                            {visibleDivisiList.map(d => {
                                 const r = ringkasan[d];
                                 const dipilih = aktif === d;
                                 return (

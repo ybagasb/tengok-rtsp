@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
-import AppRole from '@/models/AppRole';
+import AppRole, { type AppRoleName, type DivisiName } from '@/models/AppRole';
 import { requireSuperAdmin, getAuditActor, isBootstrapAdmin } from '@/lib/apiAuth';
 import { getUsersBySubs } from '@/lib/ssoUsers';
 import SsoIdentity from '@/models/SsoIdentity';
@@ -8,6 +8,8 @@ import { logAudit } from '@/lib/adminAuditLog';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+const VALID_DIVISI: readonly DivisiName[] = ['DIVISI 1', 'DIVISI 2', 'DIVISI 3'];
 
 /** Daftar cognito_sub bootstrap dari env (implisit super-admin, tidak dapat dicabut). */
 function bootstrapSubs(): string[] {
@@ -21,7 +23,7 @@ function bootstrapSubs(): string[] {
 
 /**
  * GET /api/admin/roles  (super-admin only)
- * Daftar super-admin: entri AppRole + subs bootstrap env (ditandai, tak bisa dicabut).
+ * Daftar super-admin + admin divisi: entri AppRole + subs bootstrap env.
  */
 export async function GET(req: NextRequest) {
     const authError = await requireSuperAdmin(req);
@@ -30,8 +32,10 @@ export async function GET(req: NextRequest) {
     await dbConnect();
 
     try {
-        const rows = await AppRole.find({ role: 'superadmin' }).lean() as Array<{
+        const rows = await AppRole.find({}).lean() as Array<{
             cognitoSub: string;
+            role: AppRoleName;
+            divisi?: DivisiName | null;
             createdBy?: string;
             createdAt?: Date | string;
         }>;
@@ -39,10 +43,10 @@ export async function GET(req: NextRequest) {
         const boots = bootstrapSubs();
         const bootSet = new Set(boots);
 
-        // Gabungkan: entri AppRole (removable kecuali juga bootstrap) + bootstrap env
-        // yang belum punya entri AppRole.
-        type AdminRow = {
+        type RoleRow = {
             cognitoSub: string;
+            role: AppRoleName;
+            divisi: DivisiName | null;
             username: string;
             fullName: string | null;
             jobTitle: string | null;
@@ -52,12 +56,14 @@ export async function GET(req: NextRequest) {
             createdAt?: Date | string;
         };
 
-        const bySub = new Map<string, AdminRow>();
+        const bySub = new Map<string, RoleRow>();
 
         for (const r of rows) {
             const isBoot = bootSet.has(r.cognitoSub);
             bySub.set(r.cognitoSub, {
                 cognitoSub: r.cognitoSub,
+                role: isBoot ? 'superadmin' : (r.role || 'superadmin'),
+                divisi: isBoot ? null : (r.divisi ?? null),
                 username: '',
                 fullName: null,
                 jobTitle: null,
@@ -72,6 +78,8 @@ export async function GET(req: NextRequest) {
             if (!bySub.has(sub)) {
                 bySub.set(sub, {
                     cognitoSub: sub,
+                    role: 'superadmin',
+                    divisi: null,
                     username: '',
                     fullName: null,
                     jobTitle: null,
@@ -118,16 +126,23 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: true, data: { admins: [...bySub.values()] } });
+        const allRows = [...bySub.values()];
+        const admins = allRows.filter((r) => r.role === 'superadmin');
+        const divisiAdmins = allRows
+            .filter((r) => r.role === 'divisi_admin')
+            .sort((a, b) => (a.divisi || '').localeCompare(b.divisi || '') || (a.fullName || a.username).localeCompare(b.fullName || b.username));
+
+        return NextResponse.json({ success: true, data: { admins, divisiAdmins } });
     } catch (error) {
         console.error('[Roles GET] Error:', (error as { message?: string })?.message);
-        return NextResponse.json({ success: false, error: 'Gagal memuat daftar super-admin' }, { status: 500 });
+        return NextResponse.json({ success: false, error: 'Gagal memuat daftar hak akses' }, { status: 500 });
     }
 }
 
 /**
  * POST /api/admin/roles  (super-admin only)
- * Body: { cognitoSub } — tambah super-admin (idempoten upsert).
+ * Body: { cognitoSub, role?: 'superadmin' | 'divisi_admin', divisi?: DivisiName }
+ * Tambah atau perbarui hak akses (upsert).
  */
 export async function POST(req: NextRequest) {
     const authError = await requireSuperAdmin(req);
@@ -142,10 +157,28 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: 'cognitoSub wajib diisi' }, { status: 400 });
         }
 
+        const role: AppRoleName = body?.role === 'divisi_admin' ? 'divisi_admin' : 'superadmin';
+        const divisi: DivisiName | null =
+            role === 'divisi_admin' ? (VALID_DIVISI.includes(body?.divisi) ? body.divisi : null) : null;
+
+        if (role === 'divisi_admin' && !divisi) {
+            return NextResponse.json(
+                { success: false, error: 'Divisi wajib dipilih untuk Admin Divisi (DIVISI 1 / 2 / 3)' },
+                { status: 400 },
+            );
+        }
+
+        if (isBootstrapAdmin(cognitoSub) && role !== 'superadmin') {
+            return NextResponse.json(
+                { success: false, error: 'Admin bootstrap tidak dapat diturunkan ke Admin Divisi.' },
+                { status: 400 },
+            );
+        }
+
         const actor = await getAuditActor(req);
         await AppRole.updateOne(
             { cognitoSub },
-            { $setOnInsert: { role: 'superadmin', createdBy: actor, createdAt: new Date() } },
+            { $set: { role, divisi, createdBy: actor, createdAt: new Date() } },
             { upsert: true },
         );
 
@@ -155,19 +188,19 @@ export async function POST(req: NextRequest) {
             entityId: cognitoSub,
             entityName: cognitoSub,
             by: actor,
-            detail: 'Menambah super-admin',
+            detail: role === 'divisi_admin' ? `Menetapkan Admin ${divisi}` : 'Menambah super-admin',
         });
 
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('[Roles POST] Error:', (error as { message?: string })?.message);
-        return NextResponse.json({ success: false, error: 'Gagal menambah super-admin' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Gagal menyimpan hak akses' }, { status: 400 });
     }
 }
 
 /**
  * DELETE /api/admin/roles?sub=<cognito_sub>  (super-admin only)
- * Cabut super-admin. Sub bootstrap tidak dapat dicabut (anti-lockout → 400).
+ * Cabut hak akses (super-admin atau admin divisi). Sub bootstrap tidak dapat dicabut.
  */
 export async function DELETE(req: NextRequest) {
     const authError = await requireSuperAdmin(req);
@@ -187,7 +220,7 @@ export async function DELETE(req: NextRequest) {
             );
         }
 
-        await AppRole.deleteOne({ cognitoSub: sub });
+        const removed = await AppRole.findOneAndDelete({ cognitoSub: sub }).lean<{ role?: string; divisi?: string }>();
 
         await logAudit({
             action: 'DELETE',
@@ -195,12 +228,14 @@ export async function DELETE(req: NextRequest) {
             entityId: sub,
             entityName: sub,
             by: await getAuditActor(req),
-            detail: 'Mencabut super-admin',
+            detail: removed?.role === 'divisi_admin'
+                ? `Mencabut Admin ${removed.divisi || 'Divisi'}`
+                : 'Mencabut super-admin',
         });
 
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('[Roles DELETE] Error:', (error as { message?: string })?.message);
-        return NextResponse.json({ success: false, error: 'Gagal mencabut super-admin' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Gagal mencabut hak akses' }, { status: 400 });
     }
 }

@@ -4,7 +4,9 @@ import Location from '@/models/Location';
 // Side-effect import: registers the Camera model so populate('cameras') works
 import '@/models/Camera';
 import { logAudit } from '@/lib/adminAuditLog';
-import { requireAuth, requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import {
+    requireAuth, requireDivisiAdmin, areCamerasAccessibleByDivisi, getAuditActor,
+} from '@/lib/apiAuth';
 
 import '@/lib/cameraStatusChecker';
 
@@ -73,23 +75,37 @@ interface ValidationLikeError {
 }
 
 export async function GET(req: NextRequest) {
-    // Require authentication
-    const authError = await requireAuth(req);
-    if (authError) return authError;
-
-    await dbConnect();
-
     const { searchParams } = new URL(req.url);
+    const scope = searchParams.get('scope');
     const category = searchParams.get('category');
     const division = searchParams.get('division');
     const projectType = searchParams.get('projectType');
     const id = searchParams.get('id');
 
+    // Mode ?scope=admin dipakai oleh halaman manajemen admin (/admin/*):
+    // membatasi akses ke superadmin / divisi_admin dan otomatis memfilter divisi.
+    let adminDivisi: string | null = null;
+    if (scope === 'admin') {
+        const authResult = await requireDivisiAdmin(req);
+        if ('error' in authResult) return authResult.error;
+        if (!authResult.isSuperAdmin) adminDivisi = authResult.divisi;
+    } else {
+        const authError = await requireAuth(req);
+        if (authError) return authError;
+    }
+
+    await dbConnect();
+
     try {
         if (id) {
-            const location = await Location.findById(id).populate('cameras').lean();
+            const location = await Location.findById(id)
+                .populate('cameras')
+                .lean<LocationWithCamerasLean & { division?: string }>();
             if (!location) {
                 return NextResponse.json({ success: false, error: 'Location not found' }, { status: 404 });
+            }
+            if (adminDivisi && location.division !== adminDivisi) {
+                return NextResponse.json({ success: false, error: 'Proyek ini di luar cakupan divisi Anda' }, { status: 403 });
             }
             return NextResponse.json({ success: true, data: sanitizeCameras(location) });
         }
@@ -100,7 +116,11 @@ export async function GET(req: NextRequest) {
             const cats = category.split(',').map((c) => c.trim()).filter(Boolean).slice(0, 10);
             query.category = cats.length > 1 ? { $in: cats } : (cats[0] ?? category);
         }
-        if (division) query.division = division;
+        if (adminDivisi) {
+            query.division = adminDivisi;
+        } else if (division) {
+            query.division = division;
+        }
         if (projectType) query.projectType = projectType;
         const locations = await Location.find(query).populate('cameras').lean<LocationWithCamerasLean[]>();
 
@@ -136,17 +156,33 @@ function errorResponse(error: unknown, fallback: string, status = 500) {
 }
 
 export async function POST(req: NextRequest) {
-    // Only admin can create locations
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     await dbConnect();
 
     try {
         const body = await req.json();
+        const data = pickEditableFields(body);
+
+        // Divisi admin wajib terikat ke divisinya sendiri dan hanya boleh menautkan kamera divisinya.
+        if (!isSuperAdmin && callerDivisi) {
+            data.division = callerDivisi;
+            if (Array.isArray(data.cameras) && data.cameras.length > 0) {
+                const camIds = data.cameras.map(String);
+                if (!(await areCamerasAccessibleByDivisi(camIds, callerDivisi))) {
+                    return NextResponse.json(
+                        { success: false, error: 'Terdapat kamera yang bukan milik divisi Anda' },
+                        { status: 403 },
+                    );
+                }
+            }
+        }
+
         const actor = await getAuditActor(req);
         // Hanya field allowlist yang boleh dibuat — picSubs tidak dapat disisipkan.
-        const location = await Location.create(pickEditableFields(body));
+        const location = await Location.create(data);
 
         await logAudit({
             action: 'CREATE',
@@ -164,9 +200,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-    // Only admin can delete locations
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     await dbConnect();
 
@@ -178,6 +214,14 @@ export async function DELETE(req: NextRequest) {
     }
 
     try {
+        const existing = await Location.findById(id).select('name division').lean<{ name?: string; division?: string }>();
+        if (!existing) {
+            return NextResponse.json({ success: false, error: 'Location not found' }, { status: 404 });
+        }
+        if (!isSuperAdmin && existing.division !== callerDivisi) {
+            return NextResponse.json({ success: false, error: 'Anda tidak memiliki akses menghapus proyek divisi lain' }, { status: 403 });
+        }
+
         const actor = await getAuditActor(req);
         const deletedLocation = await Location.findByIdAndDelete(id);
         if (!deletedLocation) {
@@ -200,9 +244,9 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-    // Only admin can update locations
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     await dbConnect();
 
@@ -214,9 +258,30 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ success: false, error: 'ID is required' }, { status: 400 });
         }
 
+        const existing = await Location.findById(_id).select('division').lean<{ division?: string }>();
+        if (!existing) {
+            return NextResponse.json({ success: false, error: 'Location not found' }, { status: 404 });
+        }
+        if (!isSuperAdmin && existing.division !== callerDivisi) {
+            return NextResponse.json({ success: false, error: 'Anda tidak memiliki akses mengubah proyek divisi lain' }, { status: 403 });
+        }
+
         // Hanya field allowlist yang ditulis. picSubs (kontrol akses), _id,
         // createdAt, updatedAt sengaja tidak pernah masuk update.
         const updateData = pickEditableFields(body);
+        if (!isSuperAdmin && callerDivisi) {
+            // Divisi admin tidak dapat memindahkan proyek ke divisi lain
+            updateData.division = callerDivisi;
+            if (Array.isArray(updateData.cameras) && updateData.cameras.length > 0) {
+                const camIds = updateData.cameras.map(String);
+                if (!(await areCamerasAccessibleByDivisi(camIds, callerDivisi))) {
+                    return NextResponse.json(
+                        { success: false, error: 'Terdapat kamera yang bukan milik divisi Anda' },
+                        { status: 403 },
+                    );
+                }
+            }
+        }
 
         const actor = await getAuditActor(req);
         const location = await Location.findByIdAndUpdate(_id, updateData, { new: true, runValidators: true });

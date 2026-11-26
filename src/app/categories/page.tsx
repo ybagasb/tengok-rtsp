@@ -484,13 +484,13 @@ export default function CategoriesPage() {
       ? `color-mix(in srgb, ${hex} 58%, #000)`
       : `color-mix(in srgb, ${hex} 72%, #fff)`;
 
-  // Gating UI tombol Management: hanya super-admin.
+  // Gating UI tombol Management: super-admin atau admin divisi.
   const accessFetcher = (url: string) => fetch(url).then((r) => r.json());
   const { data: accessData } = useSWR(
     session?.user ? "/api/me/access" : null,
     accessFetcher
   );
-  const isSuperAdmin = accessData?.isSuperAdmin === true;
+  const canOpenAdmin = accessData?.isAdmin === true || accessData?.isSuperAdmin === true;
 
   // Data divisi & kategori dari DB (di-cache oleh SWR, polling tiap 30 detik untuk update status kamera)
   const { data: divisionsRes, error: divisionsError } = useSWR<{ success: boolean; data: DivisionData[] }>(
@@ -1564,8 +1564,8 @@ export default function CategoriesPage() {
             </div>
           )}
 
-          {/* Management (super-admin) */}
-          {session?.user && isSuperAdmin && (
+          {/* Management (super-admin & admin divisi) */}
+          {session?.user && canOpenAdmin && (
             <button
               onClick={() => setShowPinModal(true)}
               className="flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-yellow-400 transition-all p-2 min-h-11 min-w-11 sm:px-4 sm:py-2.5 rounded-xl bg-white/70 dark:bg-white/5 backdrop-blur border border-black/10 dark:border-white/5 hover:border-yellow-500/30 group focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
@@ -1668,7 +1668,7 @@ export default function CategoriesPage() {
                     >
                       <BookOpen className="w-4 h-4" aria-hidden="true" /> Panduan (PDF)
                     </a>
-                    {session?.user && isSuperAdmin && (
+                    {session?.user && canOpenAdmin && (
                       <button
                         role="menuitem"
                         onClick={() => {

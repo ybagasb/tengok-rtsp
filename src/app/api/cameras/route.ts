@@ -1,29 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Camera from '@/models/Camera';
+import Location from '@/models/Location';
 import { logAudit } from '@/lib/adminAuditLog';
-import { requireAuth, requireAdmin, getAuditActor } from '@/lib/apiAuth';
+import {
+    requireAuth, requireDivisiAdmin, getDivisiCameraIds, getAuditActor,
+} from '@/lib/apiAuth';
 import { pickCameraFields } from '@/lib/cameraFields';
 
 export async function GET(req: NextRequest) {
-    // Require authentication
-    const authError = await requireAuth(req);
-    if (authError) return authError;
-
     try {
         // streamUrl embeds RTSP credentials, so it is stripped by default and
-        // only returned when explicitly requested. Flag ini KHUSUS admin: hanya
-        // sesi SSO yang boleh menerima streamUrl. Viewer PIN (requireAuth) tetap
-        // lolos untuk daftar kamera, tapi tanpa kredensial RTSP.
+        // only returned when explicitly requested. Flag ini KHUSUS admin (superadmin/divisi_admin).
         const includeStreamUrl = req.nextUrl.searchParams.get('includeStreamUrl') === '1';
-        if (includeStreamUrl) {
-            const adminError = await requireAdmin(req);
-            if (adminError) return adminError;
+        const scope = req.nextUrl.searchParams.get('scope');
+
+        let callerDivisi: import('@/models/AppRole').DivisiName | null = null;
+        let isSuperAdmin = true;
+
+        if (includeStreamUrl || scope === 'admin') {
+            const authResult = await requireDivisiAdmin(req);
+            if ('error' in authResult) return authResult.error;
+            callerDivisi = authResult.divisi;
+            isSuperAdmin = authResult.isSuperAdmin;
+        } else {
+            const authError = await requireAuth(req);
+            if (authError) return authError;
         }
 
         await dbConnect();
 
-        const query = Camera.find({}).sort({ createdAt: -1 });
+        let filter: Record<string, unknown> = {};
+        if (!isSuperAdmin && callerDivisi) {
+            const allowedIds = await getDivisiCameraIds(callerDivisi);
+            filter = { _id: { $in: allowedIds } };
+        }
+
+        const query = Camera.find(filter).sort({ createdAt: -1 });
         if (!includeStreamUrl) query.select('-streamUrl');
 
         const cameras = await query.lean();
@@ -34,15 +47,48 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    // Only admin users can create cameras
-    const authError = await requireAdmin(req);
-    if (authError) return authError;
+    // Super-admin atau admin divisi dapat mendaftarkan kamera
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     await dbConnect();
     try {
         const body = await req.json();
+        const fields = pickCameraFields(body);
+        if (!isSuperAdmin && callerDivisi) {
+            fields.division = callerDivisi;
+        } else if (fields.division === '') {
+            fields.division = null;
+        }
+
+        // Opsional: langsung tautkan ke lokasi proyek saat pendaftaran kamera
+        const locationIds = Array.isArray(body?.locationIds)
+            ? [...new Set(body.locationIds.map((x: unknown) => String(x).trim()).filter(Boolean))]
+            : [];
+
+        if (locationIds.length > 0 && !isSuperAdmin && callerDivisi) {
+            const countValid = await Location.countDocuments({
+                _id: { $in: locationIds },
+                division: callerDivisi,
+            });
+            if (countValid !== locationIds.length) {
+                return NextResponse.json(
+                    { success: false, error: 'Lokasi tujuan berada di luar divisi Anda' },
+                    { status: 403 },
+                );
+            }
+        }
+
         const actor = await getAuditActor(req);
-        const camera = await Camera.create(pickCameraFields(body));
+        const camera = await Camera.create(fields);
+
+        if (locationIds.length > 0) {
+            await Location.updateMany(
+                { _id: { $in: locationIds } },
+                { $addToSet: { cameras: camera._id } },
+            );
+        }
 
         // Audit log — tunggu commit sebelum merespons (jejak privilese).
         await logAudit({
@@ -51,7 +97,7 @@ export async function POST(req: NextRequest) {
             entityId: camera._id.toString(),
             entityName: camera.name,
             by: actor,
-            detail: `Mendaftarkan kamera: ${camera.name}`,
+            detail: `Mendaftarkan kamera: ${camera.name}${fields.division ? ` (${fields.division})` : ''}${locationIds.length > 0 ? ` → ditautkan ke ${locationIds.length} lokasi` : ''}`,
         });
 
         return NextResponse.json({ success: true, data: camera }, { status: 201 });
