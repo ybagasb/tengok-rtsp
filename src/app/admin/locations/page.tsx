@@ -7,7 +7,7 @@ import axios from 'axios';
 import {
     Plus, Trash2, Edit2, Loader2, Image as ImageIcon, X,
     MapPin, Search, Save, RotateCcw, List, LayoutGrid,
-    User, Phone, Video, ClipboardList, ExternalLink, Building2,
+    User, Users, Phone, Video, ClipboardList, ExternalLink, Building2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +15,7 @@ import 'leaflet/dist/leaflet.css';
 import { containerVariants, cardVariants, inputCls, selectCls, getApiError } from '@/components/admin/shared';
 import { PageHeader, SectionHeader, FormField, EmptyState, SearchBar, CountBadge, useConfirm } from '@/components/admin/AdminUI';
 import CoordinateInput, { isValidLat, isValidLng } from '@/components/admin/CoordinateInput';
+import PicManager from '@/components/shared/PicManager';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
@@ -97,6 +98,7 @@ export default function AdminLocations() {
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showForm, setShowForm] = useState(false);
+    const [picTarget, setPicTarget] = useState<Location | null>(null);
     const [L, setL] = useState<LeafletModule | null>(null);
     const [RL, setRL] = useState<ReactLeafletModule | null>(null);
 
@@ -209,13 +211,15 @@ export default function AdminLocations() {
     }, []);
 
     useEffect(() => {
-        if (!showForm) return;
+        if (!showForm && !picTarget) return;
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setShowForm(false);
+            if (e.key !== 'Escape') return;
+            if (picTarget) setPicTarget(null);
+            else setShowForm(false);
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [showForm]);
+    }, [showForm, picTarget]);
 
     useEffect(() => {
         if (geoSearchQuery.length < 3) return;
@@ -669,6 +673,14 @@ export default function AdminLocations() {
                                                         <ExternalLink aria-hidden="true" className="w-4 h-4" />
                                                     </Link>
                                                     <button
+                                                        onClick={() => setPicTarget(loc)}
+                                                        title="Atur PIC Proyek"
+                                                        aria-label={`Atur PIC proyek ${loc.name}`}
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2 rounded-lg bg-black/[0.04] dark:bg-white/5 hover:bg-emerald-500/15 text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
+                                                    >
+                                                        <Users aria-hidden="true" className="w-4 h-4" />
+                                                    </button>
+                                                    <button
                                                         onClick={() => handleEdit(loc)}
                                                         title="Edit Proyek"
                                                         aria-label={`Edit proyek ${loc.name}`}
@@ -773,6 +785,14 @@ export default function AdminLocations() {
                                                     >
                                                         <ExternalLink aria-hidden="true" className="w-4 h-4" />
                                                     </Link>
+                                                    <button
+                                                        onClick={() => setPicTarget(loc)}
+                                                        className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2.5 text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all min-w-10 min-h-10 inline-flex items-center justify-center"
+                                                        title="Atur PIC Proyek"
+                                                        aria-label={`Atur PIC proyek ${loc.name}`}
+                                                    >
+                                                        <Users aria-hidden="true" className="w-4 h-4" />
+                                                    </button>
                                                     <button
                                                         onClick={() => handleEdit(loc)}
                                                         className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none p-2.5 text-slate-500 hover:text-yellow-800 dark:hover:text-yellow-400 hover:bg-yellow-400/10 rounded-xl transition-all min-w-10 min-h-10 inline-flex items-center justify-center"
@@ -1150,6 +1170,56 @@ export default function AdminLocations() {
                                     {isSubmitting ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Save aria-hidden="true" className="w-4 h-4" />}
                                     {formData._id ? 'Update Proyek' : 'Simpan Proyek'}
                                 </motion.button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Modal Atur PIC Proyek */}
+            <AnimatePresence>
+                {picTarget && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={`Atur PIC proyek ${picTarget.name}`}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm"
+                        onClick={() => setPicTarget(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.96, opacity: 0, y: 16 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.96, opacity: 0, y: 16 }}
+                            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-3xl w-full max-w-xl max-h-[85dvh] flex flex-col shadow-[0_30px_70px_rgba(15,23,42,0.3)] dark:shadow-[0_30px_70px_rgba(0,0,0,0.75)] overflow-hidden"
+                        >
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-black/10 dark:border-white/10 shrink-0">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 shrink-0">
+                                        <Users aria-hidden="true" className="w-5 h-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">
+                                            Atur PIC Proyek
+                                        </h2>
+                                        <p className="text-xs text-slate-500 truncate">{picTarget.name}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setPicTarget(null)}
+                                    aria-label="Tutup dialog PIC"
+                                    className="focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0"
+                                >
+                                    <X aria-hidden="true" className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-5 overflow-y-auto custom-scrollbar">
+                                <PicManager key={picTarget._id} projectId={picTarget._id} />
                             </div>
                         </motion.div>
                     </motion.div>

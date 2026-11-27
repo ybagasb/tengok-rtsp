@@ -234,9 +234,9 @@ export async function buatPdfPanduanAdminDivisi(divisi: DivisionKey): Promise<js
         body: [
             ['Dashboard Operasional (/admin)', 'Ya (Terbatas Divisi)', `Ringkasan total kamera, SLA online/offline, dan lokasi proyek khusus ${divisi}.`],
             ['Manajemen Kamera (/admin/cameras)', 'Ya (Terbatas Divisi)', `Daftar kamera baru, uji koneksi stream RTSP, import CSV, dan tautkan ke proyek ${divisi}.`],
-            ['Lokasi Proyek (/admin/locations)', 'Ya (Terbatas Divisi)', `Daftar proyek baru, set titik koordinat peta, PM proyek, dan tautkan kamera ${divisi}.`],
+            ['Lokasi Proyek (/admin/locations)', 'Ya (Terbatas Divisi)', `Daftar proyek baru, set koordinat peta, PM proyek, atur PIC proyek, dan tautkan kamera ${divisi}.`],
             ['Pengisian Proyek (/admin/pengisian)', 'Ya (Terbatas Divisi)', `Pantau kelengkapan 18 dimensi data proyek ${divisi} dan unduh PDF rekap divisi.`],
-            ['Detail Proyek (/project/[id])', 'Ya (Edit Penuh Divisi)', `Isi/perbarui 5 tab proyek, Laporan Bulanan, Kurva S, QHSSE, galeri & dokumen untuk proyek ${divisi}.`],
+            ['Detail Proyek (/project/[id])', 'Ya (Edit Penuh Divisi)', `Isi/perbarui 5 tab proyek, Laporan Bulanan, Kurva S, QHSSE, galeri, dokumen, serta PIC proyek ${divisi}.`],
             ['Kategori, Share Links, Statistik, Uptime, Notifikasi, Hak Akses, Audit Log', 'Tidak (Pusat)', 'Dikelola terpusat oleh Super-admin untuk seluruh perusahaan.'],
         ],
         styles: { font: 'helvetica', fontSize: 8.3, cellPadding: 2.3, textColor: SLATE, lineColor: LINE, lineWidth: 0.2 },
@@ -275,6 +275,7 @@ export async function buatPdfPanduanAdminDivisi(divisi: DivisionKey): Promise<js
         { bold: 'Menentukan Titik Koordinat Peta', text: 'Ketik nama kota/kecamatan pada kolom Cari Lokasi lalu pilih hasil, atau klik langsung titik lokasi pada peta Leaflet, atau isi Latitude & Longitude secara manual.' },
         { bold: 'Foto & Info Project Manager', text: 'Unggah foto tampak proyek dan lengkapi Nama PM serta No. WhatsApp PM (format 628xxx) agar muncul pada panel informasi peta publik.' },
         { bold: 'Menautkan Kamera', text: 'Pada bagian "Integrasi Kamera", centang kamera yang terpasang di proyek ini lalu klik Simpan Proyek.' },
+        { bold: 'Mengatur PIC Proyek', text: `Pada daftar Lokasi Proyek, klik tombol ikon Atur PIC (atau buka Detail Proyek -> "Kelola Data" -> tab "PIC Proyek") untuk menambah maupun menghapus PIC proyek ${divisi}.` },
     ]);
 
     // ── Bab 3: Mengelola Kamera CCTV ─────────────────────────────────────────
@@ -326,7 +327,8 @@ export async function buatPdfPanduanAdminDivisi(divisi: DivisionKey): Promise<js
             ['Kamera berstatus Offline atau gagal saat klik "Test"', 'Pastikan IP/domain kamera bisa diakses publik (bukan IP lokal 192.168.x.x tanpa port-forward/VPN), port 554 terbuka, serta username, password, dan path RTSP sudah benar.'],
             ['Proyek lama di divisi saya tidak muncul di Lokasi Proyek', 'Kemungkinan proyek tersebut belum memiliki label divisi di database. Hubungi Super-admin pusat untuk menetapkan field Divisi proyek tersebut.'],
             ['Kategori proyek yang dibutuhkan belum ada di pilihan', 'Kategori bersifat global lintas divisi. Ajukan pembuatan kategori baru ke Super-admin pusat.'],
-            ['Perlu menunjuk PIC proyek atau Admin Divisi baru', 'Penambahan PIC proyek dan penetapan role Admin Divisi dilakukan oleh Super-admin pusat melalui menu Hak Akses / Kelola Data -> PIC Proyek.'],
+            ['Perlu menunjuk atau mengubah PIC proyek', `Bisa dilakukan langsung oleh Admin ${divLabel} melalui tombol "Atur PIC" pada menu Lokasi Proyek atau melalui "Kelola Data -> PIC Proyek" pada halaman Detail Proyek.`],
+            ['Perlu menambah role Admin Divisi baru', 'Penambahan atau pencabutan role Admin Divisi (dan Super-admin) dilakukan terpusat oleh Super-admin melalui menu Hak Akses (/admin/roles).'],
         ],
         styles: { font: 'helvetica', fontSize: 8.3, cellPadding: 2.5, textColor: SLATE, lineColor: LINE, lineWidth: 0.2 },
         headStyles: { fillColor: accent, textColor: WHITE, fontStyle: 'bold' },

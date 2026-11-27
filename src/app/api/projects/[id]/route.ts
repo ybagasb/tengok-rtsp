@@ -132,6 +132,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         // belum pernah login ke aplikasi penulis sub asli). Lihat matchProjectPic.
         const { match: isPic, placeholder } = matchProjectPic(picSubs, { sub, username });
         const canEdit = superAdmin || isDivisiEditor || isPic;
+        const canManagePic = superAdmin || isDivisiEditor;
 
         // SELF-HEAL: bila PIC dikenali lewat placeholder, upgrade ke sub asli
         // begitu halaman proyek dibuka (best-effort; tak boleh menggagalkan GET).
@@ -185,7 +186,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
                 ...safeLoc,
                 gallery,
                 documents,
-                access: { canEdit, isSuperAdmin: superAdmin, isPic },
+                access: { canEdit, isSuperAdmin: superAdmin, canManagePic, isPic },
             },
         });
     } catch (error) {

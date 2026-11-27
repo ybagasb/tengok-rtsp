@@ -33,6 +33,7 @@ import { dashboardForCategory } from '@/lib/categoryDashboards';
 import HariKontrakRow from '@/components/project/HariKontrakRow';
 import { fRpShort } from '@/components/PanelCharts';
 import { formatStampTime, formatStampActor, type ProjectSection, type SectionStamp, type SectionUpdates } from '@/lib/projectSections';
+import PicManager from '@/components/shared/PicManager';
 
 // Leaflet butuh browser (window) -> muat hanya di klien.
 const FootprintEditor = dynamic(() => import('@/components/FootprintEditor'), {
@@ -166,7 +167,7 @@ interface Project {
     cameras?: { _id: string; name: string; status: string }[];
     progressMinggu?: ProgressMinggu[];
     // Kontrol akses (dihitung server) — gating kosmetik; server tetap penegak.
-    access?: { canEdit: boolean; isSuperAdmin: boolean; isPic: boolean };
+    access?: { canEdit: boolean; isSuperAdmin: boolean; canManagePic?: boolean; isPic: boolean };
     // Waktu & pelaku pembaruan terakhir per dimensi data
     sectionUpdates?: SectionUpdates;
     // Timestamp (dikirim sebagai JSON string dari API)
@@ -376,9 +377,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const allTabs = tabGroups.flatMap(g => g.items);
     const activeLabel = allTabs.find(t => t.id === tab)?.label ?? '';
 
-    // Kemampuan edit berbasis akses nyata (super-admin atau PIC) — dari server.
+    // Kemampuan edit berbasis akses nyata (super-admin, admin divisi pemilik proyek, atau PIC) — dari server.
     const canEdit = project.access?.canEdit ?? false;
     const isSuperAdmin = project.access?.isSuperAdmin ?? false;
+    const canManagePic = project.access?.canManagePic ?? isSuperAdmin;
 
     const selectTab = (d: Dest) => {
         setSidebarOpen(false);
@@ -599,7 +601,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         onView={setKelola}
                         onClose={() => setKelola(null)}
                         isAdmin={canEdit}
-                        isSuperAdmin={isSuperAdmin}
+                        canManagePic={canManagePic}
                         onChanged={fetchProject}
                     />
                 )}
@@ -962,7 +964,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                     )}
                 </div>
             ) : (
-                <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex flex-col gap-2 lg:flex-1 lg:min-h-0">
+                <div className="p-4 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5 flex flex-col gap-2 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
                     <div className="flex items-center justify-between shrink-0">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Progress Keuangan (DIPA)</h3>
                         <button onClick={() => setForm(f => ({ ...f, progressKeuangan: [...f.progressKeuangan, { tahun: new Date().getFullYear(), rencana: 0, realisasi: 0 }] }))}
@@ -973,6 +975,7 @@ function FinansialTab({ project, isAdmin, onSaved, onGoTab }: { project: Project
                     <Paged
                         items={form.progressKeuangan}
                         itemH={305}
+                        minH={349}
                         empty={<p className="text-sm text-slate-600 dark:text-slate-400 italic">Belum ada data DIPA.</p>}
                         render={(pk, i) => (
                             <div className="p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 space-y-1">
@@ -1962,184 +1965,7 @@ function InfoTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boo
 
 // ── Panel PIC Proyek (hanya super-admin) ──────────────────────────────────────
 // Menetapkan daftar PIC (cognito_sub) yang boleh mengedit proyek ini. Server
-// menegakkan via requireSuperAdmin pada PATCH /api/projects/[id]/pic.
-interface PicUser { cognitoSub: string; username: string; fullName: string | null; jobTitle: string | null; email: string | null; }
-interface PicSearchResult { cognitoSub: string; username: string; fullName: string | null; jobTitle: string | null; email: string | null; }
-
-function PicPanel({ projectId }: { projectId: string }) {
-    const [loading, setLoading] = useState(true);
-    const [picSubs, setPicSubs] = useState<string[]>([]);
-    const [pics, setPics] = useState<PicUser[]>([]);
-    const [saving, setSaving] = useState(false);
-
-    const [query, setQuery] = useState('');
-    const [results, setResults] = useState<PicSearchResult[]>([]);
-    const [searching, setSearching] = useState(false);
-    const [searchError, setSearchError] = useState<string | null>(null);
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const load = useCallback(async () => {
-        try {
-            const res = await axios.get(`/api/projects/${projectId}/pic`);
-            if (res.data?.success) {
-                setPicSubs(Array.isArray(res.data.data?.picSubs) ? res.data.data.picSubs : []);
-                setPics(Array.isArray(res.data.data?.pics) ? res.data.data.pics : []);
-            }
-        } catch {
-            toast.error('Gagal memuat PIC proyek');
-        } finally {
-            setLoading(false);
-        }
-    }, [projectId]);
-
-    useEffect(() => { load(); }, [load]);
-
-    useEffect(() => {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        if (query.trim().length === 0) {
-            setResults([]);
-            setSearchError(null);
-            setSearching(false);
-            return;
-        }
-        setSearching(true);
-        debounceRef.current = setTimeout(async () => {
-            try {
-                const res = await axios.get('/api/sso-users/search', { params: { q: query.trim(), limit: 20 } });
-                if (res.data?.success) {
-                    setResults(Array.isArray(res.data.data) ? res.data.data : []);
-                    setSearchError(null);
-                }
-            } catch (err) {
-                setResults([]);
-                if (axios.isAxiosError(err) && err.response?.status === 503) {
-                    setSearchError('Direktori user SSO sedang tidak tersedia; coba lagi nanti.');
-                } else {
-                    setSearchError('Gagal mencari user.');
-                }
-            } finally {
-                setSearching(false);
-            }
-        }, 350);
-        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    }, [query]);
-
-    const nameFor = (sub: string) => {
-        const p = pics.find(x => x.cognitoSub === sub);
-        if (p && (p.fullName || p.username)) return p.fullName || p.username;
-        // Jaring pengaman terakhir: jangan tampilkan UUID mentah.
-        const m = /^ldap_(.+)$/.exec(sub);
-        if (m) return m[1];
-        return 'User (belum login)';
-    };
-
-    const addPic = async (u: PicSearchResult) => {
-        if (picSubs.includes(u.cognitoSub)) { setQuery(''); setResults([]); return; }
-        const next = [...picSubs, u.cognitoSub];
-        setPicSubs(next);
-        setPics(prev => prev.some(p => p.cognitoSub === u.cognitoSub) ? prev : [...prev, u]);
-        setQuery('');
-        setResults([]);
-        await persist(next);
-    };
-
-    const removePic = async (sub: string) => {
-        const next = picSubs.filter(s => s !== sub);
-        setPicSubs(next);
-        await persist(next);
-    };
-
-    const persist = async (next: string[]) => {
-        setSaving(true);
-        try {
-            await axios.patch(`/api/projects/${projectId}/pic`, { picSubs: next });
-            toast.success('PIC proyek diperbarui');
-            await load();
-        } catch (err) {
-            const msg = axios.isAxiosError(err) ? err.response?.data?.error : null;
-            toast.error(msg || 'Gagal menyimpan PIC');
-            await load();   // sinkron ulang dari server bila gagal
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    return (
-        <div className="mt-6 p-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
-            <div className="flex items-center gap-2 mb-1">
-                <User className="w-4 h-4 div-accent-text" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">PIC Proyek</h3>
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin div-accent-text ml-1" />}
-            </div>
-            <p className="text-[11px] text-slate-500 mb-4">PIC dapat mengedit data proyek ini. Hanya super-admin yang dapat menetapkan PIC.</p>
-
-            {loading ? (
-                <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> Memuat PIC...</div>
-            ) : (
-                <>
-                    {/* Chips PIC saat ini */}
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        {picSubs.length === 0 && <span className="text-xs text-slate-500">Belum ada PIC. Proyek ini hanya dapat diedit super-admin.</span>}
-                        {picSubs.map(sub => (
-                            <span key={sub} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-[rgba(var(--div-accent-rgb),0.1)] border border-[rgba(var(--div-accent-rgb),0.2)] text-xs font-bold div-accent-text">
-                                {nameFor(sub)}
-                                <button
-                                    onClick={() => removePic(sub)}
-                                    disabled={saving}
-                                    className="w-6 h-6 min-w-6 rounded-full bg-black/5 dark:bg-white/10 hover:bg-rose-500/30 flex items-center justify-center transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
-                                    aria-label="Hapus PIC"
-                                >
-                                    <X className="w-3 h-3" />
-                                </button>
-                            </span>
-                        ))}
-                    </div>
-
-                    {/* Typeahead tambah PIC */}
-                    <div className="relative">
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            aria-label="Cari user SSO untuk ditambahkan sebagai PIC"
-                            placeholder="Cari user SSO untuk ditambahkan sebagai PIC..."
-                            className="w-full px-3 py-2.5 rounded-xl bg-white/70 dark:bg-slate-950/60 border border-black/10 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-[rgba(var(--div-accent-rgb),0.5)] outline-none"
-                        />
-                    </div>
-
-                    {searchError && (
-                        <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {searchError}
-                        </div>
-                    )}
-                    {searching && (
-                        <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Mencari...</div>
-                    )}
-                    {!searching && !searchError && results.length > 0 && (
-                        <div className="mt-2 space-y-1.5 max-h-60 overflow-y-auto">
-                            {results.map(u => (
-                                <button
-                                    key={u.cognitoSub}
-                                    onClick={() => addPic(u)}
-                                    disabled={saving || picSubs.includes(u.cognitoSub)}
-                                    className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] hover:bg-[rgba(var(--div-accent-rgb),0.1)] border border-transparent hover:border-[rgba(var(--div-accent-rgb),0.2)] transition-colors text-left disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
-                                >
-                                    <div className="min-w-0">
-                                        <div className="text-sm font-bold text-slate-900 dark:text-white truncate">{u.fullName || u.username}</div>
-                                        <div className="text-[11px] text-slate-500 truncate">@{u.username}{u.jobTitle ? ` · ${u.jobTitle}` : ''}</div>
-                                    </div>
-                                    {picSubs.includes(u.cognitoSub)
-                                        ? <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                                        : <Plus className="w-4 h-4 text-slate-400 shrink-0" />}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </>
-            )}
-        </div>
-    );
-}
+// menegakkan via requireDivisiAdmin + verifikasi divisi pada PATCH /api/projects/[id]/pic.
 
 // ── Location ─────────────────────────────────────────────────────────────────
 function LocationTab({ project, isAdmin, onSaved }: { project: Project; isAdmin: boolean; onSaved: () => void }) {
@@ -3003,15 +2829,17 @@ function Pager({ page, pages, onChange }: { page: number; pages: number; onChang
  * Daftar berhalaman yang mengisi sisa tinggi induknya (induk harus flex-col dengan tinggi pasti di lg).
  * itemH = perkiraan tinggi satu item (px) untuk menghitung jumlah per halaman.
  */
-function Paged<T>({ items, itemH, gap = 8, cols = 1, fixed = false, baseClass = '', render, empty }: {
+function Paged<T>({ items, itemH, gap = 8, cols = 1, fixed = false, baseClass = '', minH, render, empty }: {
     items: T[]; itemH: number; gap?: number; cols?: number; fixed?: boolean; baseClass?: string;
+    /** Tinggi minimum (px, hanya lg+) agar satu item tidak terpotong di layar pendek; induk harus bisa di-scroll. */
+    minH?: number;
     render: (item: T, index: number) => React.ReactNode; empty?: React.ReactNode;
 }) {
     const [ref, perPage] = useFit<HTMLDivElement>(itemH, gap, cols);
     const desktop = useIsDesktop();
     const p = usePaged(items, perPage);
     return (
-        <div className="flex-1 min-h-0 flex flex-col gap-2">
+        <div className="flex-1 min-h-0 flex flex-col gap-2" style={desktop && minH ? { minHeight: minH } : undefined}>
             <div
                 ref={ref}
                 className={`flex-1 min-h-0 lg:overflow-hidden grid content-start ${baseClass}`}
@@ -3094,12 +2922,12 @@ function SubViews<V extends string>({ label, views, active, onChange, children }
 }
 
 /**
- * Panel geser "Kelola Data": galeri, dokumen, lokasi/footprint, dan PIC proyek (super-admin).
+ * Panel geser "Kelola Data": galeri, dokumen, lokasi/footprint, dan PIC proyek (superadmin / admin divisi).
  * Bagian ini tidak ada di panel peta, jadi tidak jadi menu tab.
  */
-function KelolaDrawer({ project, view, onView, onClose, isAdmin, isSuperAdmin, onChanged }: {
+function KelolaDrawer({ project, view, onView, onClose, isAdmin, canManagePic, onChanged }: {
     project: Project; view: KelolaView; onView: (v: KelolaView) => void; onClose: () => void;
-    isAdmin: boolean; isSuperAdmin: boolean; onChanged: () => void;
+    isAdmin: boolean; canManagePic: boolean; onChanged: () => void;
 }) {
     const closeRef = useRef<HTMLButtonElement>(null);
     const onCloseRef = useRef(onClose);
@@ -3120,9 +2948,9 @@ function KelolaDrawer({ project, view, onView, onClose, isAdmin, isSuperAdmin, o
         { id: 'galeri', label: 'Galeri', icon: ImageIcon },
         { id: 'dokumen', label: 'Dokumen', icon: FolderOpen },
         { id: 'lokasi', label: 'Lokasi & Footprint', icon: MapPin },
-        ...(isSuperAdmin ? [{ id: 'pic' as const, label: 'PIC Proyek', icon: User }] : []),
+        ...(canManagePic ? [{ id: 'pic' as const, label: 'PIC Proyek', icon: User }] : []),
     ];
-    const active: KelolaView = view === 'pic' && !isSuperAdmin ? 'galeri' : view;
+    const active: KelolaView = view === 'pic' && !canManagePic ? 'galeri' : view;
 
     return (
         <>
@@ -3169,8 +2997,8 @@ function KelolaDrawer({ project, view, onView, onClose, isAdmin, isSuperAdmin, o
                             {active === 'galeri' && <GalleryTab project={project} isAdmin={isAdmin} onChanged={onChanged} />}
                             {active === 'dokumen' && <DocumentsTab project={project} isAdmin={isAdmin} onChanged={onChanged} />}
                             {active === 'lokasi' && <LocationTab project={project} isAdmin={isAdmin} onSaved={onChanged} />}
-                            {active === 'pic' && isSuperAdmin && (
-                                <TabShell><PicPanel projectId={project._id} /></TabShell>
+                            {active === 'pic' && canManagePic && (
+                                <TabShell><PicManager projectId={project._id} className="mt-6" /></TabShell>
                             )}
                         </div>
                     </div>

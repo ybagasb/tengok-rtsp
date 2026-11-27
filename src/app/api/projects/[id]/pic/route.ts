@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Location from '@/models/Location';
-import { requireSuperAdmin, getAuditActor } from '@/lib/apiAuth';
+import { requireDivisiAdmin, getAuditActor } from '@/lib/apiAuth';
 import { getUsersBySubs } from '@/lib/ssoUsers';
 import SsoIdentity from '@/models/SsoIdentity';
 import { normalizePicSubs } from '@/lib/picIdentity';
@@ -13,22 +13,29 @@ export const runtime = 'nodejs';
 const MAX_PIC = 50;
 
 /**
- * GET /api/projects/[id]/pic  (super-admin only)
+ * GET /api/projects/[id]/pic  (superadmin atau divisi_admin pemilik proyek)
  * Kembalikan picSubs + display name (via sso_users). Postgres mati → pics: [].
  */
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-    const authError = await requireSuperAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     const { id } = await props.params;
     await dbConnect();
 
     try {
-        const loc = await Location.findById(id).select('_id picSubs').lean() as
-            | { _id: unknown; picSubs?: string[] }
+        const loc = await Location.findById(id).select('_id division picSubs').lean() as
+            | { _id: unknown; division?: string; picSubs?: string[] }
             | null;
         if (!loc) {
             return NextResponse.json({ success: false, error: 'Proyek tidak ditemukan' }, { status: 404 });
+        }
+        if (!isSuperAdmin && loc.division !== callerDivisi) {
+            return NextResponse.json(
+                { success: false, error: 'Anda hanya dapat melihat PIC untuk proyek di divisi Anda.' },
+                { status: 403 },
+            );
         }
 
         const picSubs = Array.isArray(loc.picSubs) ? loc.picSubs : [];
@@ -102,17 +109,31 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 }
 
 /**
- * PATCH /api/projects/[id]/pic  (super-admin only)
+ * PATCH /api/projects/[id]/pic  (superadmin atau divisi_admin pemilik proyek)
  * Body: { picSubs: string[] } — set daftar PIC proyek.
  */
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-    const authError = await requireSuperAdmin(req);
-    if (authError) return authError;
+    const authResult = await requireDivisiAdmin(req);
+    if ('error' in authResult) return authResult.error;
+    const { divisi: callerDivisi, isSuperAdmin } = authResult;
 
     const { id } = await props.params;
     await dbConnect();
 
     try {
+        const existing = await Location.findById(id).select('_id name division').lean() as
+            | { _id: unknown; name: string; division?: string }
+            | null;
+        if (!existing) {
+            return NextResponse.json({ success: false, error: 'Proyek tidak ditemukan' }, { status: 404 });
+        }
+        if (!isSuperAdmin && existing.division !== callerDivisi) {
+            return NextResponse.json(
+                { success: false, error: 'Anda hanya dapat mengatur PIC untuk proyek di divisi Anda.' },
+                { status: 403 },
+            );
+        }
+
         const body = await req.json();
         if (!Array.isArray(body?.picSubs)) {
             return NextResponse.json({ success: false, error: 'picSubs harus berupa array' }, { status: 400 });
